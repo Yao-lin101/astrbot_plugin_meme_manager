@@ -202,7 +202,7 @@ class MemeSender(Star):
         self.category_mapping_string = dict_to_string(self.category_mapping)
         self.sys_prompt_add = self.prompt_head + self.category_mapping_string + self.prompt_tail_1 + str(self.max_emotions_per_message) + self.prompt_tail_2
         personas = self.context.provider_manager.personas
-        persona_backup = persona.copy()
+        persona_backup = personas.copy()
         for persona in personas:
             persona["prompt"] =  self.sys_prompt_add
             
