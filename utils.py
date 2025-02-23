@@ -51,20 +51,25 @@ def generate_secret_key(length=8):
     return ''.join(random.choice(characters) for _ in range(length))
 
 async def get_public_ip():
-    """异步获取公网IP"""
-    ip_apis = [
-        'http://api.ipify.org',
-        'http://ip.42.pl/raw',
-        'http://ifconfig.me/ip',
-        'http://ipecho.net/plain'
+    """异步获取公网IPv4地址"""
+    ipv4_apis = [
+        'http://ipv4.ifconfig.me/ip',        # IPv4专用接口
+        'http://api-ipv4.ip.sb/ip',          # 樱花云IPv4接口
+        'http://v4.ident.me',                # IPv4专用
+        'http://ip.qaros.com',               # 备用国内服务
+        'http://ipv4.icanhazip.com',         # IPv4专用
+        'http://4.icanhazip.com'             # 另一个变种地址
     ]
     
     async with aiohttp.ClientSession() as session:
-        for api in ip_apis:
+        for api in ipv4_apis:
             try:
                 async with session.get(api, timeout=5) as response:
                     if response.status == 200:
-                        return await response.text()
+                        ip = (await response.text()).strip()
+                        # 添加二次验证确保是IPv4格式
+                        if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', ip):
+                            return ip
             except:
                 continue
     
