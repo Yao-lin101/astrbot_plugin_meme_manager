@@ -1,0 +1,83 @@
+{
+  "image_host": {
+    "description": "选择的图床",
+    "type": "string",
+    "hint": "请选择要使用的图床服务",
+    "default": "stardots",
+    "options": ["stardots"]
+  },
+  "image_host_config": {
+    "description": "图床配置",
+    "type": "object",
+    "items": {
+      "stardots": {
+        "description": "Stardots 图床配置",
+        "type": "object",
+        "items": {
+          "key": {
+            "description": "API Key",
+            "type": "string",
+            "hint": "请输入 Stardots 的 API Key"
+          },
+          "secret": {
+            "description": "API Secret",
+            "type": "string",
+            "hint": "请输入 Stardots 的 API Secret"
+          },
+          "space": {
+            "description": "空间名称",
+            "type": "string",
+            "hint": "请输入 Stardots 的空间名称"
+          }
+        }
+      }
+    }
+  },
+  "webui_port": {
+    "description": "Web UI 端口号",
+    "type": "int",
+    "default": 5000
+  },
+  "prompt": {
+    "description": "自动添加的提示词(类别描述自动插入到提示词中)",
+    "type": "object",
+    "items": {
+      "prompt_head": {
+        "description": "提示词头",
+        "type": "string",
+        "hint": "请输入提示词头",
+        "default": "\\n\n你在对话中需根据当前情境智能选用表情符号，表情需用⬡⬡包裹，例如：⬡happy⬡, 通用格式:⬡标签⬡。选择逻辑遵循以下动态规则：\n\n[智能触发机制]\n1. 关键词匹配：当对话内容包含以下类型词汇时激活表情使用\n   - 核心情绪词（开心/生气/惊讶等）→ 直接匹配对应标签\n   - 场景特征词（早安/报酬/思考等）→ 关联场景标签\n   - 语气调节词（请/建议/但是等）→ 触发软化型表情\n2. 动态优先级：\n   a) 精确匹配现有标签 > 同义词扩展 > 放弃使用\n   b) 高频使用标签优先于低频标签\n\n[表情标签库]（当前可用）\n格式：标签 - 使用场景描述\n当前可用：\n"
+      },
+      "prompt_tail_1": {
+        "description": "提示词尾",
+        "type": "string",
+        "hint": "请输入提示词尾_1",
+        "default": "\n\n=== 安全控制体系 ===\n1. 使用频率：\n   • 日常对话：最多"
+      },
+      "prompt_tail_2": {
+        "description": "提示词尾",
+        "type": "string",
+        "hint": "请输入提示词尾_2",
+        "default": "个表情\n   • 专业咨询：≤1个\n2. 强制校验规则：\n   a) 存在性检查：仅使用当前列表存在的标签\n   b) 冲突检测：当涉及医疗/法律/暴力话题时禁用所有表情\n   c) 语义一致性：表情含义需与上下文情绪方向一致\n3. 智能降级策略：\n   1) 首选：同类别表情或相近表情\n   2) 备选：放弃使用表情\n4. 自检流程：\n   提取关键词 → 匹配标签 → 语境审查 → 最终输出"
+      }
+    }
+  },
+  "max_emotions_per_message": {
+    "description": "每次回复最多使用表情数量",
+    "type": "int",
+    "default": 2,
+    "hint": "每次回复最多使用表情数量"
+  },
+  "emotions_probability": {
+    "description": "表情出现概率",
+    "type": "int",
+    "default": 33,
+    "hint": "每次发送表情出现的概率，范围为0-100"
+  },
+  "strict_max_emotions_per_message": {
+    "description": "严格限制表情数量",
+    "type": "bool",
+    "default": true,
+    "hint": "如果为true，则每次回复最多使用max_emotions_per_message个表情, 多余的数量会被严格裁剪去除"
+  }
+}

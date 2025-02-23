@@ -1,0 +1,15 @@
+name: meme_manager_test
+desc: anka - 表情包管理器 - 支持表情包发送及表情包上传 - 支持管理表情包的webui - 支持图床同步 - 请先在配置文件中配置图床
+help: |
+  功能包含：
+  1. AI自动发送表情包（识别[表情]、(表情)符号）
+  2. /查看表情包 - 列出所有可用表情类别
+  3. /上传表情包 [类别] - 添加新表情到指定分类
+  4. /启动表情包管理服务器
+  5. /关闭表情包管理服务器
+  6. /同步到云端
+  7. /从云端同步
+  8. /检查同步状态
+version: v3.0
+author: anka
+repo: https://github.com/anka-afk/astrbot_plugin_meme_manager_test
