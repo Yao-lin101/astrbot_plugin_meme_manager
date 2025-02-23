@@ -8,6 +8,7 @@ import time
 import aiohttp
 import ssl
 import imghdr
+import copy
 from PIL import Image
 import asyncio
 from multiprocessing import Process
@@ -82,6 +83,8 @@ class MemeSender(Star):
         self.strict_max_emotions_per_message = self.config.get("strict_max_emotions_per_message")
         
         # 更新人格
+        personas = self.context.provider_manager.personas
+        self.persona_backup = copy.deepcopy(personas)
         self._reload_personas()
 
     @filter.command_group("表情管理")
@@ -202,10 +205,8 @@ class MemeSender(Star):
         self.category_mapping_string = dict_to_string(self.category_mapping)
         self.sys_prompt_add = self.prompt_head + self.category_mapping_string + self.prompt_tail_1 + str(self.max_emotions_per_message) + self.prompt_tail_2
         personas = self.context.provider_manager.personas
-        persona_backup = personas.copy()
-        for persona in personas:
-            persona["prompt"] =  self.sys_prompt_add
-            
+        for persona, persona_backup in zip(personas, self.persona_backup):
+            persona["prompt"] =  persona_backup["prompt"] + self.sys_prompt_add
 
     @meme_manager.command("查看图库")
     async def list_emotions(self, event: AstrMessageEvent):
