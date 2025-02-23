@@ -144,11 +144,15 @@ class MemeSender(Star):
                 f"✨ 管理后台已就绪！\n"
                 f"━━━━━━━━━━━━━━\n"
                 f"表情包管理服务器已启动！\n"
+            )
+            yield event.plain_result(
                 f"🔗 访问地址：http://{public_ip}:{self.server_port}\n"
+                )
+            yield event.plain_result(
                 f"⚠️ 如果地址错误, 请使用 [服务器公网ip]:{self.server_port} 访问\n"
                 f"🔑 临时密钥：{self.server_key} （本次有效）\n"
                 f"⚠️ 请勿分享给未授权用户"
-            )
+                )
 
         except Exception as e:
             self.logger.error(f"启动失败: {str(e)}")
