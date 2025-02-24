@@ -70,6 +70,9 @@ class MemeSender(Star):
         self.found_emotions = []  # 存储找到的表情
         self.upload_states = {}   # 存储上传状态：{user_session: {"category": str, "expire_time": float}}
         self.pending_images = {}  # 存储待发送的图片
+        
+        # 读取表情包分隔符
+        self.fault_tolerant_symbols = self.config.get("fault_tolerant_symbols", ["⬡"])
 
         # 初始化 logger
         self.logger = logging.getLogger(__name__)
@@ -374,8 +377,8 @@ class MemeSender(Star):
         text = response.completion_text
         self.found_emotions = []  # 重置表情列表
 
-        # 严格匹配六边形符号包裹的表情
-        hex_pattern = r"⬡([^⬡]+)⬡"
+        # 严格匹配符号包裹的表情
+        hex_pattern = r"&&([^&&]+)&&"
         matches = re.finditer(hex_pattern, text)
         
         clean_text = text
@@ -412,7 +415,7 @@ class MemeSender(Star):
         self.found_emotions = filtered_emotions
 
         # 防御性清理残留符号
-        clean_text = re.sub(r'⬡+', '', clean_text)  # 清除未成对的六边形符号
+        clean_text = re.sub(r'&&+', '', clean_text)  # 清除未成对的&&符号
         response.completion_text = clean_text.strip()
 
     @filter.on_decorating_result()
