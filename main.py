@@ -582,9 +582,17 @@ class MemeSender(Star):
             self.logger.error(f"从云端同步失败: {str(e)}")
             yield event.plain_result(f"从云端同步失败: {str(e)}")
 
-    def __del__(self):
+    async def terminate(self):
         """清理资源"""
+        # 恢复人格
+        personas = self.context.provider_manager.personas
+        for persona, persona_backup in zip(personas, self.persona_backup):
+            persona["prompt"] = persona_backup["prompt"]
+        
+        # 停止图床同步
         if self.img_sync:
             self.img_sync.stop_sync()
-        self._cleanup_resources()
+        
+        await self._shutdown()
+        await self._cleanup_resources()
 
