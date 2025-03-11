@@ -18,7 +18,7 @@ async def scan_emoji_folder():
             emoji_files = [
                 f
                 for f in os.listdir(category_path)
-                if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))
+                if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
             ]
             emoji_data[category] = emoji_files
         else:
@@ -34,7 +34,7 @@ def get_emoji_by_category(category):
     emoji_files = [
         f
         for f in os.listdir(category_path)
-        if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif"))
+        if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
     ]
     return emoji_files
 
