@@ -79,5 +79,48 @@
     "type": "bool",
     "default": true,
     "hint": "如果为true，则每次回复最多使用max_emotions_per_message个表情, 多余的数量会被严格裁剪去除"
+  },
+  "enable_loose_emotion_matching": {
+    "description": "启用宽松的表情匹配",
+    "type": "bool",
+    "default": true,
+    "hint": "如果为true，则会尝试匹配相似的表情标签, 如果你使用中文, 强烈建议开启, 如果使用英文, 在出现错误时建议关闭"
+  },
+  "enable_alternative_markup": {
+    "description": "启用备用标记",
+    "type": "bool",
+    "default": true,
+    "hint": "如果为true，则会尝试使用备用标记, 例如: &&happy&& 和 :happy: 是等价的, 防止llm自己编标记, 一般情况建议开启"
+  },
+  "enable_repeated_emotion_detection": {
+    "description": "启用重复表情检测",
+    "type": "bool",
+    "default": true,
+    "hint": "如果为true，则会尝试检测重复的表情, 防止重复使用表情(例如angryangryangry), 一般情况建议开启"
+  },
+  "high_confidence_emotions": {
+    "description": "高置信度表情列表，即使在英文上下文中也可能被识别",
+    "type": "list",
+    "default": [
+      "angry",
+      "happy",
+      "sad",
+      "surprised",
+      "confused",
+      "color",
+      "cpu",
+      "fool",
+      "givemoney",
+      "like",
+      "see",
+      "shy",
+      "work",
+      "reply",
+      "meow",
+      "baka",
+      "morning",
+      "sleep",
+      "sigh"
+    ]
   }
 }

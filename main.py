@@ -376,15 +376,15 @@ class MemeSender(Star):
 
         text = response.completion_text
         self.found_emotions = []  # 重置表情列表
-
-        # 严格匹配符号包裹的表情
-        hex_pattern = r"&&([^&&]+)&&"
-        matches = re.finditer(hex_pattern, text)
+        valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
         
         clean_text = text
-        valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
-
-        # 两阶段处理保证准确性
+        
+        # 第一阶段：严格匹配符号包裹的表情
+        hex_pattern = r"&&([^&&]+)&&"
+        matches = re.finditer(hex_pattern, clean_text)
+        
+        # 严格模式处理
         temp_replacements = []
         for match in matches:
             original = match.group(0)
@@ -392,16 +392,102 @@ class MemeSender(Star):
             
             # 合法性验证
             if emotion in valid_emoticons:
-                temp_replacements.append( (original, emotion) )
+                temp_replacements.append((original, emotion))
             else:
-                temp_replacements.append( (original, "") )  # 非法表情静默移除
+                temp_replacements.append((original, ""))  # 非法表情静默移除
 
         # 保持原始顺序替换
         for original, emotion in temp_replacements:
             clean_text = clean_text.replace(original, "", 1)  # 每次替换第一个匹配项
             if emotion:
                 self.found_emotions.append(emotion)
-
+        
+        # 第二阶段：替代标记处理（如[emotion]、(emotion)等）
+        if self.config.get("enable_alternative_markup", True):
+            # 处理[emotion]格式
+            bracket_pattern = r'\[([^\[\]]+)\]'
+            matches = re.finditer(bracket_pattern, clean_text)
+            bracket_replacements = []
+            
+            for match in matches:
+                original = match.group(0)
+                emotion = match.group(1).strip()
+                
+                if emotion in valid_emoticons:
+                    bracket_replacements.append((original, emotion))
+                else:
+                    # 这里不删除无效标记，保留原样
+                    continue
+                    
+            for original, emotion in bracket_replacements:
+                clean_text = clean_text.replace(original, "", 1)
+                self.found_emotions.append(emotion)
+                
+            # 处理(emotion)格式
+            paren_pattern = r'\(([^()]+)\)'
+            matches = re.finditer(paren_pattern, clean_text)
+            paren_replacements = []
+            
+            for match in matches:
+                original = match.group(0)
+                emotion = match.group(1).strip()
+                
+                if emotion in valid_emoticons:
+                    # 需要额外验证，确保不是普通句子的一部分
+                    if self._is_likely_emotion_markup(original, clean_text, match.start()):
+                        paren_replacements.append((original, emotion))
+                
+            for original, emotion in paren_replacements:
+                clean_text = clean_text.replace(original, "", 1)
+                self.found_emotions.append(emotion)
+        
+        # 第三阶段：处理重复表情模式（如angryangryangry）
+        if self.config.get("enable_repeated_emotion_detection", True):
+            high_confidence_emotions = self.config.get("high_confidence_emotions", [])
+            
+            for emotion in valid_emoticons:
+                # 跳过太短的表情词，避免误判
+                if len(emotion) < 3:
+                    continue
+                    
+                # 对高置信度表情，重复两次即可识别
+                if emotion in high_confidence_emotions:
+                    # 检测重复两次的模式，如 happyhappy
+                    repeat_pattern = f'({re.escape(emotion)})\\1{{1,}}'
+                    matches = re.finditer(repeat_pattern, clean_text)
+                    for match in matches:
+                        original = match.group(0)
+                        clean_text = clean_text.replace(original, "", 1)
+                        self.found_emotions.append(emotion)
+                else:
+                    # 普通表情词需要重复至少3次才识别
+                    # 只检查长度>=4的表情，以减少误判
+                    if len(emotion) >= 4:
+                        # 查找表情词重复3次以上的模式
+                        repeat_pattern = f'({re.escape(emotion)})\\1{{2,}}'
+                        matches = re.finditer(repeat_pattern, clean_text)
+                        for match in matches:
+                            original = match.group(0)
+                            clean_text = clean_text.replace(original, "", 1)
+                            self.found_emotions.append(emotion)
+        
+        # 第四阶段：智能识别可能的表情（松散模式）
+        if self.config.get("enable_loose_emotion_matching", True):
+            # 查找所有可能的表情词
+            for emotion in valid_emoticons:
+                # 使用单词边界确保不是其他单词的一部分
+                pattern = r'\b(' + re.escape(emotion) + r')\b'
+                for match in re.finditer(pattern, clean_text):
+                    word = match.group(1)
+                    position = match.start()
+                    
+                    # 判断是否可能是表情而非英文单词
+                    if self._is_likely_emotion(word, clean_text, position, valid_emoticons):
+                        # 添加到表情列表
+                        self.found_emotions.append(word)
+                        # 替换文本中的表情词
+                        clean_text = clean_text[:position] + clean_text[position + len(word):]
+        
         # 去重并应用数量限制
         seen = set()
         filtered_emotions = []
@@ -411,12 +497,79 @@ class MemeSender(Star):
                 filtered_emotions.append(emo)
             if len(filtered_emotions) >= self.max_emotions_per_message:
                 break
-                
+                    
         self.found_emotions = filtered_emotions
 
         # 防御性清理残留符号
         clean_text = re.sub(r'&&+', '', clean_text)  # 清除未成对的&&符号
         response.completion_text = clean_text.strip()
+
+    def _is_likely_emotion_markup(self, markup, text, position):
+        """判断一个标记是否可能是表情而非普通文本的一部分"""
+        # 获取标记前后的文本
+        before_text = text[:position].strip()
+        after_text = text[position + len(markup):].strip()
+        
+        # 如果是在中文上下文中，更可能是表情
+        has_chinese_before = bool(re.search(r'[\u4e00-\u9fff]', before_text[-1:] if before_text else ''))
+        has_chinese_after = bool(re.search(r'[\u4e00-\u9fff]', after_text[:1] if after_text else ''))
+        if has_chinese_before or has_chinese_after:
+            return True
+            
+        # 如果在数字标记中，可能是引用标记如[1]，不是表情
+        if re.match(r'\[\d+\]', markup):
+            return False
+        
+        # 如果标记内有空格，可能是普通句子，不是表情
+        if ' ' in markup[1:-1]:
+            return False
+            
+        # 如果标记前后是完整的英文句子，可能不是表情
+        english_context_before = bool(re.search(r'[a-zA-Z]\s+$', before_text))
+        english_context_after = bool(re.search(r'^\s+[a-zA-Z]', after_text))
+        if english_context_before and english_context_after:
+            return False
+            
+        # 默认情况下认为可能是表情
+        return True
+
+    def _is_likely_emotion(self, word, text, position, valid_emotions):
+        """判断一个单词是否可能是表情而非普通英文单词"""
+        
+        # 先获取上下文
+        before_text = text[:position].strip()
+        after_text = text[position + len(word):].strip()
+        
+        # 规则1：检查是否在英文上下文中
+        # 如果前面有英文单词+空格，或后面有空格+英文单词，可能是英文上下文
+        english_context_before = bool(re.search(r'[a-zA-Z]\s+$', before_text))
+        english_context_after = bool(re.search(r'^\s+[a-zA-Z]', after_text))
+        
+        # 在英文上下文中，不太可能是表情
+        if english_context_before or english_context_after:
+            return False
+        
+        # 规则2：前后有中文字符，更可能是表情
+        has_chinese_before = bool(re.search(r'[\u4e00-\u9fff]', before_text[-1:] if before_text else ''))
+        has_chinese_after = bool(re.search(r'[\u4e00-\u9fff]', after_text[:1] if after_text else ''))
+        
+        if has_chinese_before or has_chinese_after:
+            return True
+        
+        # 规则3：如果是句子开头或结尾，可能是表情
+        if not before_text or before_text.endswith(('。','，','！','？','.', ',', ':', ';', '!', '?', '\n')):
+            return True
+        
+        # 规则4：如果前后都是标点或空格，可能是表情
+        if (not before_text or before_text[-1] in ' \t\n.,!?;:\'\"()[]{}') and \
+           (not after_text or after_text[0] in ' \t\n.,!?;:\'\"()[]{}'):
+            return True
+        
+        # 规则5：如果是已知的表情占比很高(>=70%)的单词，即使在英文上下文中也可能是表情
+        if word in self.config.get("high_confidence_emotions", []):
+            return True
+        
+        return False
 
     @filter.on_decorating_result()
     async def on_decorating_result(self, event: AstrMessageEvent):

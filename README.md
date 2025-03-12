@@ -47,6 +47,8 @@
 
 ## 📢 通知
 
+### 🎉 更新宽松匹配等模式, 极大减少 llm 胡乱输出如:`angryangryangry`, `[happy]`等情况
+
 ### 🎉 现在支持微信了(Gewechat) (2025-02-25)
 
 ### ⚠️ 重要更新说明 (2025-02-24)
@@ -174,6 +176,10 @@
 - `max_emotions_per_message`: 每条消息最大表情数量
 - `emotions_probability`: 表情触发概率 (0-100)
 - `strict_max_emotions_per_message`: 是否严格限制表情数量
+- `enable_loose_emotion_matching`: 是否启用宽松的表情匹配
+- `enable_alternative_markup`: 是否启用备用标记
+- `enable_repeated_emotion_detection`: 是否启用重复表情检测
+- `high_confidence_emotions`: 高置信度表情列表
 
 ## 📝 使用指令
 
@@ -198,8 +204,9 @@
 
 ## 📜 更新日志
 
-### v3.1
+### v3.1x
 
+- 💡 新增宽松匹配模式, 备用标记匹配, 重复表情检测, 高置信度表情设置
 - 🛠️ 修复 webui 中的上传, 我是猪鼻
 - 🛠️ 提供 webp 格式支持
 
