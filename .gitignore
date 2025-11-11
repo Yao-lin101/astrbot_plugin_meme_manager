@@ -169,3 +169,11 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local development notes (not for commit)
+LOCAL_DEV_NOTES.md
+
+# Test scripts (not for commit to main branch)
+test_r2_*.py
+check_r2_files.py
+UPLOAD_TRACKER_README.md
