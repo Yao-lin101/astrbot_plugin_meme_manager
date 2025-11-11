@@ -197,19 +197,24 @@ class CloudflareR2Provider(ImageHostInterface):
             return False
 
     def get_image_list(self) -> List[ImageInfo]:
-        """获取Cloudflare R2中的所有图片"""
+        """获取Cloudflare R2中 memes/ 文件夹内的所有图片"""
         all_images = []
         
         try:
             paginator = self.s3_client.get_paginator('list_objects_v2')
             
-            for page in paginator.paginate(Bucket=self.bucket_name):
+            # 只列出 memes/ 前缀的文件
+            for page in paginator.paginate(Bucket=self.bucket_name, Prefix="memes/"):
                 if 'Contents' in page:
                     for obj in page['Contents']:
                         s3_key = obj['Key']
                         
                         # 跳过目录
                         if s3_key.endswith('/'):
+                            continue
+                        
+                        # 只处理 memes/ 下的文件
+                        if not s3_key.startswith('memes/'):
                             continue
                         
                         # 解析分类和文件名
@@ -274,15 +279,15 @@ class CloudflareR2Provider(ImageHostInterface):
         return False
 
     def _generate_s3_key(self, file_path: Path) -> str:
-        """生成S3键名，保持分类结构"""
+        """生成S3键名，保持分类结构，所有文件放在memes文件夹中"""
         # 从文件路径中提取分类信息
         category = self._get_category_from_path(file_path)
         filename = file_path.name
         
         if category:
-            return f"{category}/{filename}"
+            return f"memes/{category}/{filename}"
         else:
-            return filename
+            return f"memes/{filename}"
 
     def _get_category_from_path(self, file_path: Path) -> str:
         """从文件路径获取分类"""
@@ -302,9 +307,12 @@ class CloudflareR2Provider(ImageHostInterface):
 
     def _parse_s3_key(self, s3_key: str) -> tuple:
         """解析S3键名获取分类和文件名"""
-        # 简单实现，假设所有文件都在根目录
+        # 移除 memes/ 前缀
+        if s3_key.startswith("memes/"):
+            s3_key = s3_key[6:]
+        
         filename = s3_key.split('/')[-1]
-        category = "default"
+        category = ""
         
         # 如果S3键包含路径，提取分类
         if '/' in s3_key:

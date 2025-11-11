@@ -126,7 +126,13 @@ class ImageSync:
         try:
             # 等待进程完成
             await self._sync_task
-            return self.sync_process.exitcode == 0
+            exit_code = self.sync_process.exitcode
+            if exit_code == 0:
+                logger.info(f"同步任务完成成功")
+                return True
+            else:
+                logger.error(f"同步任务失败，进程退出码: {exit_code}")
+                return False
         except Exception as e:
             logger.error(f"同步任务异常: {str(e)}")
             self.stop_sync()
@@ -225,15 +231,51 @@ def run_sync_process(config: Dict[str, str], local_dir: str, task: str):
     """
     在独立进程中运行同步任务
     """
-    sync = ImageSync(config, local_dir)
+    try:
+        logger.info(f"启动同步进程，任务类型: {task}, 本地目录: {local_dir}")
+        
+        # 检测配置类型并提取正确的配置
+        if "cloudflare_r2" in config:
+            # 如果是完整配置，提取 cloudflare_r2 部分
+            provider_config = config["cloudflare_r2"]
+            provider_type = "cloudflare_r2"
+        elif "stardots" in config:
+            # 如果是 stardots 配置
+            provider_config = config["stardots"]
+            provider_type = "stardots"
+        elif "account_id" in config:
+            # 如果是直接的 R2 配置
+            provider_config = config
+            provider_type = "cloudflare_r2"
+        elif "key" in config:
+            # 如果是直接的 stardots 配置
+            provider_config = config
+            provider_type = "stardots"
+        else:
+            logger.error(f"无法识别的配置格式: {list(config.keys())}")
+            sys.exit(1)
+        
+        sync = ImageSync(provider_config, local_dir, provider_type)
 
-    if task == "upload":
-        success = sync.sync_manager.sync_to_remote()
-        sys.exit(0 if success else 1)
-    elif task == "download":
-        success = sync.sync_manager.sync_from_remote()
-        sys.exit(0 if success else 1)
-    elif task == "sync_all":
-        upload_success = sync.sync_manager.sync_to_remote()
-        download_success = sync.sync_manager.sync_from_remote()
-        sys.exit(0 if upload_success and download_success else 1)
+        if task == "upload":
+            logger.info("开始上传任务")
+            success = sync.sync_manager.sync_to_remote()
+            logger.info(f"上传任务完成，成功: {success}")
+            sys.exit(0 if success else 1)
+        elif task == "download":
+            logger.info("开始下载任务")
+            success = sync.sync_manager.sync_from_remote()
+            logger.info(f"下载任务完成，成功: {success}")
+            sys.exit(0 if success else 1)
+        elif task == "sync_all":
+            logger.info("开始完整同步任务")
+            upload_success = sync.sync_manager.sync_to_remote()
+            download_success = sync.sync_manager.sync_from_remote()
+            logger.info(f"完整同步完成，上传成功: {upload_success}, 下载成功: {download_success}")
+            sys.exit(0 if upload_success and download_success else 1)
+        else:
+            logger.error(f"未知的任务类型: {task}")
+            sys.exit(1)
+    except Exception as e:
+        logger.exception(f"同步进程发生异常: {str(e)}")
+        sys.exit(1)
