@@ -76,12 +76,21 @@ class CloudflareR2Provider(ImageHostInterface):
         self.access_key_id = config["access_key_id"]
         self.secret_access_key = config["secret_access_key"]
         self.bucket_name = config["bucket_name"]
-        self.public_url = config.get("public_url", f"https://{self.account_id}.r2.cloudflarestorage.com")
+        self.public_url = config.get("public_url")
+        
+        logger.info(f"初始化 Cloudflare R2 图床: account_id={self.account_id}, bucket={self.bucket_name}")
+        if self.public_url:
+            logger.info(f"使用自定义公共URL: {self.public_url}")
+        else:
+            logger.info(f"使用R2.dev默认公共URL: https://{self.bucket_name}.{self.account_id}.r2.dev")
         
         # 初始化S3客户端
+        endpoint_url = f"https://{self.account_id}.r2.cloudflarestorage.com"
+        logger.info(f"R2 S3端点: {endpoint_url}")
+        
         self.s3_client = boto3.client(
             's3',
-            endpoint_url=f"https://{self.account_id}.r2.cloudflarestorage.com",
+            endpoint_url=endpoint_url,
             aws_access_key_id=self.access_key_id,
             aws_secret_access_key=self.secret_access_key,
             config=Config(
@@ -89,6 +98,14 @@ class CloudflareR2Provider(ImageHostInterface):
                 s3={'addressing_style': 'path'}
             )
         )
+        
+        # 测试连接
+        try:
+            self.s3_client.head_bucket(Bucket=self.bucket_name)
+            logger.info(f"成功连接到R2存储桶: {self.bucket_name}")
+        except ClientError as e:
+            logger.error(f"无法访问R2存储桶 {self.bucket_name}: {e}")
+            raise
         
         # 禁用SSL警告
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -115,19 +132,23 @@ class CloudflareR2Provider(ImageHostInterface):
                 
                 # 生成S3键名（保持分类结构）
                 s3_key = self._generate_s3_key(file_path)
+                logger.info(f"生成的S3键名: {s3_key}")
                 
                 # 读取文件内容
                 with open(file_path, 'rb') as f:
                     file_content = f.read()
                 
-                # 上传到R2
+                logger.info(f"准备上传到存储桶 {self.bucket_name}, 文件大小: {len(file_content)} bytes")
+                
+                # 上传到R2（Cloudflare R2不支持ACL，默认通过R2.dev或自定义域名公开访问）
                 self.s3_client.put_object(
                     Bucket=self.bucket_name,
                     Key=s3_key,
                     Body=file_content,
-                    ContentType=mime_type,
-                    ACL='public-read'  # 设置为公开读取
+                    ContentType=mime_type
                 )
+                
+                logger.info(f"上传成功: {s3_key}")
                 
                 # 获取公共URL
                 public_url = self._get_public_url(s3_key)
@@ -254,14 +275,30 @@ class CloudflareR2Provider(ImageHostInterface):
 
     def _generate_s3_key(self, file_path: Path) -> str:
         """生成S3键名，保持分类结构"""
-        # 这里可以基于本地路径生成S3键名
-        # 简化实现，直接使用文件名
-        return file_path.name
+        # 从文件路径中提取分类信息
+        category = self._get_category_from_path(file_path)
+        filename = file_path.name
+        
+        if category:
+            return f"{category}/{filename}"
+        else:
+            return filename
 
     def _get_category_from_path(self, file_path: Path) -> str:
         """从文件路径获取分类"""
-        # 这里可以根据实际需要实现分类逻辑
-        return "default"
+        # 从文件路径中提取相对于表情包目录的分类
+        # 假设 file_path 是完整的本地路径，如 /path/to/memes/category/filename.jpg
+        
+        # 获取父目录
+        parent = file_path.parent
+        
+        # 如果文件在子目录中，返回子目录名作为分类
+        if parent.name and parent.name != "." and parent.name != str(file_path.parents[-2]):
+            # 尝试获取相对于memes目录的路径
+            # 这里简化处理，返回直接父目录名
+            return parent.name
+        
+        return ""
 
     def _parse_s3_key(self, s3_key: str) -> tuple:
         """解析S3键名获取分类和文件名"""
@@ -279,9 +316,10 @@ class CloudflareR2Provider(ImageHostInterface):
 
     def _get_public_url(self, s3_key: str) -> str:
         """获取文件的公共URL"""
-        if self.public_url and self.public_url != f"https://{self.account_id}.r2.cloudflarestorage.com":
-            # 如果配置了自定义CDN域名
-            return f"{self.public_url}/{s3_key}"
+        if self.public_url:
+            # 如果配置了自定义CDN域名（确保不以斜杠结尾）
+            base_url = self.public_url.rstrip("/")
+            return f"{base_url}/{s3_key}"
         else:
-            # 使用R2默认的公共访问URL
-            return f"https://{self.bucket_name}.{self.account_id}.r2.cloudflarestorage.com/{s3_key}"
+            # 使用R2默认的公共访问URL（R2.dev子域名）
+            return f"https://{self.bucket_name}.{self.account_id}.r2.dev/{s3_key}"

@@ -69,11 +69,15 @@ class MemeSender(Star):
             )
             required_fields = ["account_id", "access_key_id", "secret_access_key", "bucket_name"]
             if all(r2_config.get(field) for field in required_fields):
+                # 确保 public_url 不以斜杠结尾
+                if r2_config.get("public_url"):
+                    r2_config["public_url"] = r2_config["public_url"].rstrip("/")
                 self.img_sync = ImageSync(
                     config=r2_config,
                     local_dir=MEMES_DIR,
                     provider_type="cloudflare_r2"
                 )
+                self.logger.info(f"Cloudflare R2 图床已初始化: {r2_config.get('bucket_name')}")
 
         # 用于管理服务器
         self.webui_process = None
@@ -349,11 +353,21 @@ class MemeSender(Star):
                     continue
 
             del self.upload_states[user_key]
+            
+            # 基础成功消息
             result_msg = [
                 Plain(
                     f"✅ 已经成功收录了 {len(saved_files)} 张新表情到「{category}」图库！"
                 )
             ]
+            
+            # 如果配置了图床，提示用户需要手动同步
+            if self.img_sync:
+                result_msg.append(Plain("\n"))
+                result_msg.append(
+                    Plain("☁️ 检测到已配置图床，如需同步到云端请使用命令：同步到云端")
+                )
+            
             yield event.chain_result(result_msg)
             await self.reload_emotions()
 

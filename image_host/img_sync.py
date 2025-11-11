@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Dict, List, Union
 from .core.sync_manager import SyncManager
+from .core.upload_tracker import UploadTracker
 from .providers import StarDotsProvider, CloudflareR2Provider
 import multiprocessing
 import sys
@@ -64,9 +65,14 @@ class ImageSync:
         else:
             raise ValueError(f"不支持的图床提供者类型: {provider_type}")
         
+        # 初始化上传追踪器（仅用于记录已上传文件）
+        tracker_file = Path(local_dir) / ".upload_tracker.json"
+        self.upload_tracker = UploadTracker(tracker_file)
+        
         self.sync_manager = SyncManager(
-            image_host=self.provider, local_dir=self.local_dir
+            image_host=self.provider, local_dir=self.local_dir, upload_tracker=self.upload_tracker
         )
+        
         self.sync_process = None
         self._sync_task = None
 
