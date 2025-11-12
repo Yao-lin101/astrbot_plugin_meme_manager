@@ -3,14 +3,12 @@ import os
 import io
 import random
 import logging
-import json
 import time
 import aiohttp
 import ssl
 import copy
 from PIL import Image as PILImage
 import asyncio
-import shutil
 from multiprocessing import Process
 from astrbot.api.event import filter, AstrMessageEvent
 from astrbot.api.star import Context, Star, register
@@ -21,11 +19,10 @@ from astrbot.api.event import ResultContentType
 from astrbot.core.message.components import Plain
 from astrbot.api.all import *
 from astrbot.core.message.message_event_result import MessageChain
-from astrbot.api.provider import Personality
 from .webui import run_server, ServerState
 from .utils import get_public_ip, generate_secret_key, dict_to_string, load_json
 from .image_host.img_sync import ImageSync
-from .config import MEMES_DIR, MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS, TEMP_DIR
+from .config import MEMES_DIR, MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS
 from .backend.category_manager import CategoryManager
 from .init import init_plugin
 
@@ -48,7 +45,7 @@ class MemeSender(Star):
         # 初始化图床同步客户端
         self.img_sync = None
         image_host_type = self.config.get("image_host", "stardots")
-        
+
         if image_host_type == "stardots":
             stardots_config = self.config.get("image_host_config", {}).get(
                 "stardots", {}
@@ -61,21 +58,24 @@ class MemeSender(Star):
                         "space": stardots_config.get("space", "memes"),
                     },
                     local_dir=MEMES_DIR,
-                    provider_type="stardots"
+                    provider_type="stardots",
                 )
         elif image_host_type == "cloudflare_r2":
             r2_config = self.config.get("image_host_config", {}).get(
                 "cloudflare_r2", {}
             )
-            required_fields = ["account_id", "access_key_id", "secret_access_key", "bucket_name"]
+            required_fields = [
+                "account_id",
+                "access_key_id",
+                "secret_access_key",
+                "bucket_name",
+            ]
             if all(r2_config.get(field) for field in required_fields):
                 # 确保 public_url 不以斜杠结尾
                 if r2_config.get("public_url"):
                     r2_config["public_url"] = r2_config["public_url"].rstrip("/")
                 self.img_sync = ImageSync(
-                    config=r2_config,
-                    local_dir=MEMES_DIR,
-                    provider_type="cloudflare_r2"
+                    config=r2_config, local_dir=MEMES_DIR, provider_type="cloudflare_r2"
                 )
                 # 延迟日志记录，避免 logger 未初始化
                 self._r2_bucket_name = r2_config.get("bucket_name")
@@ -88,9 +88,7 @@ class MemeSender(Star):
 
         # 初始化表情状态
         self.found_emotions = []  # 存储找到的表情
-        self.upload_states = (
-            {}
-        )  # 存储上传状态：{user_session: {"category": str, "expire_time": float}}
+        self.upload_states = {}  # 存储上传状态：{user_session: {"category": str, "expire_time": float}}
         self.pending_images = {}  # 存储待发送的图片
 
         # 读取表情包分隔符
@@ -98,11 +96,11 @@ class MemeSender(Star):
 
         # 初始化 logger
         self.logger = logging.getLogger(__name__)
-        
+
         # 记录 R2 初始化日志（如果已初始化）
-        if hasattr(self, '_r2_bucket_name'):
+        if hasattr(self, "_r2_bucket_name"):
             self.logger.info(f"Cloudflare R2 图床已初始化: {self._r2_bucket_name}")
-            delattr(self, '_r2_bucket_name')
+            delattr(self, "_r2_bucket_name")
 
         # 处理人格
         self.prompt_head = self.config.get("prompt").get("prompt_head")
@@ -359,21 +357,21 @@ class MemeSender(Star):
                     continue
 
             del self.upload_states[user_key]
-            
+
             # 基础成功消息
             result_msg = [
                 Plain(
                     f"✅ 已经成功收录了 {len(saved_files)} 张新表情到「{category}」图库！"
                 )
             ]
-            
+
             # 如果配置了图床，提示用户需要手动同步
             if self.img_sync:
                 result_msg.append(Plain("\n"))
                 result_msg.append(
                     Plain("☁️ 检测到已配置图床，如需同步到云端请使用命令：同步到云端")
                 )
-            
+
             yield event.chain_result(result_msg)
             await self.reload_emotions()
 
@@ -649,7 +647,7 @@ class MemeSender(Star):
 
         return False
 
-    @filter.on_decorating_result()
+    @filter.on_decorating_result(priority=99999)
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前处理文本部分"""
         if not self.found_emotions:
@@ -676,11 +674,9 @@ class MemeSender(Star):
             for component in chains:
                 if isinstance(component, Plain):
                     text = component.text
-                    # 移除 &&emotion&& 格式的标签
-                    for emotion in self.found_emotions:
-                        text = text.replace(f"&&{emotion}&&", "")
-                    # 防御性清理残留的 && 符号
-                    text = re.sub(r"&&+", "", text)
+                    # 使用正则表达式移除所有表情标签（包括标签名和&&符号）
+                    # 匹配模式：&&[a-zA-Z_]*&& - 匹配完整的表情标签格式
+                    text = re.sub(r"&&[a-zA-Z_]*&&", "", text)
                     if text.strip():
                         cleaned_chains.append(Plain(text))
 
