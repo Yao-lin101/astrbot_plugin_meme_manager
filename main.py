@@ -671,10 +671,23 @@ class MemeSender(Star):
                 elif isinstance(original_chain, list):
                     chains.extend([c for c in original_chain if isinstance(c, Plain)])
 
+            # 清理文本中的表情标签
+            cleaned_chains = []
+            for component in chains:
+                if isinstance(component, Plain):
+                    text = component.text
+                    # 移除 &&emotion&& 格式的标签
+                    for emotion in self.found_emotions:
+                        text = text.replace(f"&&{emotion}&&", "")
+                    # 防御性清理残留的 && 符号
+                    text = re.sub(r"&&+", "", text)
+                    if text.strip():
+                        cleaned_chains.append(Plain(text))
+
             text_result = event.make_result().set_result_content_type(
                 ResultContentType.LLM_RESULT
             )
-            for component in chains:
+            for component in cleaned_chains:
                 if isinstance(component, Plain):
                     text_result = text_result.message(component.text)
 
