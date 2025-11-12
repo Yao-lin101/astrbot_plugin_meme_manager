@@ -31,7 +31,7 @@ from .init import init_plugin
 
 
 @register(
-    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "2.0"
+    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "3.18"
 )
 class MemeSender(Star):
     def __init__(self, context: Context, config: dict = None):
@@ -47,7 +47,9 @@ class MemeSender(Star):
 
         # 初始化图床同步客户端
         self.img_sync = None
-        if self.config.get("image_host") == "stardots":
+        image_host_type = self.config.get("image_host", "stardots")
+        
+        if image_host_type == "stardots":
             stardots_config = self.config.get("image_host_config", {}).get(
                 "stardots", {}
             )
@@ -59,7 +61,24 @@ class MemeSender(Star):
                         "space": stardots_config.get("space", "memes"),
                     },
                     local_dir=MEMES_DIR,
+                    provider_type="stardots"
                 )
+        elif image_host_type == "cloudflare_r2":
+            r2_config = self.config.get("image_host_config", {}).get(
+                "cloudflare_r2", {}
+            )
+            required_fields = ["account_id", "access_key_id", "secret_access_key", "bucket_name"]
+            if all(r2_config.get(field) for field in required_fields):
+                # 确保 public_url 不以斜杠结尾
+                if r2_config.get("public_url"):
+                    r2_config["public_url"] = r2_config["public_url"].rstrip("/")
+                self.img_sync = ImageSync(
+                    config=r2_config,
+                    local_dir=MEMES_DIR,
+                    provider_type="cloudflare_r2"
+                )
+                # 延迟日志记录，避免 logger 未初始化
+                self._r2_bucket_name = r2_config.get("bucket_name")
 
         # 用于管理服务器
         self.webui_process = None
@@ -79,6 +98,11 @@ class MemeSender(Star):
 
         # 初始化 logger
         self.logger = logging.getLogger(__name__)
+        
+        # 记录 R2 初始化日志（如果已初始化）
+        if hasattr(self, '_r2_bucket_name'):
+            self.logger.info(f"Cloudflare R2 图床已初始化: {self._r2_bucket_name}")
+            delattr(self, '_r2_bucket_name')
 
         # 处理人格
         self.prompt_head = self.config.get("prompt").get("prompt_head")
@@ -335,11 +359,21 @@ class MemeSender(Star):
                     continue
 
             del self.upload_states[user_key]
+            
+            # 基础成功消息
             result_msg = [
                 Plain(
                     f"✅ 已经成功收录了 {len(saved_files)} 张新表情到「{category}」图库！"
                 )
             ]
+            
+            # 如果配置了图床，提示用户需要手动同步
+            if self.img_sync:
+                result_msg.append(Plain("\n"))
+                result_msg.append(
+                    Plain("☁️ 检测到已配置图床，如需同步到云端请使用命令：同步到云端")
+                )
+            
             yield event.chain_result(result_msg)
             await self.reload_emotions()
 
@@ -422,6 +456,7 @@ class MemeSender(Star):
             bracket_pattern = r"\[([^\[\]]+)\]"
             matches = re.finditer(bracket_pattern, clean_text)
             bracket_replacements = []
+            invalid_brackets = []
 
             for match in matches:
                 original = match.group(0)
@@ -430,8 +465,12 @@ class MemeSender(Star):
                 if emotion in valid_emoticons:
                     bracket_replacements.append((original, emotion))
                 else:
-                    # 这里不删除无效标记，保留原样
-                    continue
+                    # 记录无效标记，稍后删除
+                    invalid_brackets.append(original)
+
+            # 删除所有无效标记
+            for invalid in invalid_brackets:
+                clean_text = clean_text.replace(invalid, "", 1)
 
             for original, emotion in bracket_replacements:
                 clean_text = clean_text.replace(original, "", 1)
@@ -441,6 +480,7 @@ class MemeSender(Star):
             paren_pattern = r"\(([^()]+)\)"
             matches = re.finditer(paren_pattern, clean_text)
             paren_replacements = []
+            invalid_parens = []
 
             for match in matches:
                 original = match.group(0)
@@ -452,6 +492,13 @@ class MemeSender(Star):
                         original, clean_text, match.start()
                     ):
                         paren_replacements.append((original, emotion))
+                else:
+                    # 记录无效标记，稍后删除
+                    invalid_parens.append(original)
+
+            # 删除所有无效标记
+            for invalid in invalid_parens:
+                clean_text = clean_text.replace(invalid, "", 1)
 
             for original, emotion in paren_replacements:
                 clean_text = clean_text.replace(original, "", 1)

@@ -169,3 +169,8 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Local development directory - everything in this directory is ignored
+# This directory is for local development files, test scripts, notes, etc.
+# These files should never be committed to Git
+local/

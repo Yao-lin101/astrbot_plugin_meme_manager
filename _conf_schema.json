@@ -4,7 +4,7 @@
     "type": "string",
     "hint": "请选择要使用的图床服务",
     "default": "stardots",
-    "options": ["stardots"]
+    "options": ["stardots", "cloudflare_r2"]
   },
   "image_host_config": {
     "description": "图床配置",
@@ -28,6 +28,37 @@
             "description": "空间名称",
             "type": "string",
             "hint": "请输入 Stardots 的空间名称"
+          }
+        }
+      },
+      "cloudflare_r2": {
+        "description": "Cloudflare R2 图床配置",
+        "type": "object",
+        "items": {
+          "account_id": {
+            "description": "Cloudflare Account ID",
+            "type": "string",
+            "hint": "请输入 Cloudflare Account ID"
+          },
+          "access_key_id": {
+            "description": "R2 Access Key ID",
+            "type": "string",
+            "hint": "请输入 R2 Access Key ID"
+          },
+          "secret_access_key": {
+            "description": "R2 Secret Access Key",
+            "type": "string",
+            "hint": "请输入 R2 Secret Access Key"
+          },
+          "bucket_name": {
+            "description": "R2 Bucket 名称",
+            "type": "string",
+            "hint": "请输入 R2 Bucket 名称"
+          },
+          "public_url": {
+            "description": "自定义CDN域名（可选）",
+            "type": "string",
+            "hint": "自定义CDN域名，例如：https://cdn.yourdomain.com"
           }
         }
       }

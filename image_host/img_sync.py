@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Dict, List, Union
 from .core.sync_manager import SyncManager
-from .providers.stardots_provider import StarDotsProvider
+from .core.upload_tracker import UploadTracker
+from .providers import StarDotsProvider, CloudflareR2Provider
 import multiprocessing
 import sys
 import asyncio
@@ -36,27 +37,42 @@ class ImageSync:
         sync.sync_all()
     """
 
-    def __init__(self, config: Dict[str, str], local_dir: Union[str, Path]):
+    def __init__(self, config: Dict[str, str], local_dir: Union[str, Path], provider_type: str = "stardots"):
         """
         初始化同步客户端
 
         Args:
-            config: 包含图床配置信息的字典，必须包含 key、secret 和 space
+            config: 包含图床配置信息的字典
             local_dir: 本地图片目录的路径
+            provider_type: 图床提供者类型，可选 "stardots" 或 "cloudflare_r2"
         """
         self.config = config
         self.local_dir = Path(local_dir)
-        self.provider = StarDotsProvider(
-            {
-                "key": config["key"],
-                "secret": config["secret"],
-                "space": config["space"],
-                "local_dir": str(local_dir),
-            }
-        )
+        self.provider_type = provider_type
+        
+        # 根据 provider_type 初始化对应的 provider
+        if provider_type == "stardots":
+            self.provider = StarDotsProvider(
+                {
+                    "key": config["key"],
+                    "secret": config["secret"],
+                    "space": config["space"],
+                    "local_dir": str(local_dir),
+                }
+            )
+        elif provider_type == "cloudflare_r2":
+            self.provider = CloudflareR2Provider(config)
+        else:
+            raise ValueError(f"不支持的图床提供者类型: {provider_type}")
+        
+        # 初始化上传追踪器（仅用于记录已上传文件）
+        tracker_file = Path(local_dir) / ".upload_tracker.json"
+        self.upload_tracker = UploadTracker(tracker_file)
+        
         self.sync_manager = SyncManager(
-            image_host=self.provider, local_dir=self.local_dir
+            image_host=self.provider, local_dir=self.local_dir, upload_tracker=self.upload_tracker
         )
+        
         self.sync_process = None
         self._sync_task = None
 
@@ -110,7 +126,13 @@ class ImageSync:
         try:
             # 等待进程完成
             await self._sync_task
-            return self.sync_process.exitcode == 0
+            exit_code = self.sync_process.exitcode
+            if exit_code == 0:
+                logger.info(f"同步任务完成成功")
+                return True
+            else:
+                logger.error(f"同步任务失败，进程退出码: {exit_code}")
+                return False
         except Exception as e:
             logger.error(f"同步任务异常: {str(e)}")
             self.stop_sync()
@@ -209,15 +231,51 @@ def run_sync_process(config: Dict[str, str], local_dir: str, task: str):
     """
     在独立进程中运行同步任务
     """
-    sync = ImageSync(config, local_dir)
+    try:
+        logger.info(f"启动同步进程，任务类型: {task}, 本地目录: {local_dir}")
+        
+        # 检测配置类型并提取正确的配置
+        if "cloudflare_r2" in config:
+            # 如果是完整配置，提取 cloudflare_r2 部分
+            provider_config = config["cloudflare_r2"]
+            provider_type = "cloudflare_r2"
+        elif "stardots" in config:
+            # 如果是 stardots 配置
+            provider_config = config["stardots"]
+            provider_type = "stardots"
+        elif "account_id" in config:
+            # 如果是直接的 R2 配置
+            provider_config = config
+            provider_type = "cloudflare_r2"
+        elif "key" in config:
+            # 如果是直接的 stardots 配置
+            provider_config = config
+            provider_type = "stardots"
+        else:
+            logger.error(f"无法识别的配置格式: {list(config.keys())}")
+            sys.exit(1)
+        
+        sync = ImageSync(provider_config, local_dir, provider_type)
 
-    if task == "upload":
-        success = sync.sync_manager.sync_to_remote()
-        sys.exit(0 if success else 1)
-    elif task == "download":
-        success = sync.sync_manager.sync_from_remote()
-        sys.exit(0 if success else 1)
-    elif task == "sync_all":
-        upload_success = sync.sync_manager.sync_to_remote()
-        download_success = sync.sync_manager.sync_from_remote()
-        sys.exit(0 if upload_success and download_success else 1)
+        if task == "upload":
+            logger.info("开始上传任务")
+            success = sync.sync_manager.sync_to_remote()
+            logger.info(f"上传任务完成，成功: {success}")
+            sys.exit(0 if success else 1)
+        elif task == "download":
+            logger.info("开始下载任务")
+            success = sync.sync_manager.sync_from_remote()
+            logger.info(f"下载任务完成，成功: {success}")
+            sys.exit(0 if success else 1)
+        elif task == "sync_all":
+            logger.info("开始完整同步任务")
+            upload_success = sync.sync_manager.sync_to_remote()
+            download_success = sync.sync_manager.sync_from_remote()
+            logger.info(f"完整同步完成，上传成功: {upload_success}, 下载成功: {download_success}")
+            sys.exit(0 if upload_success and download_success else 1)
+        else:
+            logger.error(f"未知的任务类型: {task}")
+            sys.exit(1)
+    except Exception as e:
+        logger.exception(f"同步进程发生异常: {str(e)}")
+        sys.exit(1)

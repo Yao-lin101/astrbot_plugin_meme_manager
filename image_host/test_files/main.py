@@ -3,6 +3,7 @@ import json
 import time
 from pathlib import Path
 from providers.stardots_provider import StarDotsProvider
+from providers.cloudflare_r2_provider import CloudflareR2Provider
 from core.sync_manager import SyncManager
 from typing import Dict
 
@@ -11,27 +12,57 @@ class ImageSyncCLI:
     
     def __init__(self, config_path: str = 'config.json'):
         self.config = self._load_config(config_path)
-        self.provider = StarDotsProvider(self.config['stardots'])
+        self.provider = self._init_provider()
         self.sync_manager = SyncManager(
             image_host=self.provider,
             local_dir=Path(self.config['local_dir'])
         )
+    
+    def _init_provider(self):
+        """根据配置初始化图床提供者"""
+        provider_type = self.config.get('provider', 'stardots')
+        
+        if provider_type == 'stardots':
+            return StarDotsProvider(self.config['stardots'])
+        elif provider_type == 'cloudflare_r2':
+            return CloudflareR2Provider(self.config['cloudflare_r2'])
+        else:
+            raise ValueError(f"不支持的图床提供者: {provider_type}")
     
     def _load_config(self, config_path: str) -> Dict:
         """加载配置文件"""
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-                # 验证必要的配置项
-                required_keys = ['stardots', 'local_dir']
-                for key in required_keys:
-                    if key not in config:
-                        raise ValueError(f"配置文件缺少必要的配置项: {key}")
                 
-                stardots_required = ['key', 'secret', 'space']
-                for key in stardots_required:
-                    if key not in config['stardots']:
-                        raise ValueError(f"StarDots配置缺少必要的配置项: {key}")
+                # 验证必要的配置项
+                if 'provider' not in config:
+                    config['provider'] = 'stardots'  # 默认使用stardots
+                
+                if 'local_dir' not in config:
+                    raise ValueError(f"配置文件缺少必要的配置项: local_dir")
+                
+                # 根据提供者验证配置
+                provider_type = config.get('provider', 'stardots')
+                
+                if provider_type == 'stardots':
+                    if 'stardots' not in config:
+                        raise ValueError("配置了stardots提供者但缺少stardots配置")
+                    stardots_required = ['key', 'secret', 'space']
+                    for key in stardots_required:
+                        if key not in config['stardots']:
+                            raise ValueError(f"StarDots配置缺少必要的配置项: {key}")
+                
+                elif provider_type == 'cloudflare_r2':
+                    if 'cloudflare_r2' not in config:
+                        raise ValueError("配置了cloudflare_r2提供者但缺少cloudflare_r2配置")
+                    r2_required = ['account_id', 'access_key_id', 'secret_access_key', 'bucket_name']
+                    for key in r2_required:
+                        if key not in config['cloudflare_r2']:
+                            raise ValueError(f"Cloudflare R2配置缺少必要的配置项: {key}")
+                
+                else:
+                    raise ValueError(f"不支持的图床提供者: {provider_type}")
                         
                 return config
         except FileNotFoundError:

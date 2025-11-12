@@ -41,7 +41,7 @@ async def health_check():
     """健康检查接口"""
     return jsonify({
         "status": "running",
-        "version": "1.0.0"
+        "version": "1.0"
     })
 
 @app.before_request
