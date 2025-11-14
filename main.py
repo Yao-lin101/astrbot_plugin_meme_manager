@@ -659,94 +659,100 @@ class MemeSender(Star):
 
     @filter.on_decorating_result(priority=99999)
     async def on_decorating_result(self, event: AstrMessageEvent):
-        """在消息发送前处理文本部分，并添加表情图片"""
-        if not self.found_emotions:
-            return
-
+        """在消息发送前清理文本中的表情标签，并添加表情图片"""
         result = event.get_result()
         if not result:
             return
 
         try:
-            # 获取文本内容并清理表情标签
-            text_chains = []
+            # 第一步：获取并清理原始消息链中的文本
             original_chain = result.chain
+            cleaned_components = []
 
             if original_chain:
+                # 处理不同类型的消息链
                 if isinstance(original_chain, str):
-                    text_chains.append(original_chain)
+                    # 字符串类型：清理后转为 Plain 组件
+                    cleaned = re.sub(self.content_cleanup_rule, "", original_chain) if self.content_cleanup_rule else original_chain
+                    if cleaned.strip():
+                        cleaned_components.append(Plain(cleaned.strip()))
+
                 elif isinstance(original_chain, MessageChain):
+                    # MessageChain 类型：遍历清理 Plain 组件
                     for component in original_chain:
                         if isinstance(component, Plain):
-                            text_chains.append(component.text)
+                            cleaned = re.sub(self.content_cleanup_rule, "", component.text) if self.content_cleanup_rule else component.text
+                            if cleaned.strip():
+                                cleaned_components.append(Plain(cleaned.strip()))
+                        else:
+                            # 保留非文本组件（如已有的图片等）
+                            cleaned_components.append(component)
+
                 elif isinstance(original_chain, list):
+                    # 列表类型：遍历清理 Plain 组件
                     for component in original_chain:
                         if isinstance(component, Plain):
-                            text_chains.append(component.text)
+                            cleaned = re.sub(self.content_cleanup_rule, "", component.text) if self.content_cleanup_rule else component.text
+                            if cleaned.strip():
+                                cleaned_components.append(Plain(cleaned.strip()))
+                        else:
+                            cleaned_components.append(component)
 
-            # 清理文本中的表情标签
-            cleaned_text = ""
-            for text in text_chains:
-                if text:
-                    # 使用配置的正则表达式移除表情标签
-                    if self.content_cleanup_rule:
-                        text = re.sub(self.content_cleanup_rule, "", text)
-                    if text.strip():
-                        cleaned_text += text
+            # 第二步：添加表情图片（如果有找到的表情）
+            if self.found_emotions:
+                # 检查概率（注意：概率判断是"小于等于"才发送）
+                if random.randint(1, 100) <= self.emotions_probability:
+                    # 为每个表情添加图片
+                    for emotion in self.found_emotions:
+                        if not emotion:
+                            continue
 
-            # 优先处理：如果有文本内容，先更新文本
-            if cleaned_text.strip():
-                text_result = event.make_result().set_result_content_type(
-                    ResultContentType.LLM_RESULT
-                )
-                text_result.chain = cleaned_text.strip()
-                event.set_result(text_result)
+                        emotion_path = os.path.join(MEMES_DIR, emotion)
+                        if not os.path.exists(emotion_path):
+                            continue
 
-            # 然后添加表情图片到更新后的消息链
-            final_chain = event.get_result().chain
+                        memes = [
+                            f
+                            for f in os.listdir(emotion_path)
+                            if f.endswith((".jpg", ".png", ".gif"))
+                        ]
+                        if not memes:
+                            continue
 
-            # 检查是否发送表情图片
-            if random.randint(1, 100) > self.emotions_probability:
+                        meme = random.choice(memes)
+                        meme_file = os.path.join(emotion_path, meme)
+
+                        try:
+                            cleaned_components.append(Image.fromFileSystem(meme_file))
+                        except Exception as e:
+                            self.logger.error(f"添加表情图片失败: {e}")
+
+                # 清空已处理的表情列表
                 self.found_emotions = []
-                return
 
-            # 添加表情图片
-            for emotion in self.found_emotions:
-                if not emotion:
-                    continue
-
-                emotion_path = os.path.join(MEMES_DIR, emotion)
-                if not os.path.exists(emotion_path):
-                    continue
-
-                memes = [
-                    f
-                    for f in os.listdir(emotion_path)
-                    if f.endswith((".jpg", ".png", ".gif"))
-                ]
-                if not memes:
-                    continue
-
-                meme = random.choice(memes)
-                meme_file = os.path.join(emotion_path, meme)
-
-                try:
-                    # 将图片添加到消息链
-                    if isinstance(final_chain, str):
-                        # 如果当前是字符串，转换为 MessageChain
-                        message_chain = MessageChain([Plain(final_chain), Image.fromFileSystem(meme_file)])
-                        event.get_result().chain = message_chain
-                    elif isinstance(final_chain, MessageChain):
-                        # 如果已经是 MessageChain，直接添加图片
-                        final_chain.append(Image.fromFileSystem(meme_file))
-                    elif isinstance(final_chain, list):
-                        # 如果是列表，添加图片
-                        final_chain.append(Image.fromFileSystem(meme_file))
-                except Exception as e:
-                    self.logger.error(f"添加表情图片失败: {e}")
-
-            # 清空已处理的表情列表
-            self.found_emotions = []
+            # 第三步：更新消息链
+            if cleaned_components:
+                # 如果有清理后的内容，创建新的 MessageChain
+                result.chain = MessageChain(cleaned_components)
+            elif original_chain:
+                # 如果原本有内容但清理后为空，也要更新（避免发送带标签的空消息）
+                # 进行最后的防御性清理
+                if isinstance(original_chain, str):
+                    final_cleaned = re.sub(r"&&+", "", original_chain)  # 清除残留的&&符号
+                    if final_cleaned.strip():
+                        result.chain = MessageChain([Plain(final_cleaned.strip())])
+                elif isinstance(original_chain, MessageChain):
+                    # 对 MessageChain 中的每个 Plain 组件进行最后清理
+                    final_components = []
+                    for component in original_chain:
+                        if isinstance(component, Plain):
+                            final_cleaned = re.sub(r"&&+", "", component.text)
+                            if final_cleaned.strip():
+                                final_components.append(Plain(final_cleaned.strip()))
+                        else:
+                            final_components.append(component)
+                    if final_components:
+                        result.chain = MessageChain(final_components)
 
         except Exception as e:
             self.logger.error(f"处理消息装饰失败: {str(e)}")
