@@ -122,10 +122,6 @@ class MemeSender(Star):
             "content_cleanup_rule", "&&[a-zA-Z]*&&"
         )
 
-        # 混合消息相关配置
-        self.enable_mixed_message = self.config.get("enable_mixed_message", True)
-        self.mixed_message_probability = self.config.get("mixed_message_probability", 80)
-
         # 更新人格
         personas = self.context.provider_manager.personas
         self.persona_backup = copy.deepcopy(personas)
@@ -661,49 +657,23 @@ class MemeSender(Star):
 
         return False
 
-    @filter.on_decorating_result(priority=99999)
-    async def on_decorating_result(self, event: AstrMessageEvent):
-        """在消息发送前处理文本部分，并准备混合消息"""
+    @filter.on_decorating_result(priority=1)
+    async def decorate_message(self, event: AstrMessageEvent):
+        """在消息发送前，将表情图片附加到消息链"""
         if not self.found_emotions:
             return
 
-        result = event.get_result()
-        if not result:
+        # 随机决定是否发送表情
+        if random.randint(1, 100) > self.emotions_probability:
+            self.found_emotions = []
             return
 
         try:
-            # 获取文本内容
-            text_chains = []
-            original_chain = result.chain
+            # 获取当前的消息链
+            chain = event.get_result().chain
 
-            if original_chain:
-                if isinstance(original_chain, str):
-                    text_chains.append(original_chain)
-                elif isinstance(original_chain, MessageChain):
-                    for component in original_chain:
-                        if isinstance(component, Plain):
-                            text_chains.append(component.text)
-                elif isinstance(original_chain, list):
-                    for component in original_chain:
-                        if isinstance(component, Plain):
-                            text_chains.append(component.text)
-
-            # 清理文本中的表情标签
-            cleaned_text = ""
-            for text in text_chains:
-                if text:
-                    # 使用配置的正则表达式移除表情标签
-                    if self.content_cleanup_rule:
-                        text = re.sub(self.content_cleanup_rule, "", text)
-                    if text.strip():
-                        cleaned_text += text
-
-            # 准备表情图片
-            emotion_images = []
+            # 遍历之前找到的所有表情
             for emotion in self.found_emotions:
-                if not emotion:
-                    continue
-
                 emotion_path = os.path.join(MEMES_DIR, emotion)
                 if not os.path.exists(emotion_path):
                     continue
@@ -719,104 +689,26 @@ class MemeSender(Star):
                 meme = random.choice(memes)
                 meme_file = os.path.join(emotion_path, meme)
 
-                # 根据概率决定是否发送
-                if random.randint(0, 100) <= self.emotions_probability:
-                    emotion_images.append(Image.fromFileSystem(meme_file))
+                try:
+                    # 将图片添加到消息链的末尾
+                    chain.append(Image.fromFileSystem(meme_file))
+                except Exception as e:
+                    self.logger.error(f"添加表情图片失败: {e}")
 
-            # 决定是否使用混合消息
-            use_mixed_message = False
-            if self.enable_mixed_message and emotion_images:
-                use_mixed_message = random.randint(0, 100) <= self.mixed_message_probability
-
-            # 构建消息
-            if cleaned_text.strip() or emotion_images:
-                if use_mixed_message:
-                    # 混合消息：文本和图片在一条消息中
-                    mixed_components = []
-
-                    # 先添加文本
-                    if cleaned_text.strip():
-                        mixed_components.append(Plain(cleaned_text.strip()))
-
-                    # 再添加图片
-                    mixed_components.extend(emotion_images)
-
-                    # 创建 MessageChain
-                    message_chain = MessageChain(mixed_components)
-
-                    # 创建新的结果并设置消息链
-                    text_result = event.make_result().set_result_content_type(
-                        ResultContentType.LLM_RESULT
-                    )
-                    text_result.chain = message_chain
-                    event.set_result(text_result)
-
-                    # 清空已处理的表情
-                    self.found_emotions = []
-                else:
-                    # 分别发送：先发送文本，图片留给 after_message_sent 处理
-                    if cleaned_text.strip():
-                        text_result = event.make_result().set_result_content_type(
-                            ResultContentType.LLM_RESULT
-                        )
-                        text_result.chain = cleaned_text.strip()
-                        event.set_result(text_result)
-                    else:
-                        # 如果没有文本内容，直接发送图片
-                        await self.after_message_sent(event)
-                        event.stop_event()
+            # 清空列表，避免重复发送
+            self.found_emotions = []
 
         except Exception as e:
-            self.logger.error(f"处理混合消息失败: {str(e)}")
+            self.logger.error(f"装饰消息链失败: {str(e)}")
             import traceback
             self.logger.error(traceback.format_exc())
 
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent):
-        """消息发送后处理图片部分"""
-        if not self.found_emotions:
-            return
-
-        try:
-            for emotion in self.found_emotions:
-                if not emotion:
-                    continue
-
-                emotion_path = os.path.join(MEMES_DIR, emotion)
-                if not os.path.exists(emotion_path):
-                    continue
-
-                memes = [
-                    f
-                    for f in os.listdir(emotion_path)
-                    if f.endswith((".jpg", ".png", ".gif"))
-                ]
-                if not memes:
-                    continue
-
-                meme = random.choice(memes)
-                meme_file = os.path.join(emotion_path, meme)
-
-                # 检查概率（因为 on_decorating_result 中已经检查过一次，这里不需要再次检查）
-                # 直接发送剩余的表情图片
-                if event.get_platform_name() == "gewechat":
-                    await event.send(
-                        MessageChain([Image.fromFileSystem(meme_file)])
-                    )
-                else:
-                    await self.context.send_message(
-                        event.unified_msg_origin,
-                        MessageChain([Image.fromFileSystem(meme_file)]),
-                    )
-            self.found_emotions = []
-
-        except Exception as e:
-            self.logger.error(f"发送表情图片失败: {str(e)}")
-            import traceback
-
-            self.logger.error(traceback.format_exc())
-        finally:
-            self.found_emotions = []
+        """消息发送后处理。目前无需操作，逻辑已前置到 decorate_message。"""
+        # 此处的逻辑已移至 on_decorating_result 钩子，以兼容不支持主动消息的平台。
+        # 保留此空函数用于可能的调试或未来扩展。
+        pass
 
     @meme_manager.command("同步状态")
     async def check_sync_status(self, event: AstrMessageEvent):
