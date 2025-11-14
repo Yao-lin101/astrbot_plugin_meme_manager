@@ -705,7 +705,12 @@ class MemeSender(Star):
             # 然后添加表情图片到更新后的消息链
             final_chain = event.get_result().chain
 
-            # 添加表情图片（百分百概率发送）
+            # 检查是否发送表情图片
+            if random.randint(1, 100) > self.emotions_probability:
+                self.found_emotions = []
+                return
+
+            # 添加表情图片
             for emotion in self.found_emotions:
                 if not emotion:
                     continue
@@ -733,7 +738,15 @@ class MemeSender(Star):
                         event.get_result().chain = message_chain
                     elif isinstance(final_chain, MessageChain):
                         # 如果已经是 MessageChain，直接添加图片
-                        final_chain.append(Image.fromFileSystem(meme_file))
+                        # 需要确保 MessageChain 是可变的
+                        chain_list = list(final_chain) if hasattr(final_chain, '__iter__') else final_chain.chain
+                        if isinstance(chain_list, list):
+                            chain_list.append(Image.fromFileSystem(meme_file))
+                            final_chain.chain = chain_list
+                        else:
+                            # 如果无法直接操作，重新创建 MessageChain
+                            new_chain = MessageChain(list(final_chain.chain) + [Image.fromFileSystem(meme_file)])
+                            event.get_result().chain = new_chain
                     elif isinstance(final_chain, list):
                         # 如果是列表，添加图片
                         final_chain.append(Image.fromFileSystem(meme_file))
