@@ -794,11 +794,11 @@ class MemeSender(Star):
 
         try:
             # 获取图床配置信息
-            provider_name = self.img_sync.image_host.__class__.__name__
-            if hasattr(self.img_sync.image_host, 'bucket_name'):
-                storage_info = f"存储桶: {self.img_sync.image_host.bucket_name}"
-            elif hasattr(self.img_sync.image_host, 'album_id'):
-                storage_info = f"相册ID: {self.img_sync.image_host.album_id}"
+            provider_name = self.img_sync.provider.__class__.__name__
+            if hasattr(self.img_sync.provider, 'bucket_name'):
+                storage_info = f"存储桶: {self.img_sync.provider.bucket_name}"
+            elif hasattr(self.img_sync.provider, 'album_id'):
+                storage_info = f"相册ID: {self.img_sync.provider.album_id}"
             else:
                 storage_info = "未知存储类型"
 
@@ -948,7 +948,7 @@ class MemeSender(Star):
                 result.append("☁️ 云端图库统计:")
 
                 try:
-                    remote_images = self.img_sync.image_host.get_image_list()
+                    remote_images = self.img_sync.provider.get_image_list()
                     remote_stats = {}
                     remote_total = len(remote_images)
 
