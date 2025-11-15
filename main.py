@@ -784,7 +784,7 @@ class MemeSender(Star):
         pass
 
     @meme_manager.command("同步状态")
-    async def check_sync_status(self, event: AstrMessageEvent):
+    async def check_sync_status(self, event: AstrMessageEvent, detail: str = None):
         """检查表情包与图床的同步状态"""
         if not self.img_sync:
             yield event.plain_result(
@@ -866,6 +866,55 @@ class MemeSender(Star):
             # 同步状态总结
             if not to_upload and not to_download:
                 result.append("✅ 云端与本地图库已经完全同步啦！")
+
+                # 如果用户要求详细信息，显示更多内容
+                if detail and detail.strip() == "详细":
+                    result.append("")
+                    result.append("📋 详细信息:")
+
+                    # 显示所有文件类别的统计
+                    try:
+                        if hasattr(self.img_sync.provider, 'get_image_list'):
+                            remote_images = self.img_sync.provider.get_image_list()
+                            remote_stats = {}
+                            for img in remote_images:
+                                cat = img.get('category', '未分类')
+                                remote_stats[cat] = remote_stats.get(cat, 0) + 1
+
+                            if remote_stats:
+                                result.append("📂 云端文件分类详情:")
+                                for cat, count in sorted(remote_stats.items(), key=lambda x: x[1], reverse=True):
+                                    result.append(f"  • {cat}: {count} 个")
+
+                                # 显示文件总数
+                                result.append(f"📊 云端总计: {len(remote_images)} 个文件")
+                            else:
+                                result.append("📂 云端无文件")
+                    except Exception as e:
+                        result.append(f"⚠️ 获取云端详情失败: {str(e)}")
+
+                    # 显示本地图库统计
+                    local_stats = {}
+                    local_total = 0
+                    if os.path.exists(MEMES_DIR):
+                        for category in os.listdir(MEMES_DIR):
+                            category_path = os.path.join(MEMES_DIR, category)
+                            if os.path.isdir(category_path):
+                                files = [f for f in os.listdir(category_path)
+                                       if f.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))]
+                                count = len(files)
+                                local_stats[category] = count
+                                local_total += count
+
+                    if local_stats:
+                        result.append("")
+                        result.append("📂 本地文件分类详情:")
+                        for cat, count in sorted(local_stats.items(), key=lambda x: x[1], reverse=True):
+                            result.append(f"  • {cat}: {count} 个")
+                        result.append(f"📊 本地总计: {local_total} 个文件")
+                    else:
+                        result.append("")
+                        result.append("📂 本地无文件")
             else:
                 result.append("⏳ 需要同步以保持云端与本地图库一致")
                 result.append("💡 使用 '/表情管理 同步到云端' 或 '/表情管理 从云端同步' 进行同步")
