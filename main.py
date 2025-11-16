@@ -15,7 +15,6 @@ from astrbot.api.star import Context, Star, register
 from astrbot.api.provider import LLMResponse
 from astrbot.api.message_components import *
 from astrbot.api.event.filter import EventMessageType
-from astrbot.api.event import ResultContentType
 from astrbot.core.message.components import Plain
 from astrbot.api.all import *
 from astrbot.core.message.message_event_result import MessageChain
@@ -396,6 +395,25 @@ class MemeSender(Star):
         except Exception as e:
             self.logger.error(f"重新加载表情配置失败: {str(e)}")
 
+    def _is_position_in_thinking_tags(self, text: str, position: int) -> bool:
+        """检查指定位置是否在thinking标签内
+
+        Args:
+            text: 原始文本
+            position: 要检查的位置
+
+        Returns:
+            True如果位置在thinking标签内，False否则
+        """
+        import re
+        # 找到所有thinking标签的开始和结束位置
+        thinking_pattern = re.compile(r'<think(?:ing)?>.*?</think(?:ing)?>', re.DOTALL | re.IGNORECASE)
+
+        for match in thinking_pattern.finditer(text):
+            if match.start() <= position < match.end():
+                return True
+        return False
+
     def _check_meme_directories(self):
         """检查表情包目录是否存在并且包含图片"""
         self.logger.info(f"开始检查表情包根目录: {MEMES_DIR}")
@@ -527,6 +545,9 @@ class MemeSender(Star):
                     repeat_pattern = f"({re.escape(emotion)})\\1{{1,}}"
                     matches = re.finditer(repeat_pattern, clean_text)
                     for match in matches:
+                        # 跳过thinking标签内的内容
+                        if self._is_position_in_thinking_tags(clean_text, match.start()):
+                            continue
                         original = match.group(0)
                         clean_text = clean_text.replace(original, "", 1)
                         self.found_emotions.append(emotion)
@@ -538,6 +559,9 @@ class MemeSender(Star):
                         repeat_pattern = f"({re.escape(emotion)})\\1{{2,}}"
                         matches = re.finditer(repeat_pattern, clean_text)
                         for match in matches:
+                            # 跳过thinking标签内的内容
+                            if self._is_position_in_thinking_tags(clean_text, match.start()):
+                                continue
                             original = match.group(0)
                             clean_text = clean_text.replace(original, "", 1)
                             self.found_emotions.append(emotion)
@@ -551,6 +575,10 @@ class MemeSender(Star):
                 for match in re.finditer(pattern, clean_text):
                     word = match.group(1)
                     position = match.start()
+
+                    # 跳过thinking标签内的内容
+                    if self._is_position_in_thinking_tags(clean_text, position):
+                        continue
 
                     # 判断是否可能是表情而非英文单词
                     if self._is_likely_emotion(
