@@ -1,29 +1,32 @@
-import re
-import os
-import io
-import random
-import logging
-import time
-import aiohttp
-import ssl
-import copy
-from PIL import Image as PILImage
 import asyncio
+import copy
+import io
+import logging
+import os
+import random
+import re
+import ssl
+import time
 from multiprocessing import Process
-from astrbot.api.event import filter, AstrMessageEvent
-from astrbot.api.star import Context, Star, register
-from astrbot.api.provider import LLMResponse
-from astrbot.api.message_components import *
-from astrbot.api.event.filter import EventMessageType
-from astrbot.core.message.components import Plain
+
+import aiohttp
+from PIL import Image as PILImage
+
 from astrbot.api.all import *
+from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.event.filter import EventMessageType
+from astrbot.api.message_components import *
+from astrbot.api.provider import LLMResponse
+from astrbot.api.star import Context, Star, register
+from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain
-from .webui import run_server, ServerState
-from .utils import get_public_ip, generate_secret_key, dict_to_string, load_json
-from .image_host.img_sync import ImageSync
-from .config import MEMES_DIR, MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS
+
 from .backend.category_manager import CategoryManager
+from .config import DEFAULT_CATEGORY_DESCRIPTIONS, MEMES_DATA_PATH, MEMES_DIR
+from .image_host.img_sync import ImageSync
 from .init import init_plugin
+from .utils import dict_to_string, generate_secret_key, get_public_ip, load_json
+from .webui import ServerState, run_server
 
 
 @register(
@@ -407,7 +410,7 @@ class MemeSender(Star):
         """
         import re
         # 找到所有thinking标签的开始和结束位置
-        thinking_pattern = re.compile(r'<think(?:ing)?>.*?</think(?:ing)?>', re.DOTALL | re.IGNORECASE)
+        thinking_pattern = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE)
 
         for match in thinking_pattern.finditer(text):
             if match.start() <= position < match.end():
@@ -689,7 +692,7 @@ class MemeSender(Star):
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前清理文本中的表情标签，并添加表情图片"""
         result = event.get_result()
-        if not result:
+        if not result or result.result_content_type == ResultContentType.STREAMING_FINISH:
             return
 
         try:
@@ -823,9 +826,9 @@ class MemeSender(Star):
         try:
             # 获取图床配置信息
             provider_name = self.img_sync.provider.__class__.__name__
-            if hasattr(self.img_sync.provider, 'bucket_name'):
+            if hasattr(self.img_sync.provider, "bucket_name"):
                 storage_info = f"存储桶: {self.img_sync.provider.bucket_name}"
-            elif hasattr(self.img_sync.provider, 'album_id'):
+            elif hasattr(self.img_sync.provider, "album_id"):
                 storage_info = f"相册ID: {self.img_sync.provider.album_id}"
             else:
                 storage_info = "未知存储类型"
@@ -853,11 +856,11 @@ class MemeSender(Star):
             download_categories = {}
 
             for file in to_upload:
-                cat = file.get('category', '未分类')
+                cat = file.get("category", "未分类")
                 upload_categories[cat] = upload_categories.get(cat, 0) + 1
 
             for file in to_download:
-                cat = file.get('category', '未分类')
+                cat = file.get("category", "未分类")
                 download_categories[cat] = download_categories.get(cat, 0) + 1
 
             # 显示上传分类统计
@@ -902,11 +905,11 @@ class MemeSender(Star):
 
                     # 显示所有文件类别的统计
                     try:
-                        if hasattr(self.img_sync.provider, 'get_image_list'):
+                        if hasattr(self.img_sync.provider, "get_image_list"):
                             remote_images = self.img_sync.provider.get_image_list()
                             remote_stats = {}
                             for img in remote_images:
-                                cat = img.get('category', '未分类')
+                                cat = img.get("category", "未分类")
                                 remote_stats[cat] = remote_stats.get(cat, 0) + 1
 
                             if remote_stats:
@@ -929,7 +932,7 @@ class MemeSender(Star):
                             category_path = os.path.join(MEMES_DIR, category)
                             if os.path.isdir(category_path):
                                 files = [f for f in os.listdir(category_path)
-                                       if f.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))]
+                                       if f.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))]
                                 count = len(files)
                                 local_stats[category] = count
                                 local_total += count
@@ -948,10 +951,10 @@ class MemeSender(Star):
                 result.append("💡 使用 '/表情管理 同步到云端' 或 '/表情管理 从云端同步' 进行同步")
 
             # 上传记录统计（如果有的话）
-            if hasattr(self.img_sync.sync_manager, 'upload_tracker') and self.img_sync.sync_manager.upload_tracker:
+            if hasattr(self.img_sync.sync_manager, "upload_tracker") and self.img_sync.sync_manager.upload_tracker:
                 try:
                     # 获取上传记录总数
-                    if hasattr(self.img_sync.sync_manager.upload_tracker, 'get_uploaded_files'):
+                    if hasattr(self.img_sync.sync_manager.upload_tracker, "get_uploaded_files"):
                         uploaded_files = self.img_sync.sync_manager.upload_tracker.get_uploaded_files()
                         result.append("")
                         result.append(f"📝 上传记录: 已记录 {len(uploaded_files)} 个文件")
@@ -1003,7 +1006,7 @@ class MemeSender(Star):
                     category_path = os.path.join(MEMES_DIR, category)
                     if os.path.isdir(category_path):
                         files = [f for f in os.listdir(category_path)
-                               if f.endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp'))]
+                               if f.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp"))]
                         count = len(files)
                         local_stats[category] = count
                         local_total += count
@@ -1030,7 +1033,7 @@ class MemeSender(Star):
                     remote_total = len(remote_images)
 
                     for img in remote_images:
-                        cat = img.get('category', '未分类')
+                        cat = img.get("category", "未分类")
                         remote_stats[cat] = remote_stats.get(cat, 0) + 1
 
                     result.append(f"  • 总文件数: {remote_total} 个")
@@ -1082,7 +1085,7 @@ class MemeSender(Star):
                 estimated_size = local_total * 500 / 1024  # 转换为MB
                 result.append(f"  • 本地图库约: {estimated_size:.1f} MB")
 
-            if self.img_sync and 'remote_total' in locals():
+            if self.img_sync and "remote_total" in locals():
                 estimated_remote_size = remote_total * 500 / 1024
                 result.append(f"  • 云端图库约: {estimated_remote_size:.1f} MB")
 
