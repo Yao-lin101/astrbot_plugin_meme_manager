@@ -159,5 +159,18 @@
     "type": "string",
     "default": "&&[a-zA-Z]*&&",
     "hint": "移除分段后内容中的指定内容。如填写 `[。？！]` 将移除所有的句号、问号、感叹号。"
+  },
+  "enable_mixed_message": {
+    "description": "启用回复带图",
+    "type": "bool",
+    "default": true,
+    "hint": "文本和表情图片在同一条消息中发送（注意：分段回复可能导致功能失效）"
+  },
+  "mixed_message_probability": {
+    "description": "回复带图概率",
+    "type": "int",
+    "default": 80,
+    "hint": "启用回复带图时的发送概率，范围为0-100"
   }
 }
+

@@ -201,11 +201,20 @@
 - `webui_port`: WebUI 服务端口号
 - `max_emotions_per_message`: 每条消息最大表情数量
 - `emotions_probability`: 表情触发概率 (0-100)
+- `enable_mixed_message`: 启用回复带图功能
+- `mixed_message_probability`: 回复带图概率 (0-100)
 - `strict_max_emotions_per_message`: 是否严格限制表情数量
 - `enable_loose_emotion_matching`: 是否启用宽松的表情匹配
 - `enable_alternative_markup`: 是否启用备用标记
 - `enable_repeated_emotion_detection`: 是否启用重复表情检测
 - `high_confidence_emotions`: 高置信度表情列表
+
+### ⚠️ 重要提示
+
+**分段回复兼容性：**
+- 如果您在 AstrBot 配置中开启了 **分段回复** 功能，回复带图功能可能会失效
+- 这是由于分段回复机制会将消息组件逐个发送导致的
+- 如需完整的回复带图体验，请考虑关闭分段回复功能
 
 ## 📝 使用指令
 
@@ -237,6 +246,10 @@
 - 🛠️ 修复 webui 中的上传, 我是猪鼻
 - 🛠️ 提供 webp 格式支持
 - ☁️ 新增 Cloudflare R2 图床支持（智能上传记录，避免重复上传）
+- 🖼️ 新增回复带图功能：文本和表情图片可在同一条消息中发送
+- 🎛️ 新增回复带图概率控制，让表情包行为更自然
+- 📊 增强同步状态命令，支持详细参数查看文件分类统计
+- 🔄 修复 MessageChain 迭代错误和 R2 图床同步前缀问题
 
 ### v3.0x
 
