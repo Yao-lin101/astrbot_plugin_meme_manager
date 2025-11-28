@@ -19,7 +19,7 @@ from astrbot.api.message_components import *
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context, Star, register
 from astrbot.core.message.components import Plain
-from astrbot.core.message.message_event_result import MessageChain
+from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 
 from .backend.category_manager import CategoryManager
 from .config import DEFAULT_CATEGORY_DESCRIPTIONS, MEMES_DATA_PATH, MEMES_DIR
