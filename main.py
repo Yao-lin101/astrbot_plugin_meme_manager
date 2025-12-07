@@ -124,9 +124,9 @@ class MemeSender(Star):
             "content_cleanup_rule", "&&[a-zA-Z]*&&"
         )
 
-        # 更新人格
-        personas = self.context.provider_manager.personas
-        self.persona_backup = copy.deepcopy(personas)
+        # 构建表情包提示词（不再修改全局人格）
+        # personas = self.context.provider_manager.personas
+        # self.persona_backup = copy.deepcopy(personas)
         self._reload_personas()
 
     @filter.command_group("表情管理")
@@ -243,7 +243,7 @@ class MemeSender(Star):
         self.logger.info("资源清理完成")
 
     def _reload_personas(self):
-        """重新注入人格"""
+        """重新加载表情配置并构建提示词（不直接修改全局人格）"""
         self.category_mapping = load_json(
             MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS
         )
@@ -255,9 +255,10 @@ class MemeSender(Star):
             + str(self.max_emotions_per_message)
             + self.prompt_tail_2
         )
-        personas = self.context.provider_manager.personas
-        for persona, persona_backup in zip(personas, self.persona_backup):
-            persona["prompt"] = persona_backup["prompt"] + self.sys_prompt_add
+        # 注释掉全局人格修改，改为在 on_llm_request 钩子中动态注入
+        # personas = self.context.provider_manager.personas
+        # for persona, persona_backup in zip(personas, self.persona_backup):
+        #     persona["prompt"] = persona_backup["prompt"] + self.sys_prompt_add
 
     @meme_manager.command("查看图库")
     async def list_emotions(self, event: AstrMessageEvent):
@@ -394,9 +395,29 @@ class MemeSender(Star):
         """动态重新加载表情配置"""
         try:
             self.category_manager.sync_with_filesystem()
-
+            # 重新加载表情配置后，需要重新构建提示词
+            self._reload_personas()
         except Exception as e:
             self.logger.error(f"重新加载表情配置失败: {str(e)}")
+
+    @filter.on_llm_request()
+    async def on_llm_request(self, event: AstrMessageEvent):
+        """在 LLM 请求时动态注入表情包提示词
+        
+        使用追加方式而非替换，以兼容其他插件（如 Favour_Ultra）的提示词注入
+        """
+        try:
+            # 获取当前的 LLM 配置
+            llm_config = event.llm_config
+            if llm_config and "prompt" in llm_config:
+                # 追加表情包提示词到现有提示词后面
+                original_prompt = llm_config["prompt"]
+                llm_config["prompt"] = original_prompt + self.sys_prompt_add
+                self.logger.debug(f"动态注入表情包提示词，原始长度: {len(original_prompt)}, 注入后长度: {len(llm_config['prompt'])}")
+        except Exception as e:
+            self.logger.error(f"动态注入提示词失败: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
 
     def _is_position_in_thinking_tags(self, text: str, position: int) -> bool:
         """检查指定位置是否在thinking标签内
@@ -1120,10 +1141,11 @@ class MemeSender(Star):
 
     async def terminate(self):
         """清理资源"""
-        # 恢复人格
-        personas = self.context.provider_manager.personas
-        for persona, persona_backup in zip(personas, self.persona_backup):
-            persona["prompt"] = persona_backup["prompt"]
+        # 由于改为动态注入，不再需要恢复人格
+        # （原有的全局人格从未被修改）
+        # personas = self.context.provider_manager.personas
+        # for persona, persona_backup in zip(personas, self.persona_backup):
+        #     persona["prompt"] = persona_backup["prompt"]
 
         # 停止图床同步
         if self.img_sync:
