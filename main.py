@@ -7,6 +7,7 @@ import random
 import re
 import ssl
 import time
+import traceback
 from multiprocessing import Process
 
 import aiohttp
@@ -416,7 +417,6 @@ class MemeSender(Star):
                 self.logger.debug(f"动态注入表情包提示词，原始长度: {len(original_prompt)}, 注入后长度: {len(llm_config['prompt'])}")
         except Exception as e:
             self.logger.error(f"动态注入提示词失败: {str(e)}")
-            import traceback
             self.logger.error(traceback.format_exc())
 
     def _is_position_in_thinking_tags(self, text: str, position: int) -> bool:
