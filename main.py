@@ -473,12 +473,12 @@ class MemeSender(Star):
             return
 
         text = response.completion_text
-        logger.info(f"[meme_manager] on_llm_response 开始处理，原始文本长度: {len(text)}")
+        logger.debug(f"[meme_manager] on_llm_response 开始处理，原始文本长度: {len(text)}")
         
         self.found_emotions = []  # 重置表情列表
         valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
         
-        logger.info(f"[meme_manager] 可用表情分类数量: {len(valid_emoticons)}, 分类列表: {sorted(valid_emoticons)}")
+        logger.debug(f"[meme_manager] 可用表情分类数量: {len(valid_emoticons)}, 分类列表: {sorted(valid_emoticons)}")
 
         clean_text = text
 
@@ -500,7 +500,7 @@ class MemeSender(Star):
             else:
                 temp_replacements.append((original, ""))  # 非法表情静默移除
 
-        logger.info(f"[meme_manager] 严格匹配(&&)阶段找到的表情: {strict_emotions}")
+        logger.debug(f"[meme_manager] 严格匹配(&&)阶段找到的表情: {strict_emotions}")
 
         # 保持原始顺序替换
         for original, emotion in temp_replacements:
@@ -536,7 +536,7 @@ class MemeSender(Star):
                     # 记录无效标记，稍后删除
                     invalid_brackets.append(original)
 
-            logger.info(f"[meme_manager] 方括号[]阶段找到的表情: {bracket_emotions}")
+            logger.debug(f"[meme_manager] 方括号[]阶段找到的表情: {bracket_emotions}")
 
             # 删除所有无效标记
             for invalid in invalid_brackets:
@@ -567,7 +567,7 @@ class MemeSender(Star):
                     # 记录无效标记，稍后删除
                     invalid_parens.append(original)
 
-            logger.info(f"[meme_manager] 圆括号()阶段找到的表情: {paren_emotions}")
+            logger.debug(f"[meme_manager] 圆括号()阶段找到的表情: {paren_emotions}")
 
             # 删除所有无效标记
             for invalid in invalid_parens:
@@ -616,7 +616,7 @@ class MemeSender(Star):
                             self.found_emotions.append(emotion)
                             repeated_emotions.append(emotion)
 
-        logger.info(f"[meme_manager] 重复检测阶段找到的表情: {repeated_emotions}")
+        logger.debug(f"[meme_manager] 重复检测阶段找到的表情: {repeated_emotions}")
 
         # 第四阶段：智能识别可能的表情（松散模式）
         loose_emotions = []
@@ -645,7 +645,7 @@ class MemeSender(Star):
                             clean_text[:position] + clean_text[position + len(word) :]
                         )
 
-        logger.info(f"[meme_manager] 松散匹配阶段找到的表情: {loose_emotions}")
+        logger.debug(f"[meme_manager] 松散匹配阶段找到的表情: {loose_emotions}")
 
         # 去重并应用数量限制
         seen = set()
@@ -663,7 +663,7 @@ class MemeSender(Star):
         # 防御性清理残留符号
         clean_text = re.sub(r"&&+", "", clean_text)  # 清除未成对的&&符号
         response.completion_text = clean_text.strip()
-        logger.info(f"[meme_manager] 清理后的最终文本内容长度: {len(response.completion_text)}")
+        logger.debug(f"[meme_manager] 清理后的最终文本内容长度: {len(response.completion_text)}")
 
     def _is_likely_emotion_markup(self, markup, text, position):
         """判断一个标记是否可能是表情而非普通文本的一部分"""
@@ -746,7 +746,7 @@ class MemeSender(Star):
     @filter.on_decorating_result(priority=99999)
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前清理文本中的表情标签，并添加表情图片"""
-        logger.info("[meme_manager] on_decorating_result 开始处理")
+        logger.debug("[meme_manager] on_decorating_result 开始处理")
         
         result = event.get_result()
         if not result or result.result_content_type == ResultContentType.STREAMING_FINISH:
@@ -768,13 +768,13 @@ class MemeSender(Star):
                     chain_length = len(original_chain)
                 else:
                     chain_length = 0
-                logger.info(f"[meme_manager] 原始消息链类型: {chain_type}, 长度: {chain_length}")
+                logger.debug(f"[meme_manager] 原始消息链类型: {chain_type}, 长度: {chain_length}")
                 
                 # 记录清理前的组件详情
                 if isinstance(original_chain, MessageChain):
-                    logger.info(f"[meme_manager] 清理前的组件详情: {[type(c).__name__ for c in original_chain.chain]}")
+                    logger.debug(f"[meme_manager] 清理前的组件详情: {[type(c).__name__ for c in original_chain.chain]}")
                 elif isinstance(original_chain, list):
-                    logger.info(f"[meme_manager] 清理前的组件详情: {[type(c).__name__ for c in original_chain]}")
+                    logger.debug(f"[meme_manager] 清理前的组件详情: {[type(c).__name__ for c in original_chain]}")
 
             if original_chain:
                 # 处理不同类型的消息链
@@ -806,10 +806,10 @@ class MemeSender(Star):
                             cleaned_components.append(component)
             
             # 记录清理后的组件详情
-            logger.info(f"[meme_manager] 清理后的组件数量: {len(cleaned_components)}, 详情: {[type(c).__name__ for c in cleaned_components]}")
+            logger.debug(f"[meme_manager] 清理后的组件数量: {len(cleaned_components)}, 详情: {[type(c).__name__ for c in cleaned_components]}")
 
             # 第二步：添加表情图片（如果有找到的表情）
-            logger.info(f"[meme_manager] found_emotions 列表: {self.found_emotions}")
+            logger.debug(f"[meme_manager] found_emotions 列表: {self.found_emotions}")
             
             if self.found_emotions:
                 # 检查概率（注意：概率判断是"小于等于"才发送）
@@ -826,7 +826,7 @@ class MemeSender(Star):
 
                         emotion_path = os.path.join(MEMES_DIR, emotion)
                         path_exists = os.path.exists(emotion_path)
-                        logger.info(f"[meme_manager] 表情'{emotion}'目录存在: {path_exists}, 路径: {emotion_path}")
+                        logger.debug(f"[meme_manager] 表情'{emotion}'目录存在: {path_exists}, 路径: {emotion_path}")
                         
                         if not path_exists:
                             continue
@@ -836,7 +836,7 @@ class MemeSender(Star):
                             for f in os.listdir(emotion_path)
                             if f.endswith((".jpg", ".png", ".gif"))
                         ]
-                        logger.info(f"[meme_manager] 表情'{emotion}'目录中找到 {len(memes)} 个图片")
+                        logger.debug(f"[meme_manager] 表情'{emotion}'目录中找到 {len(memes)} 个图片")
                         
                         if not memes:
                             continue
@@ -846,26 +846,26 @@ class MemeSender(Star):
 
                         try:
                             emotion_images.append(Image.fromFileSystem(meme_file))
-                            logger.info(f"[meme_manager] 成功加载表情图片: {meme_file}")
+                            logger.debug(f"[meme_manager] 成功加载表情图片: {meme_file}")
                         except Exception as e:
                             logger.error(f"添加表情图片失败: {e}")
 
                     # 将图片与文本组件智能配对，支持分段回复
                     if emotion_images:
-                        logger.info(f"找到 {len(emotion_images)} 个表情图片，开始与文本配对")
-                        logger.info(f"配对前的组件数量: {len(cleaned_components)}")
+                        logger.debug(f"找到 {len(emotion_images)} 个表情图片，开始与文本配对")
+                        logger.debug(f"配对前的组件数量: {len(cleaned_components)}")
                         cleaned_components = self._merge_components_with_images(cleaned_components, emotion_images)
-                        logger.info(f"配对后的组件数量: {len(cleaned_components)}")
+                        logger.debug(f"配对后的组件数量: {len(cleaned_components)}")
                         # 打印配对后的组件类型
-                        logger.info(f"[meme_manager] 最终组件列表详情: {[type(c).__name__ for c in cleaned_components]}")
+                        logger.debug(f"[meme_manager] 最终组件列表详情: {[type(c).__name__ for c in cleaned_components]}")
                         for i, comp in enumerate(cleaned_components):
                             comp_type = type(comp).__name__
                             if isinstance(comp, Plain):
-                                logger.info(f"组件 {i}: {comp_type} - {comp.text[:20]}...")
+                                logger.debug(f"组件 {i}: {comp_type} - {comp.text[:20]}...")
                             else:
-                                logger.info(f"组件 {i}: {comp_type}")
+                                logger.debug(f"组件 {i}: {comp_type}")
                     else:
-                        logger.info("没有找到表情图片")
+                        logger.debug("没有找到表情图片")
 
                 # 清空已处理的表情列表
                 self.found_emotions = []
@@ -874,7 +874,7 @@ class MemeSender(Star):
             if cleaned_components:
                 # 直接使用组件列表，不要包装在 MessageChain 中
                 result.chain = cleaned_components
-                logger.info(f"[meme_manager] result.chain 最终状态: {[type(c).__name__ for c in result.chain]}")
+                logger.debug(f"[meme_manager] result.chain 最终状态: {[type(c).__name__ for c in result.chain]}")
             elif original_chain:
                 # 如果原本有内容但清理后为空，也要更新（避免发送带标签的空消息）
                 # 进行最后的防御性清理
@@ -895,7 +895,7 @@ class MemeSender(Star):
                     if final_components:
                         result.chain = final_components
             
-            logger.info("[meme_manager] on_decorating_result 处理完成")
+            logger.debug("[meme_manager] on_decorating_result 处理完成")
 
         except Exception as e:
             logger.error(f"处理消息装饰失败: {str(e)}")
@@ -1238,7 +1238,7 @@ class MemeSender(Star):
         Returns:
             合并后的消息组件列表，图片会合理地分布在文本中
         """
-        logger.info(f"[meme_manager] _merge_components_with_images 输入: 组件总数={len(components)}, 图片总数={len(images)}")
+        logger.debug(f"[meme_manager] _merge_components_with_images 输入: 组件总数={len(components)}, 图片总数={len(images)}")
         
         if not images:
             return components
@@ -1249,7 +1249,7 @@ class MemeSender(Star):
 
         # 找到所有 Plain 组件的索引
         plain_indices = [i for i, comp in enumerate(components) if isinstance(comp, Plain)]
-        logger.info(f"[meme_manager] Plain 组件的索引位置列表: {plain_indices}")
+        logger.debug(f"[meme_manager] Plain 组件的索引位置列表: {plain_indices}")
 
         if not plain_indices:
             # 没有 Plain 组件，直接添加图片到末尾
@@ -1273,7 +1273,7 @@ class MemeSender(Star):
             else:
                 images_for_this_text = min(images_per_text, len(images) - image_index)
             
-            logger.info(f"[meme_manager] Plain 组件 {idx} (索引={plain_idx}) 分配的图片数量: {images_for_this_text}")
+            logger.debug(f"[meme_manager] Plain 组件 {idx} (索引={plain_idx}) 分配的图片数量: {images_for_this_text}")
 
             # 在这个文本组件后插入图片
             # 注意：plain_idx 是在原始 components 中的位置，但由于我们已经插入了一些图片，
@@ -1287,6 +1287,6 @@ class MemeSender(Star):
                     insert_pos += 1
                     images_inserted_so_far += 1
         
-        logger.info(f"[meme_manager] 合并前组件总数: {len(components)}, 合并后组件总数: {len(merged_components)}")
+        logger.debug(f"[meme_manager] 合并前组件总数: {len(components)}, 合并后组件总数: {len(merged_components)}")
 
         return merged_components
