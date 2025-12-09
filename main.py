@@ -478,7 +478,7 @@ class MemeSender(Star):
         self.found_emotions = []  # 重置表情列表
         valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
         
-        logger.info(f"[meme_manager] 可用表情分类数量: {len(valid_emoticons)}, 分类列表: {sorted(list(valid_emoticons))}")
+        logger.info(f"[meme_manager] 可用表情分类数量: {len(valid_emoticons)}, 分类列表: {sorted(valid_emoticons)}")
 
         clean_text = text
 
@@ -815,10 +815,9 @@ class MemeSender(Star):
                 # 检查概率（注意：概率判断是"小于等于"才发送）
                 random_value = random.randint(1, 100)
                 threshold = self.emotions_probability
-                will_send = random_value <= threshold
-                logger.info(f"[meme_manager] 概率检查: 随机数={random_value}, 阈值={threshold}, 是否发送图片={will_send}")
+                logger.info(f"[meme_manager] 概率检查: 随机数={random_value}, 阈值={threshold}, 是否发送图片={random_value <= threshold}")
                 
-                if will_send:
+                if random_value <= threshold:
                     # 创建表情图片列表
                     emotion_images = []
                     for emotion in self.found_emotions:
