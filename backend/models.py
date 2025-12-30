@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+from pathlib import Path
 
 from werkzeug.utils import secure_filename
 
@@ -59,9 +61,6 @@ def add_emoji_to_category(category, image_file):
         logger.error("文件名为空")
         raise ValueError("文件名为空")
 
-    # 使用 pathlib.Path 处理路径，避免路径问题
-    from pathlib import Path
-
     # 确保类别目录存在
     category_path = Path(MEMES_DIR) / category
     category_path.mkdir(parents=True, exist_ok=True)
@@ -89,8 +88,6 @@ def add_emoji_to_category(category, image_file):
             raise OSError(f"没有权限写入目录: {category_path}")
 
         # 检查磁盘空间是否足够
-        import shutil
-
         _, _, free = shutil.disk_usage(category_path)
         # 假设文件不会超过10MB，保险起见检查是否至少有10MB
         if free < 10 * 1024 * 1024:

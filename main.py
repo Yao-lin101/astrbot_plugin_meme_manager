@@ -7,6 +7,7 @@ import random
 import re
 import ssl
 import time
+import traceback
 from multiprocessing import Process
 
 import aiohttp
@@ -417,8 +418,6 @@ class MemeSender(Star):
         Returns:
             True如果位置在thinking标签内，False否则
         """
-        import re
-
         # 找到所有thinking标签的开始和结束位置
         thinking_pattern = re.compile(
             r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE
@@ -857,8 +856,6 @@ class MemeSender(Star):
 
         except Exception as e:
             self.logger.error(f"处理消息装饰失败: {str(e)}")
-            import traceback
-
             self.logger.error(traceback.format_exc())
 
     @filter.after_message_sent()
@@ -878,8 +875,6 @@ class MemeSender(Star):
                     )
         except Exception as e:
             self.logger.error(f"发送表情图片失败: {str(e)}")
-            import traceback
-
             self.logger.error(traceback.format_exc())
         finally:
             event.set_extra("meme_manager_pending_images", None)

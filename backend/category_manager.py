@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 
 from ..config import DEFAULT_CATEGORY_DESCRIPTIONS, MEMES_DATA_PATH, MEMES_DIR
 from ..utils import ensure_dir_exists, load_json, save_json
@@ -94,8 +95,6 @@ class CategoryManager:
             # 删除文件夹
             category_path = os.path.join(MEMES_DIR, category)
             if os.path.exists(category_path):
-                import shutil
-
                 shutil.rmtree(category_path)
 
             return True

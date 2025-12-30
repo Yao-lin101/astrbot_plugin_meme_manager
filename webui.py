@@ -85,8 +85,6 @@ async def serve_emoji(category, filename):
 
 # 提供同步的入口
 def run_server(config):
-    import asyncio
-
     asyncio.run(start_server(config))
 
 
@@ -137,8 +135,6 @@ async def create_app(config=None):
         print("警告: 配置格式不正确")
 
     # 注册蓝图
-    from .backend.api import api
-
     app.register_blueprint(api, url_prefix="/api")
 
     return app

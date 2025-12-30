@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -43,8 +44,6 @@ class UploadTracker:
 
     def mark_uploaded(self, file_path: Path, category: str = "", remote_url: str = ""):
         """标记文件为已上传"""
-        import time
-
         rel_path = str(Path(category) / file_path.name) if category else file_path.name
 
         self.uploaded_files[rel_path] = {
