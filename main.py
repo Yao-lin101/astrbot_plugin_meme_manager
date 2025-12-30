@@ -119,6 +119,10 @@ class MemeSender(Star):
             "strict_max_emotions_per_message"
         )
 
+        # 混合消息相关配置
+        self.enable_mixed_message = self.config.get("enable_mixed_message", True)
+        self.mixed_message_probability = self.config.get("mixed_message_probability", 80)
+
         # 内容清理规则
         self.content_cleanup_rule = self.config.get(
             "content_cleanup_rule", "&&[a-zA-Z]*&&"
@@ -485,7 +489,6 @@ class MemeSender(Star):
             bracket_pattern = r"\[([^\[\]]+)\]"
             matches = re.finditer(bracket_pattern, clean_text)
             bracket_replacements = []
-            invalid_brackets = []
 
             for match in matches:
                 original = match.group(0)
@@ -493,13 +496,6 @@ class MemeSender(Star):
 
                 if emotion in valid_emoticons:
                     bracket_replacements.append((original, emotion))
-                else:
-                    # 记录无效标记，稍后删除
-                    invalid_brackets.append(original)
-
-            # 删除所有无效标记
-            for invalid in invalid_brackets:
-                clean_text = clean_text.replace(invalid, "", 1)
 
             for original, emotion in bracket_replacements:
                 clean_text = clean_text.replace(original, "", 1)
@@ -509,7 +505,6 @@ class MemeSender(Star):
             paren_pattern = r"\(([^()]+)\)"
             matches = re.finditer(paren_pattern, clean_text)
             paren_replacements = []
-            invalid_parens = []
 
             for match in matches:
                 original = match.group(0)
@@ -521,13 +516,6 @@ class MemeSender(Star):
                         original, clean_text, match.start()
                     ):
                         paren_replacements.append((original, emotion))
-                else:
-                    # 记录无效标记，稍后删除
-                    invalid_parens.append(original)
-
-            # 删除所有无效标记
-            for invalid in invalid_parens:
-                clean_text = clean_text.replace(invalid, "", 1)
 
             for original, emotion in paren_replacements:
                 clean_text = clean_text.replace(original, "", 1)
@@ -759,19 +747,41 @@ class MemeSender(Star):
                         except Exception as e:
                             self.logger.error(f"添加表情图片失败: {e}")
 
-                    # 将图片与文本组件智能配对，支持分段回复
                     if emotion_images:
-                        self.logger.info(f"找到 {len(emotion_images)} 个表情图片，开始与文本配对")
-                        self.logger.info(f"配对前的组件数量: {len(cleaned_components)}")
-                        cleaned_components = self._merge_components_with_images(cleaned_components, emotion_images)
-                        self.logger.info(f"配对后的组件数量: {len(cleaned_components)}")
-                        # 打印配对后的组件类型
-                        for i, comp in enumerate(cleaned_components):
-                            comp_type = type(comp).__name__
-                            if isinstance(comp, Plain):
-                                self.logger.info(f"组件 {i}: {comp_type} - {comp.text[:20]}...")
-                            else:
-                                self.logger.info(f"组件 {i}: {comp_type}")
+                        use_mixed_message = False
+                        if self.enable_mixed_message:
+                            use_mixed_message = (
+                                random.randint(1, 100)
+                                <= self.mixed_message_probability
+                            )
+
+                        if use_mixed_message:
+                            # 将图片与文本组件智能配对，支持分段回复
+                            self.logger.info(
+                                f"找到 {len(emotion_images)} 个表情图片，开始与文本配对"
+                            )
+                            self.logger.info(
+                                f"配对前的组件数量: {len(cleaned_components)}"
+                            )
+                            cleaned_components = self._merge_components_with_images(
+                                cleaned_components, emotion_images
+                            )
+                            self.logger.info(
+                                f"配对后的组件数量: {len(cleaned_components)}"
+                            )
+                            # 打印配对后的组件类型
+                            for i, comp in enumerate(cleaned_components):
+                                comp_type = type(comp).__name__
+                                if isinstance(comp, Plain):
+                                    self.logger.info(
+                                        f"组件 {i}: {comp_type} - {comp.text[:20]}..."
+                                    )
+                                else:
+                                    self.logger.info(f"组件 {i}: {comp_type}")
+                        else:
+                            event.set_extra(
+                                "meme_manager_pending_images", emotion_images
+                            )
                     else:
                         self.logger.info("没有找到表情图片")
 
@@ -809,10 +819,25 @@ class MemeSender(Star):
 
     @filter.after_message_sent()
     async def after_message_sent(self, event: AstrMessageEvent):
-        """消息发送后处理。目前无需操作，逻辑已前置到 decorate_message。"""
-        # 此处的逻辑已移至 on_decorating_result 钩子，以兼容不支持主动消息的平台。
-        # 保留此空函数用于可能的调试或未来扩展。
-        pass
+        """消息发送后处理。用于发送未混合的表情图片。"""
+        pending_images = event.get_extra("meme_manager_pending_images")
+        if not pending_images:
+            return
+
+        try:
+            for image in pending_images:
+                if event.get_platform_name() == "gewechat":
+                    await event.send(MessageChain([image]))
+                else:
+                    await self.context.send_message(
+                        event.unified_msg_origin, MessageChain([image])
+                    )
+        except Exception as e:
+            self.logger.error(f"发送表情图片失败: {str(e)}")
+            import traceback
+            self.logger.error(traceback.format_exc())
+        finally:
+            event.set_extra("meme_manager_pending_images", None)
 
     @meme_manager.command("同步状态")
     async def check_sync_status(self, event: AstrMessageEvent, detail: str = None):
