@@ -102,8 +102,13 @@
   "emotions_probability": {
     "description": "表情出现概率",
     "type": "int",
-    "default": 33,
-    "hint": "每次发送表情出现的概率，范围为0-100"
+    "default": 50,
+    "hint": "每次发送表情出现的概率，范围为1-100",
+    "slider": {
+      "min": 1,
+      "max": 100,
+      "step": 10
+    }
   },
   "strict_max_emotions_per_message": {
     "description": "严格限制表情数量",
@@ -122,6 +127,12 @@
     "type": "bool",
     "default": true,
     "hint": "如果为true，则会尝试使用备用标记, 例如: &&happy&& 和 :happy: 是等价的, 防止llm自己编标记, 一般情况建议开启"
+  },
+  "remove_invalid_alternative_markup": {
+    "description": "移除无效备用标记",
+    "type": "bool",
+    "default": true,
+    "hint": "如果为true，将移除无法识别的()或[]标记内容；如遇括号内容被误删问题，请关闭"
   },
   "enable_repeated_emotion_detection": {
     "description": "启用重复表情检测",
@@ -169,8 +180,12 @@
   "mixed_message_probability": {
     "description": "回复带图概率",
     "type": "int",
-    "default": 80,
-    "hint": "启用回复带图时的发送概率，范围为0-100"
+    "default": 50,
+    "hint": "启用回复带图时的发送概率，范围为1-100",
+    "slider": {
+      "min": 1,
+      "max": 100,
+      "step": 10
+    }
   }
 }
-

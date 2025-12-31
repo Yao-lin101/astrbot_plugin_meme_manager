@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import List, Dict
 
 
 class FileHandler:
@@ -11,7 +10,7 @@ class FileHandler:
         self.base_dir = Path(base_dir)
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
-    def scan_local_images(self) -> List[Dict[str, str]]:
+    def scan_local_images(self) -> list[dict[str, str]]:
         """扫描本地图片"""
         images = []
         for file_path in self.base_dir.rglob("*"):

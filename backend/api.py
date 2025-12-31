@@ -1,14 +1,15 @@
-from quart import Blueprint, jsonify, request, current_app
+import logging
+import os
+
+from quart import Blueprint, current_app, jsonify, request
+
+from ..config import MEMES_DIR
 from .models import (
-    scan_emoji_folder,
-    get_emoji_by_category,
     add_emoji_to_category,
     delete_emoji_from_category,
+    get_emoji_by_category,
+    scan_emoji_folder,
 )
-import os
-from ..config import MEMES_DIR
-import logging
-
 
 api = Blueprint("api", __name__)
 
@@ -42,43 +43,45 @@ async def add_emoji():
         files = await request.files
         if not files or "image_file" not in files:
             return jsonify({"message": "没有找到上传的图片文件"}), 400
-        
+
         image_file = files["image_file"]
-        
+
         # 使用 await 获取表单数据
         form = await request.form
         category = form.get("category")
-        
+
         if not category:
             return jsonify({"message": "没有指定类别"}), 400
-        
+
         if not image_file or not image_file.filename:
             return jsonify({"message": "无效的图片文件"}), 400
-            
+
         # 记录上传信息
         logger.info(f"收到上传请求: 类别={category}, 文件名={image_file.filename}")
-        
+
         try:
             result_path = add_emoji_to_category(category, image_file)
-            
+
             # 添加成功后同步配置
             plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
             category_manager = plugin_config.get("category_manager")
             if category_manager:
                 category_manager.sync_with_filesystem()
-                
+
             logger.info(f"表情包添加成功: {result_path}")
-            return jsonify({
-                "message": "表情包添加成功", 
-                "path": result_path, 
-                "category": category, 
-                "filename": image_file.filename
-            }), 201
-            
+            return jsonify(
+                {
+                    "message": "表情包添加成功",
+                    "path": result_path,
+                    "category": category,
+                    "filename": image_file.filename,
+                }
+            ), 201
+
         except Exception as inner_e:
             logger.error(f"处理上传文件时出错: {inner_e}", exc_info=True)
             return jsonify({"message": f"处理上传文件时出错: {str(inner_e)}"}), 500
-            
+
     except Exception as e:
         logger.error(f"处理上传请求时发生未知异常: {e}", exc_info=True)
         return jsonify({"message": f"处理上传请求时发生未知异常: {str(e)}"}), 500
@@ -94,7 +97,13 @@ async def delete_emoji():
         return jsonify({"message": "Category and image file are required"}), 400
 
     if delete_emoji_from_category(category, image_file):
-        return jsonify({"message": "Emoji deleted successfully", "category": category, "filename": image_file}), 200
+        return jsonify(
+            {
+                "message": "Emoji deleted successfully",
+                "category": category,
+                "filename": image_file,
+            }
+        ), 200
     else:
         return jsonify({"message": "Emoji not found"}), 404
 
@@ -124,7 +133,7 @@ async def delete_category():
 
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
-        
+
         if not category_manager:
             return jsonify({"message": "Category manager not found"}), 404
 
@@ -142,20 +151,22 @@ async def get_sync_status():
     try:
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
-        
+
         if not category_manager:
             raise ValueError("未找到类别管理器")
-        
+
         logger.info("获取同步状态...")
         missing_in_config, deleted_categories = category_manager.get_sync_status()
-        
-        return jsonify({
-            "status": "ok",
-            "differences": {
-                "missing_in_config": missing_in_config,
-                "deleted_categories": deleted_categories,
+
+        return jsonify(
+            {
+                "status": "ok",
+                "differences": {
+                    "missing_in_config": missing_in_config,
+                    "deleted_categories": deleted_categories,
+                },
             }
-        })
+        )
     except Exception as e:
         logger.error(f"获取同步状态失败: {e}")
         return jsonify({"error": "获取同步状态失败"}), 500
@@ -167,10 +178,10 @@ async def sync_config():
     try:
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
-        
+
         if not category_manager:
             raise ValueError("未找到类别管理器")
-        
+
         logger.info("开始同步配置...")
         if category_manager.sync_with_filesystem():
             logger.info("配置同步成功")
@@ -195,7 +206,7 @@ async def update_category_description():
 
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
-        
+
         if not category_manager:
             return jsonify({"message": "Category manager not found"}), 404
 
@@ -205,8 +216,9 @@ async def update_category_description():
         else:
             return jsonify({"message": "Failed to update category description"}), 500
     except Exception as e:
-        return jsonify({"message": f"Failed to update category description: {str(e)}"}), 500
-
+        return jsonify(
+            {"message": f"Failed to update category description: {str(e)}"}
+        ), 500
 
 
 @api.route("/category/restore", methods=["POST"])
@@ -217,13 +229,13 @@ async def restore_category():
 
         category = data.get("category")
         description = data.get("description", "请添加描述")
-        
+
         if not category:
             return jsonify({"message": "Category is required"}), 400
 
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
-        
+
         if not category_manager:
             return jsonify({"message": "Category manager not found"}), 404
 
@@ -233,7 +245,9 @@ async def restore_category():
 
         # 更新类别描述
         if category_manager.update_description(category, description):
-            return jsonify({"message": "Category created successfully", "description": description}), 200
+            return jsonify(
+                {"message": "Category created successfully", "description": description}
+            ), 200
         else:
             return jsonify({"message": "Failed to create category"}), 500
 
@@ -253,7 +267,7 @@ async def rename_category():
 
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
-        
+
         if not category_manager:
             return jsonify({"message": "Category manager not found"}), 404
 
@@ -273,7 +287,7 @@ async def get_img_host_sync_status():
         img_sync = plugin_config.get("img_sync")
         if not img_sync:
             return jsonify({"error": "图床服务未配置"}), 400
-            
+
         status = img_sync.check_status()
         return jsonify(status)
     except Exception as e:
@@ -288,14 +302,14 @@ async def sync_to_remote():
         img_sync = plugin_config.get("img_sync")
         if not img_sync:
             return jsonify({"message": "图床服务未配置"}), 400
-            
-        img_sync.sync_process = img_sync._start_sync_process('upload')
+
+        img_sync.sync_process = img_sync._start_sync_process("upload")
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
 
-@api.route("/img_host/sync/download", methods=["POST"]) 
+@api.route("/img_host/sync/download", methods=["POST"])
 async def sync_from_remote():
     """从云端同步"""
     try:
@@ -303,8 +317,8 @@ async def sync_from_remote():
         img_sync = plugin_config.get("img_sync")
         if not img_sync:
             return jsonify({"message": "图床服务未配置"}), 400
-            
-        img_sync.sync_process = img_sync._start_sync_process('download')
+
+        img_sync.sync_process = img_sync._start_sync_process("download")
         return jsonify({"success": True})
     except Exception as e:
         return jsonify({"message": str(e)}), 500
@@ -318,14 +332,12 @@ async def check_sync_process():
         img_sync = plugin_config.get("img_sync")
         if not img_sync or not img_sync.sync_process:
             return jsonify({"completed": True, "success": True})
-            
+
         if not img_sync.sync_process.is_alive():
             success = img_sync.sync_process.exitcode == 0
             img_sync.sync_process = None
             return jsonify({"completed": True, "success": success})
-            
+
         return jsonify({"completed": False})
     except Exception as e:
         return jsonify({"message": str(e)}), 500
-
-
