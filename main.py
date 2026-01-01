@@ -17,7 +17,7 @@ from astrbot.api.all import *
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api.message_components import *
-from astrbot.api.provider import LLMResponse, ProviderRequest
+from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context, Star, register
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
@@ -131,9 +131,9 @@ class MemeSender(Star):
             "content_cleanup_rule", "&&[a-zA-Z]*&&"
         )
 
-        # 构建表情包提示词（不再修改全局人格）
-        # personas = self.context.provider_manager.personas
-        # self.persona_backup = copy.deepcopy(personas)
+        # 构建表情包提示词
+        personas = self.context.provider_manager.personas
+        self.persona_backup = copy.deepcopy(personas)
         self._reload_personas()
 
     @filter.command_group("表情管理")
@@ -250,7 +250,7 @@ class MemeSender(Star):
         logger.info("资源清理完成")
 
     def _reload_personas(self):
-        """重新加载表情配置并构建提示词（不直接修改全局人格）"""
+        """重新加载表情配置并构建提示词并注入全局人格"""
         self.category_mapping = load_json(
             MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS
         )
@@ -262,10 +262,10 @@ class MemeSender(Star):
             + str(self.max_emotions_per_message)
             + self.prompt_tail_2
         )
-        # 注释掉全局人格修改，改为在 on_llm_request 钩子中动态注入
-        # personas = self.context.provider_manager.personas
-        # for persona, persona_backup in zip(personas, self.persona_backup):
-        #     persona["prompt"] = persona_backup["prompt"] + self.sys_prompt_add
+        # 注入全局人格，以便利用缓存并减少对聊天内容的影响
+        personas = self.context.provider_manager.personas
+        for persona, persona_backup in zip(personas, self.persona_backup):
+            persona["prompt"] = persona_backup["prompt"] + self.sys_prompt_add
 
     @meme_manager.command("查看图库")
     async def list_emotions(self, event: AstrMessageEvent):
@@ -406,27 +406,6 @@ class MemeSender(Star):
             self._reload_personas()
         except Exception as e:
             logger.error(f"重新加载表情配置失败: {str(e)}")
-
-    @filter.on_llm_request()
-    async def on_llm_request(self, event: AstrMessageEvent, req: ProviderRequest):
-        """在 LLM 请求时动态注入表情包提示词
-        
-        使用追加方式而非替换，以兼容其他插件（如 Favour_Ultra）的提示词注入
-        
-        Args:
-            event: 消息事件
-            req: LLM 请求对象
-        """
-        try:
-            # 在系统提示词中追加表情包提示词
-            if req.prompt:
-                # 追加表情包提示词到现有提示词后面
-                original_prompt = req.prompt
-                req.prompt = original_prompt + self.sys_prompt_add
-                logger.debug(f"动态注入表情包提示词，原始长度: {len(original_prompt)}, 注入后长度: {len(req.prompt)}")
-        except Exception as e:
-            logger.error(f"动态注入提示词失败: {str(e)}")
-            logger.error(traceback.format_exc())
 
     def _is_position_in_thinking_tags(self, text: str, position: int) -> bool:
         """检查指定位置是否在thinking标签内
@@ -906,16 +885,11 @@ class MemeSender(Star):
                                     )
                                 else:
                                     logger.info(f"组件 {i}: {comp_type}")
+                            logger.debug(f"[meme_manager] 最终组件列表详情: {[type(c).__name__ for c in cleaned_components]}")
                         else:
                             event.set_extra(
                                 "meme_manager_pending_images", emotion_images
                             )
-                        logger.debug(f"找到 {len(emotion_images)} 个表情图片，开始与文本配对")
-                        logger.debug(f"配对前的组件数量: {len(cleaned_components)}")
-                        cleaned_components = self._merge_components_with_images(cleaned_components, emotion_images)
-                        logger.debug(f"配对后的组件数量: {len(cleaned_components)}")
-                        # 打印配对后的组件类型
-                        logger.debug(f"[meme_manager] 最终组件列表详情: {[type(c).__name__ for c in cleaned_components]}")
                         for i, comp in enumerate(cleaned_components):
                             comp_type = type(comp).__name__
                             if isinstance(comp, Plain):
@@ -1329,11 +1303,10 @@ class MemeSender(Star):
 
     async def terminate(self):
         """清理资源"""
-        # 由于改为动态注入，不再需要恢复人格
-        # （原有的全局人格从未被修改）
-        # personas = self.context.provider_manager.personas
-        # for persona, persona_backup in zip(personas, self.persona_backup):
-        #     persona["prompt"] = persona_backup["prompt"]
+        # 恢复人格
+        personas = self.context.provider_manager.personas
+        for persona, persona_backup in zip(personas, self.persona_backup):
+            persona["prompt"] = persona_backup["prompt"]
 
         # 停止图床同步
         if self.img_sync:
