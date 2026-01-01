@@ -1,6 +1,7 @@
 from pathlib import Path
-from typing import Dict, List, Optional
+
 from tqdm import tqdm
+
 from ..interfaces.image_host import ImageHostInterface
 from .file_handler import FileHandler
 from .upload_tracker import UploadTracker
@@ -9,7 +10,12 @@ from .upload_tracker import UploadTracker
 class SyncManager:
     """同步管理器"""
 
-    def __init__(self, image_host: ImageHostInterface, local_dir: Path, upload_tracker: Optional[UploadTracker] = None):
+    def __init__(
+        self,
+        image_host: ImageHostInterface,
+        local_dir: Path,
+        upload_tracker: UploadTracker | None = None,
+    ):
         self.image_host = image_host
         self.file_handler = FileHandler(local_dir)
         self.upload_tracker = upload_tracker
@@ -27,9 +33,9 @@ class SyncManager:
         """
         if not provider_name:
             # 尝试从配置获取提供商名称
-            if hasattr(self.image_host, 'config') and self.image_host.config:
-                provider_name = self.image_host.config.get('provider', '').lower()
-            elif hasattr(self.image_host, '__class__'):
+            if hasattr(self.image_host, "config") and self.image_host.config:
+                provider_name = self.image_host.config.get("provider", "").lower()
+            elif hasattr(self.image_host, "__class__"):
                 provider_name = self.image_host.__class__.__name__.lower()
 
         # 统一转换为正斜杠
@@ -48,7 +54,7 @@ class SyncManager:
 
         return normalized_id
 
-    def check_sync_status(self) -> Dict[str, List[Dict]]:
+    def check_sync_status(self) -> dict[str, list[dict]]:
         """检查同步状态 - 简化版，只检查存在性"""
         print("正在扫描本地文件...")
         local_images = self.file_handler.scan_local_images()
@@ -86,8 +92,8 @@ class SyncManager:
 
         # 获取提供商名称
         provider_name = None
-        if hasattr(self.image_host, 'config') and self.image_host.config:
-            provider_name = self.image_host.config.get('provider', '').lower()
+        if hasattr(self.image_host, "config") and self.image_host.config:
+            provider_name = self.image_host.config.get("provider", "").lower()
 
         for img in remote_images:
             remote_id = img["id"].replace("\\", "/")
@@ -121,29 +127,31 @@ class SyncManager:
             print(f"\n开始上传 {len(to_upload)} 个文件...")
             uploaded_count = 0
             skipped_count = 0
-            
+
             with tqdm(total=len(to_upload), desc="上传进度") as pbar:
                 for image in to_upload:
                     file_path = Path(image["path"])
                     category = image.get("category", "")
-                    
+
                     try:
                         # 上传文件
                         result = self.image_host.upload_image(file_path)
-                        
+
                         # 记录已上传
                         if self.upload_tracker:
                             remote_url = result.get("url", "")
-                            self.upload_tracker.mark_uploaded(file_path, category, remote_url)
-                        
+                            self.upload_tracker.mark_uploaded(
+                                file_path, category, remote_url
+                            )
+
                         uploaded_count += 1
                         pbar.update(1)
-                        
+
                     except Exception as e:
                         print(f"\n上传失败: {file_path.name} - {str(e)}")
                         skipped_count += 1
                         pbar.update(1)
-            
+
             print(f"\n上传完成: 成功 {uploaded_count} 个，失败 {skipped_count} 个")
         else:
             print("\n没有需要上传的文件")
@@ -164,7 +172,7 @@ class SyncManager:
             print(f"\n开始下载 {len(to_download)} 个文件...")
             downloaded_count = 0
             skipped_count = 0
-            
+
             with tqdm(total=len(to_download), desc="下载进度") as pbar:
                 for image in to_download:
                     try:
@@ -174,7 +182,7 @@ class SyncManager:
 
                         # 获取保存路径
                         save_path = self.file_handler.get_file_path(category, filename)
-                        
+
                         # 检查文件是否已存在（双重检查）
                         if save_path.exists():
                             print(f"文件已存在，跳过: {filename}")
@@ -193,8 +201,10 @@ class SyncManager:
                         print(f"\n下载失败: {filename} - {str(e)}")
                         skipped_count += 1
                         pbar.update(1)
-            
-            print(f"\n下载完成: 成功 {downloaded_count} 个，失败/跳过 {skipped_count} 个")
+
+            print(
+                f"\n下载完成: 成功 {downloaded_count} 个，失败/跳过 {skipped_count} 个"
+            )
         else:
             print("\n没有需要下载的文件")
 

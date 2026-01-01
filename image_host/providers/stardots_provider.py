@@ -1,16 +1,18 @@
 import hashlib
-import time
-import random
-import string
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from pathlib import Path
-from typing import List, Dict, TypedDict
-from ..interfaces.image_host import ImageHostInterface
-import urllib3
 import json
 import logging
+import random
+import string
+import time
+from pathlib import Path
+from typing import TypedDict
+
+import requests
+import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+from ..interfaces.image_host import ImageHostInterface
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ class StarDotsProvider(ImageHostInterface):
         ".webp": "image/webp",
     }
 
-    def __init__(self, config: Dict[str, str]):
+    def __init__(self, config: dict[str, str]):
         """
         初始化StarDots图床
 
@@ -122,7 +124,7 @@ class StarDotsProvider(ImageHostInterface):
         except Exception:
             self.server_time_offset = 8 * 3600  # 如果失败，使用默认的 UTC+8
 
-    def _generate_headers(self) -> Dict[str, str]:
+    def _generate_headers(self) -> dict[str, str]:
         """生成请求头"""
         # 使用服务器时间偏移量生成时间戳
         timestamp = str(int(time.time() + self.server_time_offset))
@@ -152,7 +154,7 @@ class StarDotsProvider(ImageHostInterface):
             response = self.session.request(method, url, **kwargs)
             response.raise_for_status()
             return response
-        except requests.exceptions.SSLError as e:
+        except requests.exceptions.SSLError:
             # SSL错误，尝试禁用验证
             kwargs["verify"] = False
             response = self.session.request(method, url, **kwargs)
@@ -165,7 +167,7 @@ class StarDotsProvider(ImageHostInterface):
         """从文件加载分类记录"""
         try:
             if self.records_file.exists():
-                with open(self.records_file, "r", encoding="utf-8") as f:
+                with open(self.records_file, encoding="utf-8") as f:
                     self._upload_records = json.load(f)
             else:
                 self._upload_records = {}
@@ -205,10 +207,7 @@ class StarDotsProvider(ImageHostInterface):
                 headers.pop("Content-Type")  # 上传文件需要移除Content-Type
 
                 # 获取文件信息
-                file_stat = file_path.stat()
-                mime_type = self.MIME_TYPES.get(
-                    file_path.suffix.lower(), "image/jpeg"
-                )
+                mime_type = self.MIME_TYPES.get(file_path.suffix.lower(), "image/jpeg")
 
                 # 获取相对路径作为分类
                 base_dir = Path(self.config.get("local_dir", ""))
@@ -260,7 +259,7 @@ class StarDotsProvider(ImageHostInterface):
                         error_msg = f"HTTP {response.status_code}"
                         try:
                             error_msg = response.json().get("message", error_msg)
-                        except:
+                        except Exception:
                             pass
                         logger.error(f"上传失败: {error_msg}")
                         raise Exception(error_msg)
@@ -291,7 +290,7 @@ class StarDotsProvider(ImageHostInterface):
             return result["success"]
         return False
 
-    def get_image_list(self) -> List[ImageInfo]:
+    def get_image_list(self) -> list[ImageInfo]:
         """获取StarDots空间中的所有图片"""
         max_retries = 3
         retry_delay = 1
@@ -324,7 +323,6 @@ class StarDotsProvider(ImageHostInterface):
 
                             # 处理图片列表
                             for img in images:
-
                                 # 从文件名中提取分类信息
                                 filename = img["name"]
                                 if "@@CAT@@" in filename:
@@ -358,12 +356,12 @@ class StarDotsProvider(ImageHostInterface):
                         else:
                             if "invalid timestamp" in result.get("message", "").lower():
                                 if attempt < max_retries - 1:
-                                    print(f"时间戳错误，重试中...")
+                                    print("时间戳错误，重试中...")
                                     time.sleep(retry_delay)
                                     continue
                             if "invalid nonce" in result.get("message", "").lower():
                                 if attempt < max_retries - 1:
-                                    print(f"nonce错误，重试中...")
+                                    print("nonce错误，重试中...")
                                     time.sleep(retry_delay)
                                     continue
                             # 其他错误，打印消息但继续尝试下一页
@@ -374,14 +372,14 @@ class StarDotsProvider(ImageHostInterface):
 
                     else:
                         if attempt < max_retries - 1:
-                            print(f"HTTP错误，重试中...")
+                            print("HTTP错误，重试中...")
                             time.sleep(retry_delay)
                             continue
                         raise Exception(f"Failed to get image list: {response.text}")
 
                 except Exception as e:
                     if attempt < max_retries - 1:
-                        print(f"网络错误，重试中...")
+                        print("网络错误，重试中...")
                         time.sleep(retry_delay)
                         continue
                     print(f"获取远程文件列表失败: {str(e)}")
@@ -391,7 +389,7 @@ class StarDotsProvider(ImageHostInterface):
 
         return all_images
 
-    def download_image(self, image_info: Dict[str, str], save_path: Path) -> bool:
+    def download_image(self, image_info: dict[str, str], save_path: Path) -> bool:
         """从StarDots下载图片"""
         max_retries = 3
         retry_delay = 1  # 秒
