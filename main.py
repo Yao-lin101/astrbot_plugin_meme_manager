@@ -885,27 +885,27 @@ class MemeSender(Star):
 
                         if use_mixed_message:
                             # 将图片与文本组件智能配对，支持分段回复
-                            self.logger.info(
+                            logger.info(
                                 f"找到 {len(emotion_images)} 个表情图片，开始与文本配对"
                             )
-                            self.logger.info(
+                            logger.info(
                                 f"配对前的组件数量: {len(cleaned_components)}"
                             )
                             cleaned_components = self._merge_components_with_images(
                                 cleaned_components, emotion_images
                             )
-                            self.logger.info(
+                            logger.info(
                                 f"配对后的组件数量: {len(cleaned_components)}"
                             )
                             # 打印配对后的组件类型
                             for i, comp in enumerate(cleaned_components):
                                 comp_type = type(comp).__name__
                                 if isinstance(comp, Plain):
-                                    self.logger.info(
+                                    logger.info(
                                         f"组件 {i}: {comp_type} - {comp.text[:20]}..."
                                     )
                                 else:
-                                    self.logger.info(f"组件 {i}: {comp_type}")
+                                    logger.info(f"组件 {i}: {comp_type}")
                         else:
                             event.set_extra(
                                 "meme_manager_pending_images", emotion_images
@@ -977,8 +977,8 @@ class MemeSender(Star):
                         event.unified_msg_origin, MessageChain([image])
                     )
         except Exception as e:
-            self.logger.error(f"发送表情图片失败: {str(e)}")
-            self.logger.error(traceback.format_exc())
+            logger.error(f"发送表情图片失败: {str(e)}")
+            logger.error(traceback.format_exc())
         finally:
             event.set_extra("meme_manager_pending_images", None)
 
