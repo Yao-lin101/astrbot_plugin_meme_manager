@@ -93,6 +93,12 @@
       }
     }
   },
+  "convert_static_to_gif": {
+    "description": "静态图转GIF发送",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，发送静态图片表情时会将其转换为1帧的GIF格式"
+  },
   "max_emotions_per_message": {
     "description": "每次回复最多使用表情数量",
     "type": "int",

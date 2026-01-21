@@ -5,6 +5,7 @@ import os
 import random
 import re
 import ssl
+import tempfile
 import time
 import traceback
 from multiprocessing import Process
@@ -125,6 +126,7 @@ class MemeSender(Star):
         self.remove_invalid_alternative_markup = self.config.get(
             "remove_invalid_alternative_markup", False
         )
+        self.convert_static_to_gif = self.config.get("convert_static_to_gif", False)
 
         # 内容清理规则
         self.content_cleanup_rule = self.config.get(
@@ -717,6 +719,47 @@ class MemeSender(Star):
 
         return False
 
+    def _convert_to_gif(self, image_path: str) -> str:
+        """
+        将静态图片转换为 GIF 格式。
+        如果图片已经是 GIF，则返回原路径。
+        如果转换成功，返回临时 GIF 文件的路径。
+        """
+        if not self.convert_static_to_gif:
+            return image_path
+            
+        if image_path.lower().endswith(".gif"):
+            return image_path
+            
+        try:
+            with PILImage.open(image_path) as img:
+                # 检查是否已经是 GIF (虽然后缀不是 .gif，但内容可能是)
+                if img.format == "GIF":
+                    return image_path
+                
+                # 创建临时文件
+                temp_dir = tempfile.gettempdir()
+                temp_filename = os.path.join(temp_dir, f"meme_{int(time.time())}_{random.randint(1000, 9999)}.gif")
+                
+                # 转换为 RGB (如果是 RGBA 需要处理透明度)
+                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                    # 创建白色背景
+                    background = PILImage.new("RGB", img.size, (255, 255, 255))
+                    if img.mode == "P":
+                        img = img.convert("RGBA")
+                    background.paste(img, mask=img.split()[3]) # 3 is the alpha channel
+                    img = background
+                else:
+                    img = img.convert("RGB")
+                
+                # 保存为 GIF
+                img.save(temp_filename, "GIF")
+                logger.debug(f"[meme_manager] 已将静态图转换为 GIF: {temp_filename}")
+                return temp_filename
+        except Exception as e:
+            logger.error(f"[meme_manager] 转换图片为 GIF 失败: {e}")
+            return image_path
+
     @filter.on_decorating_result(priority=99999)
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前清理文本中的表情标签，并添加表情图片"""
@@ -784,6 +827,7 @@ class MemeSender(Star):
                 if random_value <= threshold:
                     # 创建表情图片列表
                     emotion_images = []
+                    temp_files = [] # 记录临时文件路径
                     for emotion in self.found_emotions:
                         if not emotion:
                             continue
@@ -807,11 +851,20 @@ class MemeSender(Star):
                         meme_file = os.path.join(emotion_path, meme)
 
                         try:
-                            emotion_images.append(Image.fromFileSystem(meme_file))
+                            # 转换静态图为 GIF（如果配置开启）
+                            final_meme_file = self._convert_to_gif(meme_file)
+                            if final_meme_file != meme_file:
+                                temp_files.append(final_meme_file)
+                            emotion_images.append(Image.fromFileSystem(final_meme_file))
                         except Exception as e:
                             logger.error(f"添加表情图片失败: {e}")
 
                     if emotion_images:
+                        # 记录临时文件到 event extra
+                        if temp_files:
+                            existing_temp_files = event.get_extra("meme_manager_temp_files") or []
+                            event.set_extra("meme_manager_temp_files", existing_temp_files + temp_files)
+
                         use_mixed_message = False
                         if self.enable_mixed_message:
                             use_mixed_message = (
@@ -868,22 +921,33 @@ class MemeSender(Star):
     async def after_message_sent(self, event: AstrMessageEvent):
         """消息发送后处理。用于发送未混合的表情图片。"""
         pending_images = event.get_extra("meme_manager_pending_images")
-        if not pending_images:
-            return
-
+        
         try:
-            for image in pending_images:
-                if event.get_platform_name() == "gewechat":
-                    await event.send(MessageChain([image]))
-                else:
-                    await self.context.send_message(
-                        event.unified_msg_origin, MessageChain([image])
-                    )
+            if pending_images:
+                for image in pending_images:
+                    if event.get_platform_name() == "gewechat":
+                        await event.send(MessageChain([image]))
+                    else:
+                        await self.context.send_message(
+                            event.unified_msg_origin, MessageChain([image])
+                        )
         except Exception as e:
             logger.error(f"发送表情图片失败: {str(e)}")
             logger.error(traceback.format_exc())
         finally:
             event.set_extra("meme_manager_pending_images", None)
+            
+            # 清理临时文件
+            temp_files = event.get_extra("meme_manager_temp_files")
+            if temp_files:
+                for temp_file in temp_files:
+                    try:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)
+                            logger.debug(f"[meme_manager] 已清理临时文件: {temp_file}")
+                    except Exception as e:
+                        logger.error(f"[meme_manager] 清理临时文件失败: {e}")
+                event.set_extra("meme_manager_temp_files", None)
 
     @meme_manager.command("同步状态")
     async def check_sync_status(self, event: AstrMessageEvent, detail: str = None):
