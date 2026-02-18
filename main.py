@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import io
+import json
 import os
 import random
 import re
@@ -117,6 +118,8 @@ class MemeSender(Star):
         self.strict_max_emotions_per_message = self.config.get(
             "strict_max_emotions_per_message"
         )
+        self.emotion_llm_enabled = self.config.get("emotion_llm_enabled", False)
+        self.emotion_llm_provider_id = self.config.get("emotion_llm_provider_id", "")
 
         # 混合消息相关配置
         self.enable_mixed_message = self.config.get("enable_mixed_message", True)
@@ -257,6 +260,13 @@ class MemeSender(Star):
             MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS
         )
         self.category_mapping_string = dict_to_string(self.category_mapping)
+        personas = self.context.provider_manager.personas
+        # 如果启用模型情感分析，不注入新的提示词
+        if self.emotion_llm_enabled:
+            self.sys_prompt_add = ""
+            for persona, persona_backup in zip(personas, self.persona_backup):
+                persona["prompt"] = persona_backup["prompt"]
+            return
         self.sys_prompt_add = (
             self.prompt_head
             + self.category_mapping_string
@@ -264,8 +274,7 @@ class MemeSender(Star):
             + str(self.max_emotions_per_message)
             + self.prompt_tail_2
         )
-        # 注入全局人格，以便利用缓存并减少对聊天内容的影响
-        personas = self.context.provider_manager.personas
+        # 注入全局人格，以便利用缓存并减少对聊天内容的影响(如果不启用模型分析情感)
         for persona, persona_backup in zip(personas, self.persona_backup):
             persona["prompt"] = persona_backup["prompt"] + self.sys_prompt_add
 
@@ -622,6 +631,49 @@ class MemeSender(Star):
                         )
 
         logger.debug(f"[meme_manager] 松散匹配阶段找到的表情: {loose_emotions}")
+
+        if self.emotion_llm_enabled:
+            try:
+                provider_id = self.emotion_llm_provider_id
+                if not provider_id:
+                    provider_id = await self.context.get_current_chat_provider_id(
+                        umo=event.unified_msg_origin
+                    )
+                if provider_id:
+                    valid_list = sorted(valid_emoticons)
+                    prompt = (
+                        "你是表情标签选择器，只能从给定标签中选择。\n"
+                        "请基于文本语义判断需要的表情，返回JSON格式："
+                        '{"emotions":["tag1","tag2"]}。\n'
+                        "只输出JSON，不要解释。\n"
+                        f"可用标签: {', '.join(valid_list)}\n"
+                        f"文本: {clean_text}"
+                    )
+                    llm_resp = await self.context.llm_generate(
+                        chat_provider_id=provider_id, prompt=prompt
+                    )
+                    if llm_resp and llm_resp.completion_text:
+                        raw_text = llm_resp.completion_text.strip()
+                        data = None
+                        try:
+                            data = json.loads(raw_text)
+                        except Exception:
+                            match = re.search(r"\{[\s\S]*\}", raw_text)
+                            if match:
+                                try:
+                                    data = json.loads(match.group(0))
+                                except Exception:
+                                    data = None
+                        if isinstance(data, dict):
+                            emotions = data.get("emotions")
+                            if isinstance(emotions, list):
+                                for emo in emotions:
+                                    if isinstance(emo, str) and emo in valid_emoticons:
+                                        self.found_emotions.append(emo)
+                            elif isinstance(emotions, str) and emotions in valid_emoticons:
+                                self.found_emotions.append(emotions)
+            except Exception as e:
+                logger.error(f"[meme_manager] 情感模型调用失败: {e}")
 
         # 去重并应用数量限制
         seen = set()
