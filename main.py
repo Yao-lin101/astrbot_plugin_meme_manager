@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import io
+import json
 import os
 import random
 import re
@@ -117,6 +118,8 @@ class MemeSender(Star):
         self.strict_max_emotions_per_message = self.config.get(
             "strict_max_emotions_per_message"
         )
+        self.emotion_llm_enabled = self.config.get("emotion_llm_enabled", False)
+        self.emotion_llm_provider_id = self.config.get("emotion_llm_provider_id", "")
 
         # 混合消息相关配置
         self.enable_mixed_message = self.config.get("enable_mixed_message", True)
@@ -127,6 +130,9 @@ class MemeSender(Star):
             "remove_invalid_alternative_markup", False
         )
         self.convert_static_to_gif = self.config.get("convert_static_to_gif", False)
+
+        # 流式传输兼容
+        self.streaming_compatibility = self.config.get("streaming_compatibility", False)
 
         # 内容清理规则
         self.content_cleanup_rule = self.config.get(
@@ -257,6 +263,13 @@ class MemeSender(Star):
             MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS
         )
         self.category_mapping_string = dict_to_string(self.category_mapping)
+        personas = self.context.provider_manager.personas
+        # 如果启用模型情感分析，不注入新的提示词
+        if self.emotion_llm_enabled:
+            self.sys_prompt_add = ""
+            for persona, persona_backup in zip(personas, self.persona_backup):
+                persona["prompt"] = persona_backup["prompt"]
+            return
         self.sys_prompt_add = (
             self.prompt_head
             + self.category_mapping_string
@@ -264,8 +277,7 @@ class MemeSender(Star):
             + str(self.max_emotions_per_message)
             + self.prompt_tail_2
         )
-        # 注入全局人格，以便利用缓存并减少对聊天内容的影响
-        personas = self.context.provider_manager.personas
+        # 注入全局人格，以便利用缓存并减少对聊天内容的影响(如果不启用模型分析情感)
         for persona, persona_backup in zip(personas, self.persona_backup):
             persona["prompt"] = persona_backup["prompt"] + self.sys_prompt_add
 
@@ -623,6 +635,49 @@ class MemeSender(Star):
 
         logger.debug(f"[meme_manager] 松散匹配阶段找到的表情: {loose_emotions}")
 
+        if self.emotion_llm_enabled:
+            try:
+                provider_id = self.emotion_llm_provider_id
+                if not provider_id:
+                    provider_id = await self.context.get_current_chat_provider_id(
+                        umo=event.unified_msg_origin
+                    )
+                if provider_id:
+                    valid_list = sorted(valid_emoticons)
+                    prompt = (
+                        "你是表情标签选择器，只能从给定标签中选择。\n"
+                        "请基于文本语义判断需要的表情，返回JSON格式："
+                        '{"emotions":["tag1","tag2"]}。\n'
+                        "只输出JSON，不要解释。\n"
+                        f"可用标签: {', '.join(valid_list)}\n"
+                        f"文本: {clean_text}"
+                    )
+                    llm_resp = await self.context.llm_generate(
+                        chat_provider_id=provider_id, prompt=prompt
+                    )
+                    if llm_resp and llm_resp.completion_text:
+                        raw_text = llm_resp.completion_text.strip()
+                        data = None
+                        try:
+                            data = json.loads(raw_text)
+                        except Exception:
+                            match = re.search(r"\{[\s\S]*\}", raw_text)
+                            if match:
+                                try:
+                                    data = json.loads(match.group(0))
+                                except Exception:
+                                    data = None
+                        if isinstance(data, dict):
+                            emotions = data.get("emotions")
+                            if isinstance(emotions, list):
+                                for emo in emotions:
+                                    if isinstance(emo, str) and emo in valid_emoticons:
+                                        self.found_emotions.append(emo)
+                            elif isinstance(emotions, str) and emotions in valid_emoticons:
+                                self.found_emotions.append(emotions)
+            except Exception as e:
+                logger.error(f"[meme_manager] 情感模型调用失败: {e}")
+
         # 去重并应用数量限制
         seen = set()
         filtered_emotions = []
@@ -760,16 +815,72 @@ class MemeSender(Star):
             logger.error(f"[meme_manager] 转换图片为 GIF 失败: {e}")
             return image_path
 
+    async def _send_memes_streaming(self, event: AstrMessageEvent):
+        """流式传输兼容模式：在流式消息发送完成后，主动发送表情图片作为独立消息。"""
+        if not self.found_emotions:
+            return
+
+        try:
+            random_value = random.randint(1, 100)
+            if random_value > self.emotions_probability:
+                return
+
+            for emotion in self.found_emotions:
+                if not emotion:
+                    continue
+
+                emotion_path = os.path.join(MEMES_DIR, emotion)
+                if not os.path.exists(emotion_path):
+                    continue
+
+                memes = [
+                    f
+                    for f in os.listdir(emotion_path)
+                    if f.endswith((".jpg", ".png", ".gif"))
+                ]
+                if not memes:
+                    continue
+
+                meme = random.choice(memes)
+                meme_file = os.path.join(emotion_path, meme)
+                final_meme_file = self._convert_to_gif(meme_file)
+
+                try:
+                    if event.get_platform_name() == "gewechat":
+                        await event.send(MessageChain([Image.fromFileSystem(final_meme_file)]))
+                    else:
+                        await self.context.send_message(
+                            event.unified_msg_origin,
+                            MessageChain([Image.fromFileSystem(final_meme_file)])
+                        )
+                except Exception as e:
+                    logger.error(f"[meme_manager] 流式模式发送表情失败: {e}")
+                finally:
+                    # 清理临时文件
+                    if final_meme_file != meme_file and os.path.exists(final_meme_file):
+                        try:
+                            os.remove(final_meme_file)
+                        except Exception:
+                            pass
+        except Exception as e:
+            logger.error(f"[meme_manager] 流式模式处理表情失败: {e}")
+            logger.error(traceback.format_exc())
+        finally:
+            self.found_emotions = []
+
     @filter.on_decorating_result(priority=99999)
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前清理文本中的表情标签，并添加表情图片"""
         logger.debug("[meme_manager] on_decorating_result 开始处理")
         
         result = event.get_result()
-        if (
-            not result
-            or result.result_content_type == ResultContentType.STREAMING_FINISH
-        ):
+        if not result:
+            return
+
+        # 流式传输兼容处理
+        if result.result_content_type == ResultContentType.STREAMING_FINISH:
+            if self.streaming_compatibility:
+                await self._send_memes_streaming(event)
             return
 
         try:

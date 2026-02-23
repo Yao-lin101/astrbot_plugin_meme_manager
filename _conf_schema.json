@@ -4,7 +4,10 @@
     "type": "string",
     "hint": "请选择要使用的图床服务",
     "default": "stardots",
-    "options": ["stardots", "cloudflare_r2"]
+    "options": [
+      "stardots",
+      "cloudflare_r2"
+    ]
   },
   "image_host_config": {
     "description": "图床配置",
@@ -92,6 +95,19 @@
         "default": "个表情\n   • 专业咨询：≤1个\n2. 强制校验规则：\n   a) 存在性检查：仅使用当前列表存在的标签\n   b) 冲突检测：当涉及医疗/法律/暴力话题时禁用所有表情\n   c) 语义一致性：表情含义需与上下文情绪方向一致\n3. 智能降级策略：\n   1) 首选：同类别表情或相近表情\n   2) 备选：放弃使用表情\n4. 自检流程：\n   提取关键词 → 匹配标签 → 语境审查 → 最终输出"
       }
     }
+  },
+  "emotion_llm_enabled": {
+    "description": "启用情感模型判断表情",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后将调用指定对话模型判断表情标签"
+  },
+  "emotion_llm_provider_id": {
+    "description": "情感模型Provider ID",
+    "type": "string",
+    "default": "",
+    "hint": "留空则使用当前对话的模型",
+    "_special": "select_provider"
   },
   "convert_static_to_gif": {
     "description": "静态图转GIF发送",
@@ -193,5 +209,11 @@
       "max": 100,
       "step": 10
     }
+  },
+  "streaming_compatibility": {
+    "description": "流式传输兼容",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，在流式传输模式下表情图片将作为独立消息发送（流式模式下无法混合图文）"
   }
 }
