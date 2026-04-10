@@ -5,15 +5,36 @@ from quart import Blueprint, current_app, jsonify, request
 
 from ..config import MEMES_DIR
 from .models import (
+    DuplicateEmojiError,
     add_emoji_to_category,
+    batch_copy_emojis,
+    batch_move_emojis,
+    batch_delete_emojis,
+    clear_all_emojis,
+    clear_category_emojis,
     delete_emoji_from_category,
     get_emoji_by_category,
+    move_emoji_to_category,
     scan_emoji_folder,
 )
 
 api = Blueprint("api", __name__)
 
 logger = logging.getLogger(__name__)
+
+
+def _get_provider_label(img_sync) -> str:
+    """返回当前图床 provider 的展示名称。"""
+    provider_type = getattr(img_sync, "provider_type", "")
+    if provider_type == "cloudflare_r2":
+        return "Cloudflare R2"
+    if provider_type == "stardots":
+        return "StarDots"
+
+    provider = getattr(img_sync, "provider", None)
+    if provider is not None:
+        return provider.__class__.__name__
+    return "未知图床"
 
 
 @api.route("/emoji", methods=["GET"])
@@ -60,7 +81,7 @@ async def add_emoji():
         logger.info(f"收到上传请求: 类别={category}, 文件名={image_file.filename}")
 
         try:
-            result_path = add_emoji_to_category(category, image_file)
+            result = add_emoji_to_category(category, image_file)
 
             # 添加成功后同步配置
             plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
@@ -68,16 +89,29 @@ async def add_emoji():
             if category_manager:
                 category_manager.sync_with_filesystem()
 
-            logger.info(f"表情包添加成功: {result_path}")
+            logger.info(f"表情包添加成功: {result['path']}")
             return jsonify(
                 {
                     "message": "表情包添加成功",
-                    "path": result_path,
+                    "path": result["path"],
                     "category": category,
-                    "filename": image_file.filename,
+                    "filename": result["filename"],
                 }
             ), 201
 
+        except DuplicateEmojiError as inner_e:
+            logger.info(f"跳过重复表情包: {inner_e}")
+            return (
+                jsonify(
+                    {
+                        "message": str(inner_e),
+                        "code": "duplicate_emoji",
+                        "category": category,
+                        "filename": inner_e.existing_filename,
+                    }
+                ),
+                409,
+            )
         except Exception as inner_e:
             logger.error(f"处理上传文件时出错: {inner_e}", exc_info=True)
             return jsonify({"message": f"处理上传文件时出错: {str(inner_e)}"}), 500
@@ -106,6 +140,205 @@ async def delete_emoji():
         ), 200
     else:
         return jsonify({"message": "Emoji not found"}), 404
+
+
+@api.route("/emoji/batch_delete", methods=["POST"])
+async def batch_delete_emoji():
+    """批量删除指定类别的表情包"""
+    data = await request.get_json()
+    category = data.get("category")
+    image_files = data.get("image_files")
+
+    if not category or not isinstance(image_files, list) or not image_files:
+        return jsonify({"message": "Category and image_files are required"}), 400
+
+    result = batch_delete_emojis(category, image_files)
+    if not result["category_exists"]:
+        return jsonify({"message": "Category not found"}), 404
+
+    deleted_files = result["deleted_files"]
+    missing_files = result["missing_files"]
+    return jsonify(
+        {
+            "message": "Batch delete completed",
+            "category": category,
+            "deleted_files": deleted_files,
+            "missing_files": missing_files,
+            "deleted_count": len(deleted_files),
+            "missing_count": len(missing_files),
+        }
+    ), 200
+
+
+@api.route("/emoji/move", methods=["POST"])
+async def move_emoji():
+    """移动单个表情包到指定类别。"""
+    data = await request.get_json()
+    source_category = data.get("source_category")
+    target_category = data.get("target_category")
+    image_file = data.get("image_file")
+
+    if not source_category or not target_category or not image_file:
+        return (
+            jsonify(
+                {
+                    "message": "source_category, target_category and image_file are required"
+                }
+            ),
+            400,
+        )
+
+    if source_category == target_category:
+        return jsonify({"message": "Source and target category must be different"}), 400
+
+    result = move_emoji_to_category(source_category, image_file, target_category)
+    if not result["source_category_exists"]:
+        return jsonify({"message": "Source category not found"}), 404
+    if result["conflict"]:
+        return jsonify({"message": "Target file already exists"}), 409
+    if result["missing"]:
+        return jsonify({"message": "Emoji not found"}), 404
+
+    return jsonify(
+        {
+            "message": "Emoji moved successfully",
+            "source_category": result["source_category"],
+            "target_category": result["target_category"],
+            "filename": result["filename"],
+        }
+    ), 200
+
+
+@api.route("/emoji/batch_move", methods=["POST"])
+async def batch_move_emoji():
+    """批量移动指定类别的表情包到另一个类别。"""
+    data = await request.get_json()
+    source_category = data.get("source_category")
+    target_category = data.get("target_category")
+    image_files = data.get("image_files")
+
+    if (
+        not source_category
+        or not target_category
+        or not isinstance(image_files, list)
+        or not image_files
+    ):
+        return (
+            jsonify(
+                {
+                    "message": "source_category, target_category and image_files are required"
+                }
+            ),
+            400,
+        )
+
+    if source_category == target_category:
+        return jsonify({"message": "Source and target category must be different"}), 400
+
+    result = batch_move_emojis(source_category, image_files, target_category)
+    if not result["source_category_exists"]:
+        return jsonify({"message": "Source category not found"}), 404
+
+    moved_files = result["moved_files"]
+    missing_files = result["missing_files"]
+    conflicting_files = result["conflicting_files"]
+    return jsonify(
+        {
+            "message": "Batch move completed",
+            "source_category": source_category,
+            "target_category": target_category,
+            "moved_files": moved_files,
+            "missing_files": missing_files,
+            "conflicting_files": conflicting_files,
+            "moved_count": len(moved_files),
+            "missing_count": len(missing_files),
+            "conflict_count": len(conflicting_files),
+        }
+    ), 200
+
+
+@api.route("/emoji/batch_copy", methods=["POST"])
+async def batch_copy_emoji():
+    """批量复制指定类别的表情包到另一个类别。"""
+    data = await request.get_json()
+    source_category = data.get("source_category")
+    target_category = data.get("target_category")
+    image_files = data.get("image_files")
+
+    if (
+        not source_category
+        or not target_category
+        or not isinstance(image_files, list)
+        or not image_files
+    ):
+        return (
+            jsonify(
+                {
+                    "message": "source_category, target_category and image_files are required"
+                }
+            ),
+            400,
+        )
+
+    result = batch_copy_emojis(source_category, image_files, target_category)
+    if not result["source_category_exists"]:
+        return jsonify({"message": "Source category not found"}), 404
+
+    copied_files = result["copied_files"]
+    missing_files = result["missing_files"]
+    conflicting_files = result["conflicting_files"]
+    return jsonify(
+        {
+            "message": "Batch copy completed",
+            "source_category": source_category,
+            "target_category": target_category,
+            "copied_files": copied_files,
+            "missing_files": missing_files,
+            "conflicting_files": conflicting_files,
+            "copied_count": len(copied_files),
+            "missing_count": len(missing_files),
+            "conflict_count": len(conflicting_files),
+        }
+    ), 200
+
+
+@api.route("/category/clear", methods=["POST"])
+async def clear_category():
+    """清空指定类别下的所有表情包，但保留类别和配置。"""
+    data = await request.get_json()
+    category = data.get("category")
+    if not category:
+        return jsonify({"message": "Category is required"}), 400
+
+    result = clear_category_emojis(category)
+    if not result["category_exists"]:
+        return jsonify({"message": "Category not found"}), 404
+
+    deleted_files = result["deleted_files"]
+    return jsonify(
+        {
+            "message": "Category cleared successfully",
+            "category": category,
+            "deleted_files": deleted_files,
+            "deleted_count": len(deleted_files),
+        }
+    ), 200
+
+
+@api.route("/emoji/clear_all", methods=["POST"])
+async def clear_all_emoji():
+    """清空所有类别中的表情包，但保留类别和配置。"""
+    result = clear_all_emojis()
+    deleted_by_category = result["deleted_by_category"]
+    deleted_count = sum(deleted_by_category.values())
+    return jsonify(
+        {
+            "message": "All emojis cleared successfully",
+            "deleted_by_category": deleted_by_category,
+            "deleted_count": deleted_count,
+            "affected_categories": len(deleted_by_category),
+        }
+    ), 200
 
 
 @api.route("/emotions", methods=["GET"])
@@ -161,6 +394,8 @@ async def get_sync_status():
         return jsonify(
             {
                 "status": "ok",
+                "missing_in_config": missing_in_config,
+                "deleted_categories": deleted_categories,
                 "differences": {
                     "missing_in_config": missing_in_config,
                     "deleted_categories": deleted_categories,
@@ -289,6 +524,9 @@ async def get_img_host_sync_status():
             return jsonify({"error": "图床服务未配置"}), 400
 
         status = img_sync.check_status()
+        status["upload_count"] = len(status.get("to_upload", []))
+        status["download_count"] = len(status.get("to_download", []))
+        status["provider_label"] = _get_provider_label(img_sync)
         return jsonify(status)
     except Exception as e:
         return jsonify({"error": str(e)}), 500

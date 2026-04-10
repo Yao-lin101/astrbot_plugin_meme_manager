@@ -15,25 +15,58 @@ import aiohttp
 from PIL import Image as PILImage
 
 from astrbot.api import logger
-from astrbot.api.all import *
+from astrbot.api.all import *  # noqa: F403
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
-from astrbot.api.message_components import *
+from astrbot.api.message_components import *  # noqa: F403
+from astrbot.api.message_components import Image
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context, Star, register
+from astrbot.core import astrbot_config
 from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
+from astrbot.core.platform import MessageType as PlatformMessageType
+from astrbot.core.platform.message_session import MessageSession
+from astrbot.core.utils.io import get_local_ip_addresses
+from astrbot.core.utils.session_waiter import (
+    SessionController,
+    SessionFilter,
+    session_waiter,
+)
 
 from .backend.category_manager import CategoryManager
+from .backend.models import (
+    clear_all_emojis,
+    clear_category_emojis,
+    get_emoji_by_category,
+)
 from .config import DEFAULT_CATEGORY_DESCRIPTIONS, MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
-from .utils import dict_to_string, generate_secret_key, get_public_ip, load_json
+from .utils import (
+    dict_to_string,
+    generate_secret_key,
+    get_default_meme_categories,
+    load_json,
+    restore_default_memes,
+)
 from .webui import ServerState, run_server
 
 
+class ConfirmationCancelled(Exception):
+    """Raised when a dangerous command is cancelled by the user."""
+
+
+class SenderScopedSessionFilter(SessionFilter):
+    """Bind confirmation replies to the same sender within the same session."""
+
+    def filter(self, event: AstrMessageEvent) -> str:
+        sender_id = str(event.get_sender_id() or "").strip()
+        return f"{event.unified_msg_origin}:{sender_id}"
+
+
 @register(
-    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "3.18"
+    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "3.20"
 )
 class MemeSender(Star):
     def __init__(self, context: Context, config: dict = None):
@@ -151,6 +184,10 @@ class MemeSender(Star):
         关闭管理后台
         查看图库
         添加表情
+        恢复默认表情包
+        清空指定类型
+        清空全部
+        删除类型本身
         同步状态
         同步到云端
         从云端同步
@@ -161,21 +198,34 @@ class MemeSender(Star):
     @meme_manager.command("开启管理后台")
     async def start_webui(self, event: AstrMessageEvent):
         """启动表情包管理服务器"""
-        yield event.plain_result("🚀 正在启动管理后台，请稍等片刻～")
+        if event.get_message_type() != PlatformMessageType.FRIEND_MESSAGE:
+            yield event.plain_result(
+                "⚠️ 该指令仅限私聊使用。\n请私聊发送“表情管理 开启管理后台”。"
+            )
+            return
 
         try:
+            self.server_port = self.config.get("webui_port", 5000)
+            is_running = bool(self.webui_process and self.webui_process.is_alive())
+            if is_running and self.server_key and await self._check_port_active():
+                yield event.plain_result(
+                    "ℹ️ 管理后台已在运行，以下是当前访问信息：\n\n"
+                    + self._build_webui_access_message()
+                )
+                return
+
             state = ServerState()
             state.ready.clear()
 
             # 生成秘钥
             self.server_key = generate_secret_key(8)
-            self.server_port = self.config.get("webui_port", 5000)
 
             # 检查端口占用情况
             if await self._check_port_active():
-                yield event.plain_result("🔧 检测到端口占用，正在尝试自动释放...")
                 await self._shutdown()
                 await asyncio.sleep(1)  # 等待系统释放端口
+                if await self._check_port_active():
+                    raise RuntimeError(f"端口 {self.server_port} 仍被占用")
 
             config_for_server = {
                 "img_sync": self.img_sync,
@@ -194,19 +244,8 @@ class MemeSender(Star):
             else:
                 raise RuntimeError("⌛ 启动超时，请检查防火墙设置")
 
-            # 获取公网IP并返回结果
-            public_ip = await get_public_ip()
-            yield event.plain_result(
-                f"✨ 管理后台已就绪！\n"
-                f"━━━━━━━━━━━━━━\n"
-                f"表情包管理服务器已启动！\n"
-                f"⚠️ 如果地址错误或未发出, 请使用 [服务器公网ip]:{self.server_port} 访问\n"
-                f"🔑 临时密钥：{self.server_key} （本次有效）\n"
-                f"⚠️ 请勿分享给未授权用户"
-            )
-            yield event.plain_result(
-                f"🔗 访问地址：http://{public_ip}:{self.server_port}\n"
-            )
+            access_message = self._build_webui_access_message()
+            yield event.plain_result(access_message)
 
         except Exception as e:
             logger.error(f"启动失败: {str(e)}")
@@ -226,17 +265,93 @@ class MemeSender(Star):
         except Exception:
             return False
 
+    def _build_webui_access_urls(self) -> list[str]:
+        """参考 AstrBot 本体生成可访问地址列表。"""
+        access_urls = [f"http://localhost:{self.server_port}"]
+        seen_hosts = {"localhost", "127.0.0.1"}
+
+        try:
+            for ip_addr in get_local_ip_addresses():
+                if not ip_addr or ip_addr in seen_hosts or ip_addr.startswith("127."):
+                    continue
+                seen_hosts.add(ip_addr)
+                access_urls.append(f"http://{ip_addr}:{self.server_port}")
+        except Exception as exc:
+            logger.warning(f"获取本地网络地址失败: {exc}")
+
+        return access_urls
+
+    def _build_webui_access_message(self) -> str:
+        access_urls = self._build_webui_access_urls()
+        parts = [
+            "✨ 管理后台已就绪！",
+            "━━━━━━━━━━━━━━",
+            "表情包管理服务器已启动！",
+            "🔗 可访问地址：",
+            f"   ➜ 本地: {access_urls[0]}",
+        ]
+
+        for url in access_urls[1:]:
+            parts.append(f"   ➜ 网络: {url}")
+
+        parts.extend(
+            [
+                f"🔑 临时密钥：{self.server_key} （本次有效）",
+                "⚠️ 请勿分享给未授权用户",
+            ]
+        )
+
+        if len(access_urls) == 1:
+            parts.append(
+                "⚠️ 当前仅检测到本地地址，如需远程访问，请确认端口映射、防火墙和宿主机网络已放行。"
+            )
+
+        callback_api_base = str(
+            astrbot_config.get("callback_api_base", "") or ""
+        ).strip()
+        if callback_api_base:
+            parts.append(
+                f"ℹ️ 如你通过反代对外暴露服务，请优先使用你自己的外部地址访问。当前 callback_api_base: {callback_api_base}"
+            )
+
+        return "\n".join(parts)
+
+    async def _send_webui_access_info_privately(
+        self, event: AstrMessageEvent, message: str
+    ) -> bool:
+        """只向当前操作者私聊发送管理后台地址。"""
+        sender_id = str(event.get_sender_id() or "").strip()
+        if not sender_id:
+            return False
+
+        private_session = MessageSession(
+            event.get_platform_id(),
+            PlatformMessageType.FRIEND_MESSAGE,
+            sender_id,
+        )
+
+        try:
+            return await self.context.send_message(
+                private_session, MessageChain([Plain(message)])
+            )
+        except Exception as exc:
+            logger.warning(f"私聊发送管理后台地址失败: {exc}")
+            return False
+
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("关闭管理后台")
     async def stop_server(self, event: AstrMessageEvent):
         """关闭表情包管理服务器的指令"""
-        yield event.plain_result("🚪 管理后台正在关闭，稍后见~ ✨")
-
         try:
+            is_running = bool(self.webui_process and self.webui_process.is_alive())
+            if not is_running:
+                yield event.plain_result("ℹ️ 管理后台当前未运行。")
+                return
+
             await self._shutdown()
-            yield event.plain_result("✅ 服务器已关闭")
+            yield event.plain_result("✅ 管理后台已关闭。")
         except Exception as e:
-            yield event.plain_result(f"❌ 安全关闭失败: {str(e)}")
+            yield event.plain_result(f"❌ 管理后台关闭失败：{str(e)}")
         finally:
             await self._cleanup_resources()
 
@@ -256,6 +371,86 @@ class MemeSender(Star):
                 self.webui_process.join()
         self.webui_process = None
         logger.info("资源清理完成")
+
+    def _get_manageable_categories(self) -> set[str]:
+        """Return the union of configured and local categories."""
+        return (
+            set(self.category_manager.get_descriptions())
+            | self.category_manager.get_local_categories()
+        )
+
+    async def _wait_for_command_confirmation(
+        self, event: AstrMessageEvent, timeout: int = 30
+    ) -> bool:
+        """Wait for the same sender to reply with confirmation text."""
+
+        @session_waiter(timeout=timeout, record_history_chains=False)
+        async def confirmation_waiter(
+            controller: SessionController, confirm_event: AstrMessageEvent
+        ) -> None:
+            reply = (confirm_event.message_str or "").strip()
+
+            if reply in {"确认", "确定"}:
+                controller.stop()
+                return
+
+            if reply in {"取消", "退出"}:
+                await confirm_event.send(confirm_event.plain_result("已取消本次操作。"))
+                controller.stop(ConfirmationCancelled())
+                return
+
+            await confirm_event.send(
+                confirm_event.plain_result(
+                    "请回复“确认”继续执行，或回复“取消”终止本次操作。"
+                )
+            )
+            controller.keep(timeout=timeout, reset_timeout=True)
+
+        try:
+            await confirmation_waiter(event, SenderScopedSessionFilter())
+            return True
+        except TimeoutError:
+            await event.send(event.plain_result("⌛ 等待确认超时，操作已取消。"))
+            return False
+        except ConfirmationCancelled:
+            return False
+
+    def _format_category_counts(
+        self, category_counts: dict[str, int], limit: int = 8
+    ) -> str:
+        """Render a compact category count summary for confirmation prompts."""
+        non_empty_items = [
+            (category, count)
+            for category, count in sorted(category_counts.items())
+            if count > 0
+        ]
+        if not non_empty_items:
+            return "无可删除的表情包文件。"
+
+        lines = [
+            f"- {category}: {count} 个" for category, count in non_empty_items[:limit]
+        ]
+        if len(non_empty_items) > limit:
+            lines.append(f"- 其余 {len(non_empty_items) - limit} 个类型已省略")
+        return "\n".join(lines)
+
+    def _ensure_default_category_descriptions(self, categories: list[str]) -> None:
+        """为恢复出来但缺少描述的默认类别补回默认描述。"""
+        existing_descriptions = self.category_manager.get_descriptions()
+        updated = False
+
+        for category in categories:
+            if category in existing_descriptions:
+                continue
+            default_description = DEFAULT_CATEGORY_DESCRIPTIONS.get(category)
+            if not default_description:
+                continue
+            if self.category_manager.update_description(category, default_description):
+                existing_descriptions[category] = default_description
+                updated = True
+
+        if updated:
+            self._reload_personas()
 
     def _reload_personas(self):
         """重新加载表情配置并构建提示词并注入全局人格"""
@@ -313,6 +508,188 @@ class MemeSender(Star):
         }
         yield event.plain_result(
             f"请在30秒内发送要添加到【{category}】类别的图片（可发送多张图片）。"
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("恢复默认表情包")
+    async def restore_default_memes_command(
+        self, event: AstrMessageEvent, category: str = None
+    ):
+        """恢复内置默认表情包，可指定类别或恢复全部。"""
+        available_default_categories = get_default_meme_categories()
+        if not available_default_categories:
+            yield event.plain_result("❌ 未找到插件内置默认表情包资源。")
+            return
+
+        normalized_category = category.strip() if category else None
+        if (
+            normalized_category
+            and normalized_category not in available_default_categories
+        ):
+            category_list = "\n".join(
+                f"- {name}" for name in available_default_categories
+            )
+            yield event.plain_result(
+                f"⚠️ 默认表情包中不存在类别「{normalized_category}」。\n"
+                f"当前可恢复的默认类别如下：\n{category_list}"
+            )
+            return
+
+        restore_result = restore_default_memes(normalized_category)
+        if not restore_result["source_exists"]:
+            yield event.plain_result("❌ 未找到插件内置默认表情包资源。")
+            return
+
+        copied_files = restore_result["copied_files"]
+        duplicate_files = restore_result["duplicate_files"]
+        renamed_files = restore_result["renamed_files"]
+        restored_categories = sorted(
+            set(copied_files) | set(duplicate_files) | set(renamed_files)
+        )
+
+        if restored_categories:
+            self._ensure_default_category_descriptions(restored_categories)
+
+        copied_count = sum(len(files) for files in copied_files.values())
+        duplicate_count = sum(len(files) for files in duplicate_files.values())
+        renamed_count = sum(len(files) for files in renamed_files.values())
+
+        if copied_count == 0 and duplicate_count > 0:
+            yield event.plain_result(
+                (
+                    "ℹ️ 默认表情包已存在，本次未新增文件。"
+                    if not normalized_category
+                    else f"ℹ️ 类别「{normalized_category}」的默认表情包已存在，本次未新增文件。"
+                )
+            )
+            return
+
+        if copied_count == 0:
+            yield event.plain_result("ℹ️ 本次没有恢复任何默认表情包文件。")
+            return
+
+        if normalized_category:
+            yield event.plain_result(
+                f"✅ 已恢复类别「{normalized_category}」的默认表情包，共新增 {copied_count} 个文件"
+                f"{f'，其中 {renamed_count} 个因重名自动补序号' if renamed_count > 0 else ''}"
+                f"{f'，跳过 {duplicate_count} 个重复文件' if duplicate_count > 0 else ''}。"
+            )
+            return
+
+        yield event.plain_result(
+            f"✅ 已恢复全部默认表情包，共新增 {copied_count} 个文件，涉及 {len(copied_files)} 个类别"
+            f"{f'，其中 {renamed_count} 个因重名自动补序号' if renamed_count > 0 else ''}"
+            f"{f'，跳过 {duplicate_count} 个重复文件' if duplicate_count > 0 else ''}。"
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("清空指定类型")
+    async def clear_category_command(
+        self, event: AstrMessageEvent, category: str = None
+    ):
+        """清空指定类型下的所有表情包，但保留类型本身。"""
+        if not category:
+            yield event.plain_result(
+                "📌 若要清空指定类型，请按照此格式操作：\n/表情管理 清空指定类型 [类别名称]"
+            )
+            return
+
+        category = category.strip()
+        available_categories = self._get_manageable_categories()
+        if category not in available_categories:
+            yield event.plain_result(
+                f"⚠️ 未找到类型「{category}」。\n可先使用 /表情管理 查看图库 查看当前类型。"
+            )
+            return
+
+        emoji_count = len(get_emoji_by_category(category))
+        if emoji_count == 0:
+            yield event.plain_result(f"📭 类型「{category}」当前没有可清空的表情包。")
+            return
+
+        yield event.plain_result(
+            f"⚠️ 即将清空类型「{category}」下的 {emoji_count} 个表情包，但会保留类型本身。\n"
+            "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
+        )
+        if not await self._wait_for_command_confirmation(event):
+            return
+
+        result = clear_category_emojis(category)
+        deleted_count = len(result["deleted_files"])
+        yield event.plain_result(
+            f"✅ 已清空类型「{category}」，共删除 {deleted_count} 个表情包。"
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("清空全部")
+    async def clear_all_emojis_command(self, event: AstrMessageEvent):
+        """清空所有类型下的表情包，但保留类型和描述配置。"""
+        available_categories = sorted(self._get_manageable_categories())
+        category_counts = {
+            category: len(get_emoji_by_category(category))
+            for category in available_categories
+        }
+        total_count = sum(category_counts.values())
+
+        if total_count == 0:
+            yield event.plain_result("📭 当前没有可清空的表情包文件。")
+            return
+
+        category_count = sum(1 for count in category_counts.values() if count > 0)
+        summary = self._format_category_counts(category_counts)
+        yield event.plain_result(
+            f"⚠️ 即将清空全部表情包，共 {total_count} 个文件，涉及 {category_count} 个类型。\n"
+            "该操作会保留所有类型名称和描述配置。\n"
+            f"{summary}\n"
+            "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
+        )
+        if not await self._wait_for_command_confirmation(event):
+            return
+
+        result = clear_all_emojis()
+        deleted_total = sum(result["deleted_by_category"].values())
+        yield event.plain_result(
+            f"✅ 已清空全部表情包，共删除 {deleted_total} 个文件，类型配置已保留。"
+        )
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("删除类型本身")
+    async def delete_category_command(
+        self, event: AstrMessageEvent, category: str = None
+    ):
+        """删除指定类型本身，同时移除其描述配置和本地文件夹。"""
+        if not category:
+            yield event.plain_result(
+                "📌 若要删除类型本身，请按照此格式操作：\n/表情管理 删除类型本身 [类别名称]"
+            )
+            return
+
+        category = category.strip()
+        available_categories = self._get_manageable_categories()
+        if category not in available_categories:
+            yield event.plain_result(
+                f"⚠️ 未找到类型「{category}」。\n可先使用 /表情管理 查看图库 查看当前类型。"
+            )
+            return
+
+        emoji_count = len(get_emoji_by_category(category))
+        yield event.plain_result(
+            f"⚠️ 即将删除类型「{category}」本身，并移除其描述配置"
+            f"{f'，同时删除其中的 {emoji_count} 个表情包' if emoji_count > 0 else ''}。\n"
+            "该操作不可恢复。\n"
+            "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
+        )
+        if not await self._wait_for_command_confirmation(event):
+            return
+
+        if not self.category_manager.delete_category(category):
+            yield event.plain_result(f"❌ 删除类型「{category}」失败，请稍后重试。")
+            return
+
+        self._reload_personas()
+        yield event.plain_result(
+            f"✅ 已删除类型「{category}」"
+            f"{f'，并移除 {emoji_count} 个表情包。' if emoji_count > 0 else '。'}"
         )
 
     @filter.event_message_type(EventMessageType.ALL)
@@ -476,10 +853,10 @@ class MemeSender(Star):
             return
 
         text = response.completion_text
-        
+
         self.found_emotions = []  # 重置表情列表
         valid_emoticons = set(self.category_mapping.keys())  # 预加载合法表情集合
-        
+
         clean_text = text
 
         # 第一阶段：严格匹配符号包裹的表情
@@ -507,8 +884,6 @@ class MemeSender(Star):
                 self.found_emotions.append(emotion)
 
         # 第二阶段：替代标记处理（如[emotion]、(emotion)等）
-        bracket_emotions = []
-        paren_emotions = []
         if self.config.get("enable_alternative_markup", True):
             remove_invalid_markup = self.remove_invalid_alternative_markup
             # 处理[emotion]格式
@@ -673,7 +1048,10 @@ class MemeSender(Star):
                                 for emo in emotions:
                                     if isinstance(emo, str) and emo in valid_emoticons:
                                         self.found_emotions.append(emo)
-                            elif isinstance(emotions, str) and emotions in valid_emoticons:
+                            elif (
+                                isinstance(emotions, str)
+                                and emotions in valid_emoticons
+                            ):
                                 self.found_emotions.append(emotions)
             except Exception as e:
                 logger.error(f"[meme_manager] 情感模型调用失败: {e}")
@@ -694,7 +1072,9 @@ class MemeSender(Star):
         # 防御性清理残留符号
         clean_text = re.sub(r"&&+", "", clean_text)  # 清除未成对的&&符号
         response.completion_text = clean_text.strip()
-        logger.debug(f"[meme_manager] 清理后的最终文本内容长度: {len(response.completion_text)}")
+        logger.debug(
+            f"[meme_manager] 清理后的最终文本内容长度: {len(response.completion_text)}"
+        )
 
     def _is_likely_emotion_markup(self, markup, text, position):
         """判断一个标记是否可能是表情而非普通文本的一部分"""
@@ -782,31 +1162,36 @@ class MemeSender(Star):
         """
         if not self.convert_static_to_gif:
             return image_path
-            
+
         if image_path.lower().endswith(".gif"):
             return image_path
-            
+
         try:
             with PILImage.open(image_path) as img:
                 # 检查是否已经是 GIF (虽然后缀不是 .gif，但内容可能是)
                 if img.format == "GIF":
                     return image_path
-                
+
                 # 创建临时文件
                 temp_dir = tempfile.gettempdir()
-                temp_filename = os.path.join(temp_dir, f"meme_{int(time.time())}_{random.randint(1000, 9999)}.gif")
-                
+                temp_filename = os.path.join(
+                    temp_dir,
+                    f"meme_{int(time.time())}_{random.randint(1000, 9999)}.gif",
+                )
+
                 # 转换为 RGB (如果是 RGBA 需要处理透明度)
-                if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+                if img.mode in ("RGBA", "LA") or (
+                    img.mode == "P" and "transparency" in img.info
+                ):
                     # 创建白色背景
                     background = PILImage.new("RGB", img.size, (255, 255, 255))
                     if img.mode == "P":
                         img = img.convert("RGBA")
-                    background.paste(img, mask=img.split()[3]) # 3 is the alpha channel
+                    background.paste(img, mask=img.split()[3])  # 3 is the alpha channel
                     img = background
                 else:
                     img = img.convert("RGB")
-                
+
                 # 保存为 GIF
                 img.save(temp_filename, "GIF")
                 logger.debug(f"[meme_manager] 已将静态图转换为 GIF: {temp_filename}")
@@ -847,11 +1232,13 @@ class MemeSender(Star):
 
                 try:
                     if event.get_platform_name() == "gewechat":
-                        await event.send(MessageChain([Image.fromFileSystem(final_meme_file)]))
+                        await event.send(
+                            MessageChain([Image.fromFileSystem(final_meme_file)])
+                        )
                     else:
                         await self.context.send_message(
                             event.unified_msg_origin,
-                            MessageChain([Image.fromFileSystem(final_meme_file)])
+                            MessageChain([Image.fromFileSystem(final_meme_file)]),
                         )
                 except Exception as e:
                     logger.error(f"[meme_manager] 流式模式发送表情失败: {e}")
@@ -872,7 +1259,7 @@ class MemeSender(Star):
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前清理文本中的表情标签，并添加表情图片"""
         logger.debug("[meme_manager] on_decorating_result 开始处理")
-        
+
         result = event.get_result()
         if not result:
             return
@@ -887,7 +1274,7 @@ class MemeSender(Star):
             # 第一步：获取并清理原始消息链中的文本
             original_chain = result.chain
             cleaned_components = []
-            
+
             if original_chain:
                 # 处理不同类型的消息链
                 if isinstance(original_chain, str):
@@ -928,24 +1315,24 @@ class MemeSender(Star):
                                 cleaned_components.append(Plain(cleaned.strip()))
                         else:
                             cleaned_components.append(component)
-            
+
             # 第二步：添加表情图片（如果有找到的表情）
             if self.found_emotions:
                 # 检查概率（注意：概率判断是"小于等于"才发送）
                 random_value = random.randint(1, 100)
                 threshold = self.emotions_probability
-                
+
                 if random_value <= threshold:
                     # 创建表情图片列表
                     emotion_images = []
-                    temp_files = [] # 记录临时文件路径
+                    temp_files = []  # 记录临时文件路径
                     for emotion in self.found_emotions:
                         if not emotion:
                             continue
 
                         emotion_path = os.path.join(MEMES_DIR, emotion)
                         path_exists = os.path.exists(emotion_path)
-                        
+
                         if not path_exists:
                             continue
 
@@ -954,7 +1341,7 @@ class MemeSender(Star):
                             for f in os.listdir(emotion_path)
                             if f.endswith((".jpg", ".png", ".gif"))
                         ]
-                        
+
                         if not memes:
                             continue
 
@@ -973,8 +1360,13 @@ class MemeSender(Star):
                     if emotion_images:
                         # 记录临时文件到 event extra
                         if temp_files:
-                            existing_temp_files = event.get_extra("meme_manager_temp_files") or []
-                            event.set_extra("meme_manager_temp_files", existing_temp_files + temp_files)
+                            existing_temp_files = (
+                                event.get_extra("meme_manager_temp_files") or []
+                            )
+                            event.set_extra(
+                                "meme_manager_temp_files",
+                                existing_temp_files + temp_files,
+                            )
 
                         use_mixed_message = False
                         if self.enable_mixed_message:
@@ -1021,7 +1413,7 @@ class MemeSender(Star):
                             final_components.append(component)
                     if final_components:
                         result.chain = final_components
-            
+
             logger.debug("[meme_manager] on_decorating_result 处理完成")
 
         except Exception as e:
@@ -1032,7 +1424,7 @@ class MemeSender(Star):
     async def after_message_sent(self, event: AstrMessageEvent):
         """消息发送后处理。用于发送未混合的表情图片。"""
         pending_images = event.get_extra("meme_manager_pending_images")
-        
+
         try:
             if pending_images:
                 for image in pending_images:
@@ -1047,7 +1439,7 @@ class MemeSender(Star):
             logger.error(traceback.format_exc())
         finally:
             event.set_extra("meme_manager_pending_images", None)
-            
+
             # 清理临时文件
             temp_files = event.get_extra("meme_manager_temp_files")
             if temp_files:
@@ -1416,10 +1808,14 @@ class MemeSender(Star):
             return
 
         try:
-            yield event.plain_result("⚠️ 正在执行覆盖到云端任务（将清理云端多余文件）...")
+            yield event.plain_result(
+                "⚠️ 正在执行覆盖到云端任务（将清理云端多余文件）..."
+            )
             success = await self.img_sync.start_sync("overwrite_to_remote")
             if success:
-                yield event.plain_result("覆盖到云端任务已完成！云端现在与本地完全一致。")
+                yield event.plain_result(
+                    "覆盖到云端任务已完成！云端现在与本地完全一致。"
+                )
             else:
                 yield event.plain_result("任务失败，请查看日志。")
         except Exception as e:
@@ -1437,10 +1833,14 @@ class MemeSender(Star):
             return
 
         try:
-            yield event.plain_result("⚠️ 正在执行从云端覆盖任务（将清理本地多余文件）...")
+            yield event.plain_result(
+                "⚠️ 正在执行从云端覆盖任务（将清理本地多余文件）..."
+            )
             success = await self.img_sync.start_sync("overwrite_from_remote")
             if success:
-                yield event.plain_result("从云端覆盖任务已完成！本地现在与云端完全一致。")
+                yield event.plain_result(
+                    "从云端覆盖任务已完成！本地现在与云端完全一致。"
+                )
             else:
                 yield event.plain_result("任务失败，请查看日志。")
         except Exception as e:
@@ -1471,8 +1871,10 @@ class MemeSender(Star):
         Returns:
             合并后的消息组件列表，图片会合理地分布在文本中
         """
-        logger.debug(f"[meme_manager] _merge_components_with_images 输入: 组件总数={len(components)}, 图片总数={len(images)}")
-        
+        logger.debug(
+            f"[meme_manager] _merge_components_with_images 输入: 组件总数={len(components)}, 图片总数={len(images)}"
+        )
+
         if not images:
             return components
 
@@ -1481,7 +1883,9 @@ class MemeSender(Star):
             return images
 
         # 找到所有 Plain 组件的索引
-        plain_indices = [i for i, comp in enumerate(components) if isinstance(comp, Plain)]
+        plain_indices = [
+            i for i, comp in enumerate(components) if isinstance(comp, Plain)
+        ]
         logger.debug(f"[meme_manager] Plain 组件的索引位置列表: {plain_indices}")
 
         if not plain_indices:
@@ -1507,8 +1911,10 @@ class MemeSender(Star):
                 images_for_this_text = len(images) - image_index
             else:
                 images_for_this_text = min(images_per_text, len(images) - image_index)
-            
-            logger.debug(f"[meme_manager] Plain 组件 {idx} (索引={plain_idx}) 分配的图片数量: {images_for_this_text}")
+
+            logger.debug(
+                f"[meme_manager] Plain 组件 {idx} (索引={plain_idx}) 分配的图片数量: {images_for_this_text}"
+            )
 
             # 在这个文本组件后插入图片
             # 注意：plain_idx 是在原始 components 中的位置，但由于我们已经插入了一些图片，
@@ -1521,7 +1927,9 @@ class MemeSender(Star):
                     image_index += 1
                     insert_pos += 1
                     images_inserted_so_far += 1
-        
-        logger.debug(f"[meme_manager] 合并前组件总数: {len(components)}, 合并后组件总数: {len(merged_components)}")
+
+        logger.debug(
+            f"[meme_manager] 合并前组件总数: {len(components)}, 合并后组件总数: {len(merged_components)}"
+        )
 
         return merged_components

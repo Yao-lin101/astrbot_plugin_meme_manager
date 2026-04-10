@@ -119,10 +119,14 @@ class ImageSync:
         elif task == "download" and not status.get("to_download"):
             logger.info("没有文件需要下载")
             return True
-        elif task == "overwrite_to_remote" and not (status.get("to_upload") or status.get("to_delete_remote")):
+        elif task == "overwrite_to_remote" and not (
+            status.get("to_upload") or status.get("to_delete_remote")
+        ):
             logger.info("云端已是最新且完全一致，无需覆盖")
             return True
-        elif task == "overwrite_from_remote" and not (status.get("to_download") or status.get("to_delete_local")):
+        elif task == "overwrite_from_remote" and not (
+            status.get("to_download") or status.get("to_delete_local")
+        ):
             logger.info("本地已是最新且完全一致，无需覆盖")
             return True
 

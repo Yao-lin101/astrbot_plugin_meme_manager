@@ -43,6 +43,7 @@ class ImageInfo(TypedDict):
     id: str
     filename: str
     category: str
+    size: int
 
 
 class CloudflareR2Provider(ImageHostInterface):
@@ -228,6 +229,7 @@ class CloudflareR2Provider(ImageHostInterface):
                                 "id": s3_key,
                                 "filename": filename,
                                 "category": category,
+                                "size": int(obj.get("Size", 0)),
                             }
                         )
 

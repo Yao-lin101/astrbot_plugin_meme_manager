@@ -46,6 +46,7 @@ class ImageInfo(TypedDict):
     id: str
     filename: str
     category: str
+    size: int | None
 
 
 class StarDotsProvider(ImageHostInterface):
@@ -193,6 +194,17 @@ class StarDotsProvider(ImageHostInterface):
         if not encoded:
             return self.DEFAULT_CATEGORY
         return encoded.replace("@@DIR@@", "/")
+
+    def _extract_image_size(self, image_info: dict) -> int | None:
+        """尽量从 StarDots 返回数据中提取文件大小。"""
+        candidate_keys = ("size", "fileSize", "file_size", "bytes", "length")
+        for key in candidate_keys:
+            value = image_info.get(key)
+            if isinstance(value, (int, float)):
+                return int(value)
+            if isinstance(value, str) and value.isdigit():
+                return int(value)
+        return None
 
     def upload_image(self, file_path: Path) -> ImageInfo:
         """上传图片到StarDots"""
@@ -344,6 +356,7 @@ class StarDotsProvider(ImageHostInterface):
                                         "id": file_id,
                                         "filename": name,
                                         "category": category,
+                                        "size": self._extract_image_size(img),
                                     }
                                 )
 

@@ -54,6 +54,25 @@ class SyncManager:
 
         return normalized_id
 
+    def _extract_remote_size(self, image_info: dict) -> int | None:
+        """提取远端文件大小，兼容不同 provider 的字段命名。"""
+        candidate_keys = ("size", "file_size", "fileSize", "bytes", "length")
+        for key in candidate_keys:
+            value = image_info.get(key)
+            if isinstance(value, (int, float)):
+                return int(value)
+            if isinstance(value, str) and value.isdigit():
+                return int(value)
+        return None
+
+    def _extract_local_size(self, image_info: dict) -> int:
+        """提取本地文件大小。"""
+        file_path = Path(image_info["path"])
+        try:
+            return file_path.stat().st_size
+        except OSError:
+            return 0
+
     def check_sync_status(self) -> dict[str, list[dict]]:
         """检查同步状态 - 简化版，只检查存在性"""
         print("正在扫描本地文件...")
@@ -72,24 +91,33 @@ class SyncManager:
             for img in remote_images[:5]:
                 print(f"  - [{img.get('category', '根目录')}] {img['filename']}")
 
-        # 上传：检查哪些文件没有上传记录
-        to_upload = []
-        if self.upload_tracker:
-            for img in local_images:
-                category = img.get("category", "")
-                file_path = Path(img["path"])
-                if not self.upload_tracker.is_uploaded(file_path, category):
-                    to_upload.append(img)
-            print(f"\n未上传过的文件: {len(to_upload)} 个")
-        else:
-            # 如果没有上传追踪器，默认所有文件都需要上传
-            to_upload = local_images
-            print(f"\n未启用上传记录，所有文件标记为待上传: {len(to_upload)} 个")
+        local_sizes_by_id = {
+            img["id"].replace("\\", "/"): self._extract_local_size(img)
+            for img in local_images
+        }
+        local_total_bytes = sum(local_sizes_by_id.values())
+        local_average_size = (
+            local_total_bytes / len(local_images) if local_images else 0
+        )
+
+        remote_sizes = [
+            remote_size
+            for img in remote_images
+            if (remote_size := self._extract_remote_size(img)) is not None
+        ]
+        remote_total_bytes = sum(remote_sizes) if remote_sizes else 0
+        remote_size_complete = len(remote_sizes) == len(remote_images)
 
         # 获取提供商名称
         provider_name = None
         if hasattr(self.image_host, "config") and self.image_host.config:
             provider_name = self.image_host.config.get("provider", "").lower()
+
+        remote_file_ids = set()
+        for img in remote_images:
+            remote_id = img["id"].replace("\\", "/")
+            normalized_remote_id = self._normalize_remote_id(remote_id, provider_name)
+            remote_file_ids.add(normalized_remote_id)
 
         # 下载：检查哪些文件本地不存在
         local_file_ids = {img["id"].replace("\\", "/") for img in local_images}
@@ -101,17 +129,32 @@ class SyncManager:
                 to_download.append(img)
         print(f"\n本地不存在的文件: {len(to_download)} 个")
 
+        # 上传：检查哪些文件远程不存在或缺少上传记录
+        to_upload = []
+        for img in local_images:
+            category = img.get("category", "")
+            file_path = Path(img["path"])
+            local_id = img["id"].replace("\\", "/")
+            missing_on_remote = local_id not in remote_file_ids
+            missing_upload_record = bool(self.upload_tracker) and (
+                not self.upload_tracker.is_uploaded(file_path, category)
+            )
+
+            if missing_on_remote or missing_upload_record:
+                to_upload.append(img)
+
+        if self.upload_tracker:
+            print(
+                f"\n待上传文件: {len(to_upload)} 个（按云端缺失文件和上传记录联合判断）"
+            )
+        else:
+            print(f"\n待上传文件: {len(to_upload)} 个（按云端缺失文件判断）")
+
         # 远程删除：检查哪些文件在云端存在但本地不存在
-        to_delete_remote = to_download.copy() 
+        to_delete_remote = to_download.copy()
         print(f"\n云端多出的文件: {len(to_delete_remote)} 个")
 
         # 本地删除：检查哪些文件在本地存在但云端不存在
-        remote_file_ids = set()
-        for img in remote_images:
-            remote_id = img["id"].replace("\\", "/")
-            normalized_remote_id = self._normalize_remote_id(remote_id, provider_name)
-            remote_file_ids.add(normalized_remote_id)
-
         to_delete_local = []
         for img in local_images:
             local_id = img["id"].replace("\\", "/")
@@ -119,12 +162,57 @@ class SyncManager:
                 to_delete_local.append(img)
         print(f"\n本地多出的文件: {len(to_delete_local)} 个")
 
+        remote_total_bytes_estimated = None
+        remote_size_source = (
+            "exact" if remote_size_complete or not remote_images else "unknown"
+        )
+
+        if remote_size_complete or not remote_images:
+            remote_total_bytes_estimated = remote_total_bytes
+        else:
+            local_only_bytes = sum(
+                local_sizes_by_id.get(img["id"].replace("\\", "/"), 0)
+                for img in to_delete_local
+            )
+            download_known_bytes = 0
+            download_unknown_count = 0
+            for img in to_download:
+                remote_size = self._extract_remote_size(img)
+                if remote_size is None:
+                    download_unknown_count += 1
+                else:
+                    download_known_bytes += remote_size
+
+            if local_images or download_known_bytes:
+                remote_total_bytes_estimated = int(
+                    max(
+                        0,
+                        local_total_bytes
+                        - local_only_bytes
+                        + download_known_bytes
+                        + (download_unknown_count * local_average_size),
+                    )
+                )
+                remote_size_source = "local_estimate"
+
         return {
             "to_upload": to_upload,
             "to_download": to_download,
             "to_delete_local": to_delete_local,
             "to_delete_remote": to_delete_remote,
-            "is_synced": not (to_upload or to_download or to_delete_local or to_delete_remote),
+            "is_synced": not (
+                to_upload or to_download or to_delete_local or to_delete_remote
+            ),
+            "remote_image_count": len(remote_images),
+            "remote_total_bytes": (
+                remote_total_bytes
+                if remote_size_complete or not remote_images
+                else None
+            ),
+            "remote_total_bytes_estimated": remote_total_bytes_estimated,
+            "remote_size_source": remote_size_source,
+            "remote_size_complete": remote_size_complete,
+            "local_total_bytes": local_total_bytes,
         }
 
     def sync_to_remote(self) -> bool:
@@ -268,7 +356,9 @@ class SyncManager:
                         deleted_count += 1
                         # 同时从上传记录中移除
                         if self.upload_tracker:
-                            self.upload_tracker.remove_record(file_path, img.get("category", ""))
+                            self.upload_tracker.remove_record(
+                                file_path, img.get("category", "")
+                            )
                 except Exception as e:
                     print(f"\n删除本地文件失败: {img['filename']} - {str(e)}")
             print(f"\n本地清理完成: 成功删除 {deleted_count} 个")
