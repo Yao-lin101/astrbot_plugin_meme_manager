@@ -15,7 +15,7 @@
   </head>
   <body>
     <div id="app" class="layout-container" v-cloak @click="closeContextMenu">
-      <!-- 头部 -->
+      <!-- 头部导航栏 -->
       <header class="header">
         <div class="header-logo">
           <i class="fas fa-face-smile-wink logo-icon"></i>
@@ -35,270 +35,265 @@
         </div>
       </header>
 
-      <!-- 主要工作区 -->
-      <div class="main-workspace">
-        <!-- 侧边栏 -->
-        <aside class="sidebar">
-          <!-- 同步按钮 -->
-          <div class="sync-buttons">
-            <button id="check-sync-btn" @click="checkSyncStatus(true)" :disabled="syncChecking">
-              <i class="fas fa-sync icon" :class="{ 'fa-spin': syncChecking }"></i>检查同步状态
-            </button>
-          </div>
-
-          <!-- 同步控制面板 -->
-          <div class="sync-panel">
-            <h3><i class="fas fa-gear icon"></i>配置同步</h3>
-            <div id="sync-status">
-              <div v-if="syncChecking">
-                <p><i class="fas fa-spinner fa-spin icon"></i>正在检查同步状态...</p>
+      <!-- 主要工作区 (无侧边栏，通栏大气的仪表盘布局) -->
+      <main class="main-content">
+        <!-- 同步控制中心网格 -->
+        <div class="sync-grid">
+          <!-- 本地配置同步卡片 -->
+          <div class="sync-card">
+            <div class="sync-card-header">
+              <div class="sync-title">
+                <i class="fas fa-arrows-spin header-icon"></i>
+                <h3>配置与本地同步</h3>
+              </div>
+              <button class="btn-text" @click="checkSyncStatus(true)" :disabled="syncChecking">
+                <i class="fas fa-sync" :class="{ 'fa-spin': syncChecking }"></i> 检查状态
+              </button>
+            </div>
+            <div class="sync-card-body">
+              <div v-if="syncChecking" class="loading-state">
+                <i class="fas fa-circle-notch fa-spin"></i> 正在检查配置状态...
               </div>
               <div v-else>
-                <!-- 配置同步正常 -->
-                <p v-if="syncStatus.inSync" class="sync-ok" style="color: #10b981;">
-                  <i class="fas fa-circle-check icon"></i>配置与文件夹结构一致！
-                </p>
-                <!-- 存在同步差异 -->
-                <div v-else>
-                  <!-- 缺失在配置中的文件夹 -->
-                  <div v-if="syncStatus.missingInConfig && syncStatus.missingInConfig.length > 0" class="sync-section">
-                    <p style="font-weight: 600; color: #f59e0b; margin-bottom: 5px;">新增类别（需要同步到配置）：</p>
-                    <ul style="padding-left: 15px; margin: 5px 0; font-size: 12px; color: var(--text-secondary);">
-                      <li v-for="cat in syncStatus.missingInConfig" :key="cat">{% raw %}{{ cat }}{% endraw %}</li>
-                    </ul>
-                  </div>
-
-                  <!-- 文件夹被删除但在配置中仍存在 -->
-                  <div v-if="syncStatus.deletedCategories && syncStatus.deletedCategories.length > 0" class="sync-section" style="margin-top: 10px;">
-                    <p style="font-weight: 600; color: #ef4444; margin-bottom: 5px;">已删除的类别：</p>
-                    <ul style="padding-left: 0; list-style: none; margin: 5px 0; font-size: 12px;">
-                      <li v-for="cat in syncStatus.deletedCategories" :key="cat" style="margin-bottom: 8px; background: var(--bg-hover); padding: 6px; border-radius: 6px;">
-                        <span style="font-weight: 500;">{% raw %}{{ cat }}{% endraw %}</span>
-                        <div class="action-buttons" style="display: flex; gap: 5px; margin-top: 4px;">
-                          <button class="restore-btn" style="padding: 2px 6px; font-size: 10px; border-radius: 4px;" @click="restoreCategory(cat)">恢复</button>
-                          <button class="remove-btn" style="padding: 2px 6px; font-size: 10px; border-radius: 4px; background: #ef4444; color: #fff; border: none;" @click="removeFromConfig(cat)">删除</button>
-                        </div>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <button class="main-sync-btn" style="margin-top: 10px; width: 100%; padding: 8px;" @click="syncConfig">
-                    <i class="fas fa-arrows-rotate icon"></i>同步所有配置
-                  </button>
+                <div v-if="syncStatus.inSync" class="sync-status-ok">
+                  <i class="fas fa-circle-check"></i> 配置与文件夹结构一致！
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <hr class="sync-divider" />
-
-          <div class="sync-panel">
-            <h4><i class="fas fa-cloud icon"></i>图床同步</h4>
-            <div class="sync-status">
-              <div class="sync-provider-summary">
-                <p>
-                  <i class="fas fa-server icon"></i>图床服务商:
-                  <span>{% raw %}{{ imgHostStatus.provider }}{% endraw %}</span>
-                </p>
-                <p>
-                  <i class="fas fa-images icon"></i>云端图片数:
-                  <span>{% raw %}{{ imgHostStatus.remoteImageCount }}{% endraw %}</span> 张
-                </p>
-                <p>
-                  <i class="fas fa-hard-drive icon"></i>云端占用:
-                  <span>{% raw %}{{ imgHostStatus.remoteStorageSize }}{% endraw %}</span>
-                </p>
-              </div>
-              <p>
-                <i class="fas fa-upload icon"></i>待上传:
-                <span>{% raw %}{{ imgHostStatus.uploadCount }}{% endraw %}</span> 个文件
-              </p>
-              <p>
-                <i class="fas fa-download icon"></i>待下载:
-                <span>{% raw %}{{ imgHostStatus.downloadCount }}{% endraw %}</span> 个文件
-              </p>
-              <button id="upload-sync-btn" @click="syncToRemote" :disabled="imgHostStatus.uploadCount === 0 || imgHostSyncing">
-                <i class="fas fa-cloud-arrow-up icon" :class="{ 'fa-spin': imgHostSyncing }"></i>同步到云端
-              </button>
-              <button id="download-sync-btn" @click="syncFromRemote" :disabled="imgHostStatus.downloadCount === 0 || imgHostSyncing">
-                <i class="fas fa-cloud-arrow-down icon" :class="{ 'fa-spin': imgHostSyncing }"></i>从云端同步
-              </button>
-            </div>
-          </div>
-
-          <!-- 目录导航 -->
-          <div id="sidebar">
-            <h2><i class="fas fa-folder-open icon"></i>目录</h2>
-            <ul id="sidebar-list">
-              <li v-for="(emojis, category) in emojiData" :key="category">
-                <a href="#" 
-                   :class="{ active: activeCategory === category }" 
-                   @click.prevent="selectCategory(category)"
-                   @dragover.prevent
-                   @drop="onDropEmoji($event, category)">
-                  {% raw %}{{ category }}{% endraw %}
-                </a>
-              </li>
-            </ul>
-          </div>
-        </aside>
-
-        <!-- 内容区域 -->
-        <div id="content">
-          <!-- 批量操作栏 -->
-          <div class="page-toolbar">
-            <div class="selection-toolbar">
-              <div class="selection-toolbar-copy">
-                <h2>批量管理</h2>
-                <p id="selection-summary">
-                  {% raw %}{{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个表情包' : '未开启批量选择' }}{% endraw %}
-                </p>
-              </div>
-              <div class="selection-toolbar-actions">
-                <button id="batch-move-btn" class="secondary" :disabled="selectedEmojis.size === 0" @click="openMoveModal">
-                  <i class="fas fa-right-left icon"></i>移动已选
-                </button>
-                <button id="toggle-selection-mode-btn" class="secondary" @click="toggleSelectionMode">
-                  <i class="fas fa-list-check icon"></i>{% raw %}{{ selectionEnabled ? '退出批量选择' : '开启批量选择' }}{% endraw %}
-                </button>
-                <button id="batch-delete-btn" class="danger" :disabled="selectedEmojis.size === 0" @click="batchDeleteSelected">
-                  <i class="fas fa-trash-can icon"></i>删除已选
-                </button>
-                <button id="clear-all-btn" class="danger" @click="clearAllEmojiFiles">
-                  <i class="fas fa-radiation icon"></i>清空全部表情包
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <!-- 顶部 Tab 过滤切换 -->
-          <div id="emoji-tabs" class="emoji-tabs-container">
-            <button v-for="(emojis, category) in emojiData" 
-                    :key="category" 
-                    class="emoji-tab-btn" 
-                    :class="{ active: activeCategory === category }" 
-                    @click="selectCategory(category)"
-                    @dragover.prevent
-                    @drop="onDropEmoji($event, category)">
-              <span class="tab-name">{% raw %}{{ category }}{% endraw %}</span>
-              <span class="tab-badge">{% raw %}{{ emojis ? emojis.length : 0 }}{% endraw %}</span>
-            </button>
-          </div>
-
-          <!-- 当前分类表情网格 -->
-          <div id="emoji-categories">
-            <div v-if="activeCategory" class="category active" :id="'category-' + activeCategory">
-              <div class="category-title">
-                <div class="category-header">
-                  <div class="category-title-main">
-                    <div class="category-name">{% raw %}{{ activeCategory }}{% endraw %}</div>
-                    <span class="category-selection-summary">
-                      {% raw %}{{ selectionEnabled ? '已选 ' + getCategorySelectedCount(activeCategory) + ' / ' + (emojiData[activeCategory]?.length || 0) : '未开启批量选择' }}{% endraw %}
-                    </span>
-                  </div>
-                  <div class="category-actions">
-                    <button class="edit-category-btn" @click="openEditCategory(activeCategory)">编辑类别</button>
-                    <button class="select-all-category-btn" 
-                            :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
-                            @click="toggleCategorySelection(activeCategory)">
-                      {% raw %}{{ isAllSelectedInCategory(activeCategory) ? '取消本类' : '本类全选' }}{% endraw %}
-                    </button>
-                    <button class="clear-category-btn danger" @click="clearCategory(activeCategory)">清空本类</button>
-                    <button class="delete-category-btn icon-only-btn danger" :title="'删除类别 ' + activeCategory" @click="deleteCategory(activeCategory)">
-                      <i class="fas fa-trash"></i>
-                    </button>
-                  </div>
-                </div>
-                <p class="description">{% raw %}{{ tagDescriptions[activeCategory] || '请添加描述' }}{% endraw %}</p>
-              </div>
-
-              <!-- 表情包 Grid 网格 -->
-              <div class="emoji-grid">
-                <template v-for="emoji in emojiData[activeCategory]" :key="emoji">
-                  <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
-                    <div class="emoji-item" 
-                         :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
-                         :style="{ backgroundImage: 'url(/memes/' + encodeURIComponent(activeCategory) + '/' + encodeURIComponent(emoji) + ')' }"
-                         draggable="true" 
-                         @dragstart="onDragStart($event, emoji, activeCategory)"
-                         @click="onEmojiClick(activeCategory, emoji)"
-                         @contextmenu.prevent="openContextMenu($event, activeCategory, emoji)">
-                      
-                      <!-- 选中标记按钮 -->
-                      <button type="button" class="selection-indicator" aria-label="选择表情包" @click.stop="toggleEmojiSelection(activeCategory, emoji)"></button>
-                      
-                      <!-- 删除按钮 -->
-                      <button class="delete-btn" @click.stop="deleteEmoji(activeCategory, emoji)">&times;</button>
-                      
-                      <!-- 编辑属性按钮 -->
-                      <button class="edit-btn" @click.stop="toggleDetailDrawer(activeCategory, emoji)">
-                        <i class="fas fa-pen"></i>
-                      </button>
-                    </div>
-
-                    <!-- 表情包卡片底部多标签 -->
-                    <div class="emoji-tags">
-                      <span v-for="t in getEmojiTags(emoji)" :key="t" class="tag-pill">
-                        {% raw %}{{ t }}{% endraw %}
+                <div v-else class="sync-status-warn">
+                  <div v-if="syncStatus.missingInConfig.length > 0" class="sync-diff-group">
+                    <h4>未注册的本地分类:</h4>
+                    <div class="diff-tags">
+                      <span v-for="cat in syncStatus.missingInConfig" :key="cat" class="diff-tag">
+                        {% raw %}{{ cat }}{% endraw %}
                       </span>
                     </div>
                   </div>
-
-                  <!-- 行内属性抽屉面板 -->
-                  <div v-if="activeDetailEmoji === emoji" 
-                       id="emoji-detail-drawer" 
-                       class="emoji-detail-drawer" 
-                       :class="{ loading: detailDrawerLoading }">
-                    <div v-if="detailDrawerLoading"></div>
-                    <template v-else>
-                      <div class="drawer-header">
-                        <span class="drawer-title">编辑属性: {% raw %}{{ emoji }}{% endraw %}</span>
-                        <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
-                      </div>
-                      <div class="drawer-content">
-                        <!-- 标签多选 -->
-                        <div class="drawer-section">
-                          <label>分类标签 (点击进行选择/取消选择)</label>
-                          <div class="drawer-tags-picker">
-                            <span v-for="cat in Object.keys(emojiData)" 
-                                  :key="cat" 
-                                  class="picker-tag-pill" 
-                                  :class="{ active: selectedEmotions.includes(cat) }" 
-                                  @click="toggleTagInDrawer(cat)">
-                              {% raw %}{{ cat }}{% endraw %}
-                            </span>
-                          </div>
-                        </div>
-
-                        <!-- 人格可用性多选 -->
-                        <div class="drawer-section">
-                          <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
-                          <div class="drawer-personas-list">
-                            <label>
-                              <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" />
-                              <span>全局可用 (*)</span>
-                            </label>
-                            <label v-for="p in systemPersonas" :key="p.id">
-                              <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" />
-                              <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
-                            </label>
-                          </div>
+                  <div v-if="syncStatus.deletedCategories.length > 0" class="sync-diff-group">
+                    <h4>已删除的类别（配置残留）：</h4>
+                    <div class="deleted-list">
+                      <div v-for="cat in syncStatus.deletedCategories" :key="cat" class="deleted-item">
+                        <span class="deleted-name">{% raw %}{{ cat }}{% endraw %}</span>
+                        <div class="deleted-actions">
+                          <button class="btn-sm" @click="restoreCategory(cat)">恢复文件夹</button>
+                          <button class="btn-sm btn-danger" @click="removeFromConfig(cat)">删除配置</button>
                         </div>
                       </div>
-                      <div class="drawer-actions">
-                        <button class="drawer-cancel-btn" @click="closeDetailDrawer">取消</button>
-                        <button class="drawer-save-btn" @click="saveEmojiAttributes">保存修改</button>
-                      </div>
-                    </template>
+                    </div>
                   </div>
-                </template>
+                </div>
+              </div>
+            </div>
+            <div class="sync-card-footer">
+              <button class="btn-primary w-100" @click="syncConfig" :disabled="syncChecking || syncStatus.inSync">
+                <i class="fas fa-arrows-rotate"></i> 同步所有配置到本地
+              </button>
+            </div>
+          </div>
 
-                <!-- 上传卡片 -->
-                <div class="emoji-upload" 
-                     @click="triggerFileInput(activeCategory)"
-                     @dragover.prevent
-                     @drop.prevent="onUploadDrop($event, activeCategory)"
-                     :class="{ uploading: uploadStateByCategory.has(activeCategory) }">
+          <!-- 云端图床同步卡片 -->
+          <div class="sync-card">
+            <div class="sync-card-header">
+              <div class="sync-title">
+                <i class="fas fa-cloud header-icon"></i>
+                <h3>图床云端同步</h3>
+              </div>
+              <button class="btn-text" @click="checkImgHostSyncStatus(true)" :disabled="imgHostSyncing">
+                <i class="fas fa-rotate" :class="{ 'fa-spin': imgHostSyncing }"></i> 刷新图床
+              </button>
+            </div>
+            <div class="sync-card-body">
+              <div class="img-host-details">
+                <div class="detail-row">
+                  <span class="label">图床服务商</span>
+                  <span class="value">{% raw %}{{ imgHostStatus.provider }}{% endraw %}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="label">云端文件</span>
+                  <span class="value font-num">
+                    {% raw %}{{ imgHostStatus.remoteImageCount }}{% endraw %} 张 ({% raw %}{{ imgHostStatus.remoteStorageSize }}{% endraw %})
+                  </span>
+                </div>
+                <div class="detail-row highlight" v-if="imgHostStatus.uploadCount > 0 || imgHostStatus.downloadCount > 0">
+                  <span class="label">待同步数量</span>
+                  <span class="value sync-badges">
+                    <span v-if="imgHostStatus.uploadCount > 0" class="badge upload-badge">
+                      <i class="fas fa-arrow-up"></i> {% raw %}{{ imgHostStatus.uploadCount }}{% endraw %} 待上传
+                    </span>
+                    <span v-if="imgHostStatus.downloadCount > 0" class="badge download-badge">
+                      <i class="fas fa-arrow-down"></i> {% raw %}{{ imgHostStatus.downloadCount }}{% endraw %} 待下载
+                    </span>
+                  </span>
+                </div>
+                <div class="detail-row" v-else>
+                  <span class="label">状态</span>
+                  <span class="value text-ok"><i class="fas fa-circle-check"></i> 云端已同步</span>
+                </div>
+              </div>
+            </div>
+            <div class="sync-card-footer split-buttons">
+              <button class="btn-primary" @click="syncToRemote" :disabled="imgHostStatus.uploadCount === 0 || imgHostSyncing">
+                <i class="fas fa-cloud-arrow-up"></i> 上传到云端
+              </button>
+              <button class="btn-primary" @click="syncFromRemote" :disabled="imgHostStatus.downloadCount === 0 || imgHostSyncing">
+                <i class="fas fa-cloud-arrow-down"></i> 从云端下载
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 批量操作与工具栏 -->
+        <div class="page-toolbar">
+          <div class="selection-toolbar">
+            <div class="selection-toolbar-copy">
+              <h2>批量管理</h2>
+              <p id="selection-summary" :class="{ 'active-selection': selectionEnabled && selectedEmojis.size > 0 }">
+                {% raw %}{{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个表情包' : '未开启批量选择' }}{% endraw %}
+              </p>
+            </div>
+            <div class="selection-toolbar-actions">
+              <button id="batch-move-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="openMoveModal">
+                <i class="fas fa-right-left icon"></i>移动已选
+              </button>
+              <button id="toggle-selection-mode-btn" class="btn-secondary" :class="{ active: selectionEnabled }" @click="toggleSelectionMode">
+                <i class="fas fa-list-check icon"></i>{% raw %}{{ selectionEnabled ? '退出批量选择' : '开启批量选择' }}{% endraw %}
+              </button>
+              <button id="batch-delete-btn" class="btn-danger" :disabled="selectedEmojis.size === 0" @click="batchDeleteSelected">
+                <i class="fas fa-trash-can icon"></i>删除已选
+              </button>
+              <button id="clear-all-btn" class="btn-danger-outline" @click="clearAllEmojiFiles">
+                <i class="fas fa-radiation icon"></i>清空全部表情包
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 顶部 Tab 分类过滤器 -->
+        <div id="emoji-tabs" class="emoji-tabs-container">
+          <button v-for="(emojis, category) in emojiData" 
+                  :key="category" 
+                  class="emoji-tab-btn" 
+                  :class="{ active: activeCategory === category }" 
+                  @click="selectCategory(category)"
+                  @dragover.prevent
+                  @drop="onDropEmoji($event, category)">
+            <span class="tab-name">{% raw %}{{ category }}{% endraw %}</span>
+            <span class="tab-badge">{% raw %}{{ emojis ? emojis.length : 0 }}{% endraw %}</span>
+          </button>
+        </div>
+
+        <!-- 当前分类表情网格 -->
+        <div id="emoji-categories">
+          <div v-if="activeCategory" class="category active" :id="'category-' + activeCategory">
+            <div class="category-title">
+              <div class="category-header">
+                <div class="category-title-main">
+                  <div class="category-name">{% raw %}{{ activeCategory }}{% endraw %}</div>
+                  <span class="category-selection-summary">
+                    {% raw %}{{ selectionEnabled ? '已选 ' + getCategorySelectedCount(activeCategory) + ' / ' + (emojiData[activeCategory]?.length || 0) : '未开启批量选择' }}{% endraw %}
+                  </span>
+                </div>
+                <div class="category-actions">
+                  <button class="btn-secondary" @click="openEditCategory(activeCategory)">编辑描述</button>
+                  <button class="btn-secondary" 
+                          :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
+                          @click="toggleCategorySelection(activeCategory)">
+                    {% raw %}{{ isAllSelectedInCategory(activeCategory) ? '取消本类' : '本类全选' }}{% endraw %}
+                  </button>
+                  <button class="btn-danger" @click="clearCategory(activeCategory)">清空本类</button>
+                  <button class="btn-danger-outline icon-only-btn" :title="'删除类别 ' + activeCategory" @click="deleteCategory(activeCategory)">
+                    <i class="fas fa-trash"></i>
+                  </button>
+                </div>
+              </div>
+              <p class="description">{% raw %}{{ tagDescriptions[activeCategory] || '请添加描述' }}{% endraw %}</p>
+            </div>
+
+            <!-- 表情包 Grid 网格 -->
+            <div class="emoji-grid">
+              <template v-for="emoji in emojiData[activeCategory]" :key="emoji">
+                <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
+                  <div class="emoji-item" 
+                       :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
+                       :style="{ backgroundImage: 'url(/memes/' + encodeURIComponent(activeCategory) + '/' + encodeURIComponent(emoji) + ')' }"
+                       draggable="true" 
+                       @dragstart="onDragStart($event, emoji, activeCategory)"
+                       @click="onEmojiClick(activeCategory, emoji)"
+                       @contextmenu.prevent="openContextMenu($event, activeCategory, emoji)">
+                    
+                    <!-- 选中标记按钮 -->
+                    <button type="button" class="selection-indicator" aria-label="选择表情包" @click.stop="toggleEmojiSelection(activeCategory, emoji)"></button>
+                    
+                    <!-- 删除按钮 -->
+                    <button class="delete-btn" @click.stop="deleteEmoji(activeCategory, emoji)">&times;</button>
+                    
+                    <!-- 编辑属性按钮 -->
+                    <button class="edit-btn" @click.stop="toggleDetailDrawer(activeCategory, emoji)">
+                      <i class="fas fa-pen"></i>
+                    </button>
+                  </div>
+
+                  <!-- 表情包卡片底部多标签 -->
+                  <div class="emoji-tags">
+                    <span v-for="t in getEmojiTags(emoji)" :key="t" class="tag-pill">
+                      {% raw %}{{ t }}{% endraw %}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 行内属性抽屉面板 -->
+                <div v-if="activeDetailEmoji === emoji" 
+                     id="emoji-detail-drawer" 
+                     class="emoji-detail-drawer" 
+                     :class="{ loading: detailDrawerLoading }">
+                  <div v-if="detailDrawerLoading"></div>
+                  <template v-else>
+                    <div class="drawer-header">
+                      <span class="drawer-title">编辑属性: {% raw %}{{ emoji }}{% endraw %}</span>
+                      <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
+                    </div>
+                    <div class="drawer-content">
+                      <!-- 标签多选 -->
+                      <div class="drawer-section">
+                        <label>分类标签 (点击进行选择/取消选择)</label>
+                        <div class="drawer-tags-picker">
+                          <span v-for="cat in Object.keys(emojiData)" 
+                                :key="cat" 
+                                class="picker-tag-pill" 
+                                :class="{ active: selectedEmotions.includes(cat) }" 
+                                @click="toggleTagInDrawer(cat)">
+                            {% raw %}{{ cat }}{% endraw %}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- 人格可用性多选 -->
+                      <div class="drawer-section">
+                        <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
+                        <div class="drawer-personas-list">
+                          <label>
+                            <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" />
+                            <span>全局可用 (*)</span>
+                          </label>
+                          <label v-for="p in systemPersonas" :key="p.id">
+                            <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" />
+                            <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="drawer-actions">
+                      <button class="btn-secondary" @click="closeDetailDrawer">取消</button>
+                      <button class="btn-primary" @click="saveEmojiAttributes">保存修改</button>
+                    </div>
+                  </template>
+                </div>
+              </template>
+
+              <!-- 上传卡片 -->
+              <div class="emoji-upload" 
+                   @click="triggerFileInput(activeCategory)"
+                   @dragover.prevent
+                   @drop.prevent="onUploadDrop($event, activeCategory)"
+                   :class="{ uploading: uploadStateByCategory.has(activeCategory) }">
                   <div class="emoji-upload-icon">
                     <i :class="uploadStateByCategory.has(activeCategory) ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-arrow-up'"></i>
                   </div>
@@ -316,37 +311,39 @@
                   </div>
                   <input type="file" :id="'file-input-' + activeCategory" style="display: none;" accept="image/*" multiple @change="onFileSelected($event, activeCategory)" />
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 添加类别表单/按钮 -->
-          <button v-if="!addCategoryForm.visible" id="add-category-btn" @click="addCategoryForm.visible = true">
-            <i class="fas fa-plus-circle icon"></i>添加分类
-          </button>
-          <div v-else id="add-category-form" style="display: block;">
-            <input type="text" v-model="addCategoryForm.name" placeholder="输入类别名称" class="form-control" />
-            <input type="text" v-model="addCategoryForm.description" placeholder="输入类别描述" class="form-control mt-2" />
-            <div style="margin-top: 10px;">
-              <button id="save-category-btn" class="btn btn-primary" @click="saveNewCategory">
-                <i class="fas fa-save icon"></i>保存分类
-              </button>
-              <button class="secondary" style="margin-left: 10px; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-color);" @click="addCategoryForm.visible = false">
-                取消
-              </button>
             </div>
           </div>
         </div>
-      </div>
+
+        <!-- 添加类别表单/按钮 -->
+        <button v-if="!addCategoryForm.visible" id="add-category-btn" @click="addCategoryForm.visible = true">
+          <i class="fas fa-plus-circle icon"></i>添加新分类
+        </button>
+        <div v-else id="add-category-form" class="add-category-panel">
+          <h3>添加新分类</h3>
+          <div class="form-group">
+            <input type="text" v-model="addCategoryForm.name" placeholder="分类名称" class="form-control" />
+            <input type="text" v-model="addCategoryForm.description" placeholder="分类描述" class="form-control" />
+          </div>
+          <div class="panel-actions">
+            <button class="btn-primary" @click="saveNewCategory">
+              <i class="fas fa-save icon"></i> 保存分类
+            </button>
+            <button class="btn-secondary" @click="addCategoryForm.visible = false">
+              取消
+            </button>
+          </div>
+        </div>
+      </main>
 
       <!-- 确认操作模态框 -->
       <div v-if="confirmDialog.visible" class="confirm-modal" role="dialog" aria-modal="true">
         <div class="confirm-modal-card">
           <h2>{% raw %}{{ confirmDialog.title }}{% endraw %}</h2>
           <p>{% raw %}{{ confirmDialog.description }}{% endraw %}</p>
-          <div class="confirm-modal-actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="secondary" @click="handleConfirm(false)">取消</button>
-            <button :class="confirmDialog.confirmClass || 'primary-btn'" @click="handleConfirm(true)">
+          <div class="confirm-modal-actions">
+            <button class="btn-secondary" @click="handleConfirm(false)">取消</button>
+            <button :class="confirmDialog.confirmClass === 'danger' ? 'btn-danger' : 'btn-primary'" @click="handleConfirm(true)">
               {% raw %}{{ confirmDialog.confirmLabel }}{% endraw %}
             </button>
           </div>
@@ -360,22 +357,22 @@
           <p>{% raw %}{{ dangerConfirmDialog.description }}{% endraw %}</p>
 
           <div v-if="dangerConfirmDialog.stage === 'ack'" class="danger-modal-check">
-            <label style="display: flex; align-items: center; gap: 8px; margin-top: 15px; cursor: pointer;">
+            <label>
               <input type="checkbox" @change="startDangerCountdown" />
               <span>我已了解此操作的风险和影响</span>
             </label>
           </div>
-          <div v-else-if="dangerConfirmDialog.stage === 'countdown'" class="danger-modal-stage-text" style="margin-top: 15px; text-align: center; color: #ef4444; font-weight: 500;">
+          <div v-else-if="dangerConfirmDialog.stage === 'countdown'" class="danger-modal-stage-text">
             请在 {% raw %}{{ dangerConfirmDialog.countdown }}{% endraw %} 秒后确认操作
           </div>
-          <div v-else-if="dangerConfirmDialog.stage === 'input'" class="danger-modal-check" style="margin-top: 15px;">
-            <p style="margin-bottom: 8px;">请输入 <strong>CONFIRM</strong> 以确认此项敏感操作：</p>
-            <input type="text" id="danger-modal-ack" class="form-control" style="text-align: center; font-weight: bold;" @keyup.enter="handleDangerConfirm" />
+          <div v-else-if="dangerConfirmDialog.stage === 'input'" class="danger-modal-check">
+            <p>请输入 <strong>CONFIRM</strong> 以确认此项敏感操作：</p>
+            <input type="text" id="danger-modal-ack" class="form-control text-center" @keyup.enter="handleDangerConfirm" />
           </div>
 
-          <div class="danger-modal-actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="secondary" @click="cancelDangerConfirm">取消</button>
-            <button class="danger" :disabled="dangerConfirmDialog.stage !== 'input'" @click="handleDangerConfirm">
+          <div class="danger-modal-actions">
+            <button class="btn-secondary" @click="cancelDangerConfirm">取消</button>
+            <button class="btn-danger" :disabled="dangerConfirmDialog.stage !== 'input'" @click="handleDangerConfirm">
               {% raw %}{{ dangerConfirmDialog.actionLabel }}{% endraw %}
             </button>
           </div>
@@ -388,18 +385,17 @@
           <p class="move-target-modal-eyebrow">批量移动</p>
           <h2>选择目标分类</h2>
           <p>选择一个分类，将已选表情包批量移动过去。</p>
-          <div class="move-target-list" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+          <div class="move-target-list">
             <button v-for="(emojis, category) in emojiData" 
                     v-show="category !== activeCategory" 
                     :key="category" 
                     class="move-target-btn" 
-                    style="width: 100%; text-align: left; padding: 10px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-card); cursor: pointer;"
                     @click="handleMoveTarget(category)">
               {% raw %}{{ category }}{% endraw %}
             </button>
           </div>
-          <div class="move-target-modal-actions" style="margin-top: 20px; display: flex; justify-content: flex-end;">
-            <button class="secondary" @click="closeMoveModal">取消</button>
+          <div class="move-target-modal-actions">
+            <button class="btn-secondary" @click="closeMoveModal">取消</button>
           </div>
         </div>
       </div>
@@ -410,15 +406,15 @@
           <p class="category-edit-modal-eyebrow">类别管理</p>
           <h2>修改类别描述</h2>
           <p>修改类别 「{% raw %}{{ editCategoryModal.originalCategory }}{% endraw %}」 的描述信息。</p>
-          <div class="category-edit-form-panel" style="margin-top: 15px; display: flex; flex-direction: column; gap: 8px;">
-            <label style="font-weight: 500;">类别名称</label>
+          <div class="category-edit-form-panel">
+            <label>类别名称</label>
             <input type="text" v-model="editCategoryModal.category" class="form-control" disabled />
-            <label style="font-weight: 500; margin-top: 8px;">描述信息</label>
+            <label style="margin-top: 10px;">描述信息</label>
             <input type="text" v-model="editCategoryModal.description" class="form-control" />
           </div>
-          <div class="category-edit-modal-actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="secondary" @click="editCategoryModal.visible = false">取消</button>
-            <button style="background: var(--primary-color, #3b82f6); color: white; border: none; border-radius: 6px; padding: 8px 16px; cursor: pointer;" @click="saveEditCategory">
+          <div class="category-edit-modal-actions">
+            <button class="btn-secondary" @click="editCategoryModal.visible = false">取消</button>
+            <button class="btn-primary" @click="saveEditCategory">
               保存修改
             </button>
           </div>
@@ -428,41 +424,39 @@
       <!-- 右键/长按批量快捷菜单 -->
       <div v-if="contextMenu.visible" 
            class="batch-context-menu" 
-           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px', display: 'block' }"
+           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
            @click.stop>
-        <div class="batch-context-menu-header" style="padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-hover);">
-          <p style="font-weight: 600; margin: 0; font-size: 13px;">
+        <div class="batch-context-menu-header">
+          <p>
             批量管理 ({% raw %}{{ contextMenu.targetItems.length }}{% endraw %} 个文件)
           </p>
         </div>
-        <div class="batch-context-menu-actions" style="display: flex; flex-direction: column; padding: 6px;">
-          <button class="danger" style="text-align: left; padding: 8px 12px; font-size: 13px;" @click="contextMenuDelete">
-            <i class="fas fa-trash-can icon" style="margin-right: 8px;"></i>删除文件
+        <div class="batch-context-menu-actions">
+          <button class="danger" @click="contextMenuDelete">
+            <i class="fas fa-trash-can icon"></i>删除文件
           </button>
-          <button class="secondary" style="text-align: left; padding: 8px 12px; font-size: 13px;" @click="contextMenuMove">
-            <i class="fas fa-right-left icon" style="margin-right: 8px;"></i>移动文件
+          <button class="secondary" @click="contextMenuMove">
+            <i class="fas fa-right-left icon"></i>移动文件
           </button>
-          <button class="secondary" style="text-align: left; padding: 8px 12px; font-size: 13px;" @click="contextMenuCopy">
-            <i class="fas fa-copy icon" style="margin-right: 8px;"></i>复制文件
+          <button class="secondary" @click="contextMenuCopy">
+            <i class="fas fa-copy icon"></i>复制文件
           </button>
-          <button :disabled="contextMenu.pasteableItems.length === 0" style="text-align: left; padding: 8px 12px; font-size: 13px;" @click="contextMenuPaste">
-            <i class="fas fa-paste icon" style="margin-right: 8px;"></i>粘贴文件 ({% raw %}{{ contextMenu.pasteableItems.length }}{% endraw %})
+          <button :disabled="contextMenu.pasteableItems.length === 0" @click="contextMenuPaste">
+            <i class="fas fa-paste icon"></i>粘贴文件 ({% raw %}{{ contextMenu.pasteableItems.length }}{% endraw %})
           </button>
         </div>
       </div>
 
       <!-- 吐司通知容器 -->
-      <div class="toast-container" style="position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 10px;">
-        <div v-for="toast in toasts" :key="toast.id" class="toast show" :class="toast.type" style="padding: 12px 18px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); display: flex; align-items: center; gap: 12px; min-width: 240px; background: #fff; border-left: 4px solid var(--border-color, #cbd5e1);">
-          <div class="toast-content" style="flex: 1;">
-            <div style="font-weight: 600; font-size: 13px; color: var(--text-primary);">{% raw %}{{ toast.title || '系统提示' }}{% endraw %}</div>
-            <div style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">{% raw %}{{ toast.message }}{% endraw %}</div>
+      <div class="toast-container">
+        <div v-for="toast in toasts" :key="toast.id" class="toast show" :class="toast.type">
+          <div class="toast-content">
+            <div class="toast-title">{% raw %}{{ toast.title || '系统提示' }}{% endraw %}</div>
+            <div class="toast-body">{% raw %}{{ toast.message }}{% endraw %}</div>
           </div>
-          <button type="button" style="background: none; border: none; font-size: 16px; cursor: pointer; color: var(--text-secondary);" @click="removeToast(toast.id)">&times;</button>
+          <button type="button" class="toast-close" @click="removeToast(toast.id)">&times;</button>
         </div>
       </div>
     </div>
-
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
   </body>
 </html>
