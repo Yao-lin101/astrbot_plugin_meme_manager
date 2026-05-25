@@ -2339,3 +2339,365 @@ body.drag-session-active {
     border-radius: 22px;
   }
 }
+
+/* ==========================================================================
+   New Grid Row Drawer, Multi-tag pills, and Tabs styling
+   ========================================================================== */
+
+/* Tabs Container */
+.emoji-tabs-container {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;  /* IE and Edge */
+}
+.emoji-tabs-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Tab Button */
+.emoji-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  background: var(--bg-card, #fff);
+  color: var(--text-secondary, #64748b);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.emoji-tab-btn:hover {
+  background: var(--bg-hover, #f8fafc);
+  color: var(--text-primary, #0f172a);
+  transform: translateY(-1px);
+}
+
+.emoji-tab-btn.active {
+  background: linear-gradient(135deg, var(--primary-color, #3b82f6), #2563eb);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}
+
+/* Tab Badge */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--text-secondary, #64748b);
+  transition: all 0.2s ease;
+}
+
+.emoji-tab-btn.active .tab-badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
+/* Emoji Card Container */
+.emoji-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-card, #ffffff);
+  border-radius: 18px;
+  padding: 8px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.emoji-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+}
+
+.emoji-card.active {
+  border-color: var(--primary-color, #3b82f6);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.emoji-card .emoji-item {
+  transform: none !important;
+}
+
+/* Emoji Tags Container under Image */
+.emoji-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-start;
+  min-height: 20px;
+}
+
+/* Tag Pill under Image */
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--text-secondary, #475569);
+  font-size: 11px;
+  font-weight: 500;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Detail Drawer inside Grid */
+.emoji-detail-drawer {
+  grid-column: 1 / -1;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 16px;
+  margin: 10px 0 20px 0;
+  padding: 24px;
+  box-shadow: var(--shadow-md, 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1));
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: slideDown 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-15px);
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    max-height: 800px;
+  }
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  padding-bottom: 12px;
+}
+
+.drawer-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #0f172a);
+  word-break: break-all;
+}
+
+.drawer-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: var(--transition);
+}
+
+.drawer-close-btn:hover {
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--text-primary, #0f172a);
+}
+
+.drawer-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+
+@media (max-width: 768px) {
+  .drawer-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-section label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary, #475569);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Picker Pills in Drawer */
+.drawer-tags-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  background: var(--bg-main, #f8fafc);
+  max-height: 180px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.picker-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  background: #fff;
+  color: var(--text-secondary, #475569);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.picker-tag-pill:hover {
+  border-color: var(--primary-color, #3b82f6);
+  color: var(--primary-color, #3b82f6);
+  transform: translateY(-1px);
+}
+
+.picker-tag-pill.active {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: var(--primary-color, #3b82f6);
+  color: var(--primary-color, #3b82f6);
+  font-weight: 500;
+}
+
+.picker-tag-pill.active::before {
+  content: "\f00c";
+  font-family: "Font Awesome 6 Free", "Font Awesome 5 Free";
+  font-weight: 900;
+  font-size: 11px;
+}
+
+/* Personas List in Drawer */
+.drawer-personas-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 10px;
+  background: var(--bg-main, #f8fafc);
+  max-height: 180px;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.drawer-personas-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 13px;
+  color: var(--text-primary, #1e293b);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.drawer-personas-list label:hover {
+  background: var(--bg-hover, #f1f5f9);
+}
+
+.drawer-personas-list input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  cursor: pointer;
+}
+
+/* Actions in Drawer */
+.drawer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+  padding-top: 16px;
+}
+
+.drawer-actions button {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.drawer-cancel-btn {
+  background: transparent;
+  border: 1px solid var(--border-color, #e2e8f0);
+  color: var(--text-secondary, #64748b);
+}
+
+.drawer-cancel-btn:hover {
+  background: var(--bg-hover, #f1f5f9);
+  color: var(--text-primary, #0f172a);
+}
+
+.drawer-save-btn {
+  background: var(--primary-color, #3b82f6);
+  border: none;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.2);
+}
+
+.drawer-save-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(59, 130, 246, 0.3);
+}
+
+/* Loading state for Drawer */
+.emoji-detail-drawer.loading {
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+  color: var(--text-secondary, #64748b);
+}
+
+.emoji-detail-drawer.loading::after {
+  content: "";
+  width: 32px;
+  height: 32px;
+  border: 4px solid var(--border-color, #e2e8f0);
+  border-top-color: var(--primary-color, #3b82f6);
+  border-radius: 50%;
+  animation: drawer-spin 0.8s linear infinite;
+}
+
+@keyframes drawer-spin {
+  to { transform: rotate(360deg); }
+}
+

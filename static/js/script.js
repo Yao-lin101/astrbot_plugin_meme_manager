@@ -1,601 +1,1170 @@
-// script.js - Entry point for the Meme Manager WebUI. Initializes modules and registers global events.
+// script.js - Unified Vue 3 Application for AstrBot Meme Manager WebUI
+const { createApp, ref, reactive, computed, onMounted, nextTick } = Vue;
 
-import { state } from "./modules/state.js";
-import {
-  elements,
-  MOBILE_LAYOUT_MEDIA,
-  LONG_PRESS_CANCEL_DISTANCE_PX,
-  showToast,
-  closeConfirm,
-  closeDangerConfirm,
-  startDangerCountdown,
-  closeMoveTargetModal,
-  openMoveTargetModal,
-  closeCategoryEditModal,
-  editCategory,
-  cancelEdit,
-  saveCategory,
-  closeEmojiEditModal,
-  openEmojiEditModal,
-  syncSidebarLayout,
-  updateSidebarToggleState,
-  toggleSidebar,
-  closeSidebar,
-} from "./modules/ui.js";
-import {
-  fetchEmojis,
-  fetchPersonas,
-  checkSyncStatus,
-  checkImgHostSyncStatus,
-  syncToRemote,
-  syncFromRemote,
-  syncConfig,
-  restoreCategory,
-  removeFromConfig,
-  clearCategory,
-  deleteCategory,
-  cancelAllPendingRequests,
-} from "./modules/api.js";
-import {
-  clearDragMode,
-  closeBatchContextMenu,
-  shouldOpenBatchContextMenu,
-  openBatchContextMenu,
-  hasActiveDragInteraction,
-  finishLongPress,
-  finishPointerDrag,
-  updatePointerDrag,
-  cancelLongPress,
-  setSelectionMode,
-  batchDeleteSelected,
-  clearAllEmojiFiles,
-  getClipboardItems,
-  copyEmojiItemsToCategory,
-  copyItemsToClipboard,
-} from "./modules/interactions.js";
+createApp({
+  setup() {
+    // ----------------------------------------------------
+    // State variables
+    // ----------------------------------------------------
+    const emojiData = ref({});
+    const tagDescriptions = ref({});
+    const systemPersonas = ref([]);
 
-document.addEventListener("DOMContentLoaded", () => {
-  // Bind category add form toggling
-  const addCategoryBtn = document.getElementById("add-category-btn");
-  if (addCategoryBtn) {
-    addCategoryBtn.addEventListener("click", function () {
-      const form = document.getElementById("add-category-form");
-      if (form) form.style.display = "block";
-      this.style.display = "none";
+    // UI States
+    const activeCategory = ref(null);
+    const activeDetailEmoji = ref(null);
+    const personaFilter = ref("");
+    const toasts = ref([]);
+    let toastIdCounter = 0;
+
+    // Properties Editor (Inline Grid Drawer)
+    const detailMetadata = ref(null);
+    const selectedEmotions = ref([]);
+    const selectedPersonas = ref([]);
+    const detailDrawerLoading = ref(false);
+
+    // Upload state tracking
+    const uploadStateByCategory = ref(new Map());
+
+    // Batch Selection Mode
+    const selectionEnabled = ref(false);
+    const selectedEmojis = ref(new Map()); // Key: 'category:emoji' -> { category, emoji }
+
+    // Context Menu State (right click / long press)
+    const contextMenu = reactive({
+      visible: false,
+      x: 0,
+      y: 0,
+      targetCategory: null,
+      targetEmoji: null,
+      targetItems: [],
+      pasteableItems: [],
     });
-  }
 
-  // Bind category save button
-  const saveCategoryBtn = document.getElementById("save-category-btn");
-  if (saveCategoryBtn) {
-    saveCategoryBtn.addEventListener("click", async function () {
-      const categoryName = document.getElementById("new-category-name")?.value.trim();
-      const categoryDesc = document.getElementById("new-category-description")?.value.trim() || "请添加描述";
+    // Clipboard (for Copy / Paste)
+    const clipboardItems = ref([]);
 
-      if (!categoryName) {
-        showToast("请输入类别名称后再保存。", "warning", "缺少类别名称");
+    // Modals
+    const confirmDialog = reactive({
+      visible: false,
+      title: "",
+      description: "",
+      confirmLabel: "确认",
+      confirmClass: "",
+      resolve: null,
+    });
+
+    const dangerConfirmDialog = reactive({
+      visible: false,
+      title: "",
+      description: "",
+      actionLabel: "确认",
+      countdown: 0,
+      stage: "ack", // 'ack', 'countdown', 'input'
+      timer: null,
+      resolve: null,
+    });
+
+    const moveModal = reactive({
+      visible: false,
+      resolve: null,
+    });
+
+    const addCategoryForm = reactive({
+      visible: false,
+      name: "",
+      description: "",
+    });
+
+    const editCategoryModal = reactive({
+      visible: false,
+      category: "",
+      description: "",
+      originalCategory: "",
+    });
+
+    // Sync state tracking
+    const syncChecking = ref(false);
+    const syncStatus = ref({
+      inSync: true,
+      missingInConfig: [],
+      deletedCategories: [],
+    });
+
+    const imgHostSyncing = ref(false);
+    const imgHostStatus = ref({
+      provider: "--",
+      remoteImageCount: "--",
+      remoteStorageSize: "--",
+      uploadCount: 0,
+      downloadCount: 0,
+    });
+
+    // ----------------------------------------------------
+    // Toast Notification helper
+    // ----------------------------------------------------
+    const showToast = (message, type = "info", title = "系统提示", duration = 3000) => {
+      const id = toastIdCounter++;
+      toasts.value.push({ id, message, type, title });
+      setTimeout(() => {
+        removeToast(id);
+      }, duration);
+    };
+
+    const removeToast = (id) => {
+      toasts.value = toasts.value.filter((t) => t.id !== id);
+    };
+
+    // ----------------------------------------------------
+    // Utilities
+    // ----------------------------------------------------
+    const formatBytes = (bytes) => {
+      if (typeof bytes !== "number" || Number.isNaN(bytes) || bytes < 0) return "未知";
+      if (bytes === 0) return "0 B";
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let value = bytes;
+      let unitIndex = 0;
+      while (value >= 1024 && unitIndex < units.length - 1) {
+        value /= 1024;
+        unitIndex++;
+      }
+      return `${value.toFixed(1)} ${units[unitIndex]}`;
+    };
+
+    // ----------------------------------------------------
+    // API Data Fetching
+    // ----------------------------------------------------
+    const fetchEmojis = async () => {
+      try {
+        const personaId = personaFilter.value;
+        const url = personaId ? `/api/emoji?persona_id=${encodeURIComponent(personaId)}` : "/api/emoji";
+        
+        const [emojiRes, tagRes] = await Promise.all([
+          fetch(url).then(res => {
+            if (!res.ok) throw new Error("获取表情包数据失败");
+            return res.json();
+          }),
+          fetch("/api/emotions").then(res => {
+            if (!res.ok) throw new Error("获取类别描述失败");
+            return res.json();
+          })
+        ]);
+
+        emojiData.value = emojiRes;
+        tagDescriptions.value = tagRes;
+
+        // Clean up selections of items that no longer exist
+        pruneSelections();
+
+        // Default to first category if activeCategory is unset or missing
+        const categories = Object.keys(emojiRes);
+        if (categories.length > 0) {
+          if (!activeCategory.value || !emojiRes[activeCategory.value]) {
+            activeCategory.value = categories[0];
+          }
+        } else {
+          activeCategory.value = null;
+        }
+      } catch (e) {
+        console.error(e);
+        showToast(e.message, "error", "加载数据失败");
+      }
+    };
+
+    const fetchPersonas = async () => {
+      try {
+        const res = await fetch("/api/personas");
+        if (!res.ok) throw new Error("获取系统人格失败");
+        systemPersonas.value = await res.json();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    const pruneSelections = () => {
+      for (const [key, item] of selectedEmojis.value.entries()) {
+        const list = emojiData.value[item.category];
+        if (!list || !list.includes(item.emoji)) {
+          selectedEmojis.value.delete(key);
+        }
+      }
+    };
+
+    // ----------------------------------------------------
+    // Tab & Navigation Handling
+    // ----------------------------------------------------
+    const selectCategory = (category) => {
+      activeCategory.value = category;
+      closeDetailDrawer();
+    };
+
+    // ----------------------------------------------------
+    // Multi-tag Emoji mapping computed
+    // ----------------------------------------------------
+    const emojiTagsMap = computed(() => {
+      const map = new Map();
+      Object.entries(emojiData.value).forEach(([cat, emos]) => {
+        if (Array.isArray(emos)) {
+          emos.forEach((emo) => {
+            if (!map.has(emo)) map.set(emo, new Set());
+            map.get(emo).add(cat);
+          });
+        }
+      });
+      return map;
+    });
+
+    const getEmojiTags = (emoji) => {
+      const tags = emojiTagsMap.value.get(emoji);
+      return tags ? Array.from(tags).sort() : [];
+    };
+
+    // ----------------------------------------------------
+    // Inline Properties Drawer (Detail Drawer)
+    // ----------------------------------------------------
+    const toggleDetailDrawer = async (category, emoji) => {
+      if (activeDetailEmoji.value === emoji) {
+        closeDetailDrawer();
         return;
       }
-
-      const saveButton = this;
-      const { setButtonBusy, restoreButton, refreshUi } = await import("./modules/ui.js");
-      const { requestJson } = await import("./modules/api.js");
-      setButtonBusy(saveButton, "保存中...");
+      
+      closeDetailDrawer();
+      activeDetailEmoji.value = emoji;
+      detailDrawerLoading.value = true;
 
       try {
-        await requestJson(
-          "/api/category/restore",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              category: categoryName,
-              description: categoryDesc,
-            }),
-          },
-          { defaultErrorMessage: "添加类别失败" }
-        );
+        const res = await fetch(`/api/emoji/info/${encodeURIComponent(emoji)}`);
+        if (!res.ok) throw new Error("获取属性失败");
+        const metadata = await res.json();
 
-        const newNameEl = document.getElementById("new-category-name");
-        const newDescEl = document.getElementById("new-category-description");
-        if (newNameEl) newNameEl.value = "";
-        if (newDescEl) newDescEl.value = "";
+        // Check if user switched to another emoji during load
+        if (activeDetailEmoji.value !== emoji) return;
 
-        const form = document.getElementById("add-category-form");
-        if (form) form.style.display = "none";
-        if (addCategoryBtn) addCategoryBtn.style.display = "block";
-
-        await fetchEmojis();
-        await checkSyncStatus(false);
-        showToast(`类别「${categoryName}」已添加。`, "success", "添加成功");
-      } catch (error) {
-        console.error("添加类别失败:", error);
-        showToast(error.message, "error", "添加失败");
+        detailMetadata.value = metadata;
+        selectedEmotions.value = metadata.emotions || [];
+        selectedPersonas.value = metadata.personas || [];
+      } catch (e) {
+        showToast(e.message, "error", "加载表情属性失败");
+        closeDetailDrawer();
       } finally {
-        restoreButton(saveButton);
+        detailDrawerLoading.value = false;
       }
-    });
-  }
+    };
 
-  // Bind Sync buttons
-  const checkSyncBtn = document.getElementById("check-sync-btn");
-  if (checkSyncBtn) {
-    checkSyncBtn.addEventListener("click", () => checkSyncStatus());
-  }
+    const closeDetailDrawer = () => {
+      activeDetailEmoji.value = null;
+      detailMetadata.value = null;
+      selectedEmotions.value = [];
+      selectedPersonas.value = [];
+    };
 
-  const uploadSyncBtn = document.getElementById("upload-sync-btn");
-  if (uploadSyncBtn) {
-    uploadSyncBtn.addEventListener("click", () => syncToRemote());
-  }
+    const toggleTagInDrawer = (tag) => {
+      const idx = selectedEmotions.value.indexOf(tag);
+      if (idx > -1) {
+        selectedEmotions.value.splice(idx, 1);
+      } else {
+        selectedEmotions.value.push(tag);
+      }
+    };
 
-  const downloadSyncBtn = document.getElementById("download-sync-btn");
-  if (downloadSyncBtn) {
-    downloadSyncBtn.addEventListener("click", () => syncFromRemote());
-  }
-
-  // Bind batch actions
-  const toggleSelectionModeBtn = elements.toggleSelectionModeBtn;
-  if (toggleSelectionModeBtn) {
-    toggleSelectionModeBtn.addEventListener("click", () => {
-      setSelectionMode(!state.selectionState.enabled);
-    });
-  }
-
-  const batchDeleteBtn = elements.batchDeleteBtn;
-  if (batchDeleteBtn) {
-    batchDeleteBtn.addEventListener("click", batchDeleteSelected);
-  }
-
-  const batchMoveBtn = elements.batchMoveBtn;
-  if (batchMoveBtn) {
-    batchMoveBtn.addEventListener("click", () => {
-      openMoveTargetModal(Array.from(state.selectionState.items.values()));
-    });
-  }
-
-  const clearAllBtn = elements.clearAllBtn;
-  if (clearAllBtn) {
-    clearAllBtn.addEventListener("click", clearAllEmojiFiles);
-  }
-
-  // Bind Context Menu actions
-  const contextMenuDeleteBtn = elements.contextMenuDeleteBtn;
-  if (contextMenuDeleteBtn) {
-    contextMenuDeleteBtn.addEventListener("click", async () => {
-      const menuItems = state.contextMenuState.items;
-      closeBatchContextMenu();
-      const { deleteEmojiItems, isEmojiSelected } = await import("./modules/interactions.js");
-      await deleteEmojiItems(menuItems, {
-        useSelectionState:
-          menuItems.length > 0 &&
-          menuItems.every((item) => isEmojiSelected(item.category, item.emoji)),
-        confirmMode: "danger",
-      });
-    });
-  }
-
-  const contextMenuMoveBtn = elements.contextMenuMoveBtn;
-  if (contextMenuMoveBtn) {
-    contextMenuMoveBtn.addEventListener("click", async () => {
-      const menuItems = state.contextMenuState.items;
-      closeBatchContextMenu();
-      const confirmed = await showConfirm({
-        title: "移动表情包",
-        description: `确认继续为这 ${menuItems.length} 个表情包选择目标分类？`,
-        confirmLabel: "继续选择目标分类",
-      });
-      if (!confirmed) return;
-      openMoveTargetModal(menuItems);
-    });
-  }
-
-  const contextMenuCopyBtn = elements.contextMenuCopyBtn;
-  if (contextMenuCopyBtn) {
-    contextMenuCopyBtn.addEventListener("click", async () => {
-      const menuItems = state.contextMenuState.items;
-      closeBatchContextMenu();
-      const confirmed = await showConfirm({
-        title: "复制表情包",
-        description: `确认复制这 ${menuItems.length} 个表情包到 WebUI 剪贴板？`,
-        confirmLabel: "确认复制",
-      });
-      if (!confirmed) return;
-      copyItemsToClipboard(menuItems);
-    });
-  }
-
-  const contextMenuPasteBtn = elements.contextMenuPasteBtn;
-  if (contextMenuPasteBtn) {
-    contextMenuPasteBtn.addEventListener("click", async () => {
-      const targetCategory = state.contextMenuState.targetCategory;
-      const clipboardItems = getClipboardItems();
-      closeBatchContextMenu();
-      const confirmed = await showConfirm({
-        title: "粘贴表情包",
-        description: `确认将剪贴板中的 ${clipboardItems.length} 个表情包粘贴到「${targetCategory}」？`,
-        confirmLabel: "确认粘贴",
-      });
-      if (!confirmed) return;
-      await copyEmojiItemsToCategory(targetCategory, clipboardItems);
-    });
-  }
-
-  // Bind Sidebar Actions
-  const sidebarToggleBtn = elements.sidebarToggleBtn;
-  if (sidebarToggleBtn) {
-    sidebarToggleBtn.addEventListener("click", () => toggleSidebar());
-  }
-
-  const sidebarCloseBtn = elements.sidebarCloseBtn;
-  if (sidebarCloseBtn) {
-    sidebarCloseBtn.addEventListener("click", () => closeSidebar());
-  }
-
-  const sidebarBackdrop = elements.sidebarBackdrop;
-  if (sidebarBackdrop) {
-    sidebarBackdrop.addEventListener("click", () => closeSidebar());
-  }
-
-  // Bind Danger Confirm Ack Modal actions
-  const dangerModalAck = elements.dangerModalAcknowledge;
-  if (dangerModalAck) {
-    dangerModalAck.addEventListener("change", () => {
-      if (state.dangerConfirmStage === "ack") {
-        if (!dangerModalAck.checked) {
-          const btn = elements.dangerModalConfirmBtn;
-          if (btn) {
-            btn.disabled = true;
-            btn.textContent = "请先勾选上方选项";
-          }
-          return;
+    const togglePersonaInDrawer = (personaId) => {
+      if (personaId === "*") {
+        if (selectedPersonas.value.includes("*")) {
+          selectedPersonas.value = [];
+        } else {
+          selectedPersonas.value = ["*"];
         }
-        startDangerCountdown();
+      } else {
+        // Clear global if selected specific
+        const gIdx = selectedPersonas.value.indexOf("*");
+        if (gIdx > -1) selectedPersonas.value.splice(gIdx, 1);
+
+        const idx = selectedPersonas.value.indexOf(personaId);
+        if (idx > -1) {
+          selectedPersonas.value.splice(idx, 1);
+        } else {
+          selectedPersonas.value.push(personaId);
+        }
       }
-    });
-  }
+    };
 
-  const dangerModalCancelBtn = elements.dangerModalCancelBtn;
-  if (dangerModalCancelBtn) {
-    dangerModalCancelBtn.addEventListener("click", () => {
-      closeDangerConfirm(false);
-    });
-  }
-
-  const dangerModalConfirmBtn = elements.dangerModalConfirmBtn;
-  if (dangerModalConfirmBtn) {
-    dangerModalConfirmBtn.addEventListener("click", () => {
-      if (state.dangerConfirmStage === "ack" && dangerModalAck?.checked) {
-        startDangerCountdown();
-        return;
-      }
-      if (state.dangerConfirmStage === "ready") {
-        closeDangerConfirm(true);
-      }
-    });
-  }
-
-  const dangerModalRoot = elements.dangerModalRoot;
-  if (dangerModalRoot) {
-    dangerModalRoot.addEventListener("click", (event) => {
-      if (event.target === dangerModalRoot) {
-        closeDangerConfirm(false);
-      }
-    });
-  }
-
-  // Bind Standard Confirm Modal actions
-  const confirmModalCancelBtn = elements.confirmModalCancelBtn;
-  if (confirmModalCancelBtn) {
-    confirmModalCancelBtn.addEventListener("click", () => {
-      closeConfirm(false);
-    });
-  }
-
-  const confirmModalConfirmBtn = elements.confirmModalConfirmBtn;
-  if (confirmModalConfirmBtn) {
-    confirmModalConfirmBtn.addEventListener("click", () => {
-      closeConfirm(true);
-    });
-  }
-
-  const confirmModalRoot = elements.confirmModalRoot;
-  if (confirmModalRoot) {
-    confirmModalRoot.addEventListener("click", (event) => {
-      if (event.target === confirmModalRoot) {
-        closeConfirm(false);
-      }
-    });
-  }
-
-  // Bind Category Edit Modal actions
-  const categoryEditCancelBtn = elements.categoryEditCancelBtn;
-  if (categoryEditCancelBtn) {
-    categoryEditCancelBtn.addEventListener("click", () => {
-      closeCategoryEditModal();
-    });
-  }
-
-  const categoryEditSaveBtn = elements.categoryEditSaveBtn;
-  if (categoryEditSaveBtn) {
-    categoryEditSaveBtn.addEventListener("click", async () => {
-      await saveCategory();
-    });
-  }
-
-  const categoryEditModalRoot = elements.categoryEditModalRoot;
-  if (categoryEditModalRoot) {
-    categoryEditModalRoot.addEventListener("click", (event) => {
-      if (event.target === categoryEditModalRoot) {
-        closeCategoryEditModal();
-      }
-    });
-  }
-
-  [elements.categoryEditNameInput, elements.categoryEditDescInput].forEach((input) => {
-    input?.addEventListener("keydown", async (event) => {
-      if (event.key === "Enter") {
-        event.preventDefault();
-        await saveCategory();
-      }
-    });
-  });
-
-  // Bind Move Target Modal actions
-  const moveTargetCancelBtn = elements.moveTargetCancelBtn;
-  if (moveTargetCancelBtn) {
-    moveTargetCancelBtn.addEventListener("click", () => {
-      closeMoveTargetModal();
-    });
-  }
-
-  const moveTargetModalRoot = elements.moveTargetModalRoot;
-  if (moveTargetModalRoot) {
-    moveTargetModalRoot.addEventListener("click", (event) => {
-      if (event.target === moveTargetModalRoot) {
-        closeMoveTargetModal();
-      }
-    });
-  }
-
-  // Document level pointer move handlers for dragging & long press cancellation
-  document.addEventListener("pointermove", (event) => {
-    if (
-      state.longPressState.emojiItem &&
-      typeof event.pointerId === "number" &&
-      event.pointerId === state.longPressState.pointerId
-    ) {
-      const offsetX = event.clientX - state.longPressState.startX;
-      const offsetY = event.clientY - state.longPressState.startY;
-      const movedDistance = Math.hypot(offsetX, offsetY);
-      if (movedDistance > LONG_PRESS_CANCEL_DISTANCE_PX) {
-        cancelLongPress();
+    const saveEmojiAttributes = async () => {
+      if (selectedEmotions.value.length === 0) {
+        showToast("请至少选择一个分类标签。", "warning", "保存提示");
         return;
       }
 
-      state.longPressState.currentX = event.clientX;
-      state.longPressState.currentY = event.clientY;
-
-      const elapsed = performance.now() - state.longPressState.startTime;
-      const progress = Math.min(1, elapsed / LONG_PRESS_DURATION_MS);
-      const remainingSeconds = Math.max(
-        1,
-        Math.ceil((LONG_PRESS_DURATION_MS - elapsed) / 1000)
-      );
-      setLongPressProgress(progress, `${remainingSeconds}s`);
-      event.preventDefault();
-    }
-
-    if (
-      state.dragModeState.pointerId !== null &&
-      typeof event.pointerId === "number" &&
-      event.pointerId === state.dragModeState.pointerId
-    ) {
-      updatePointerDrag(event);
-      event.preventDefault();
-    }
-  });
-
-  const handlePointerRelease = async (event) => {
-    finishLongPress(event);
-    await finishPointerDrag(event);
-  };
-
-  document.addEventListener("pointerup", (event) => {
-    void handlePointerRelease(event);
-  });
-
-  document.addEventListener("pointercancel", (event) => {
-    void handlePointerRelease(event);
-  });
-
-  document.addEventListener(
-    "touchmove",
-    (event) => {
-      if (state.dragModeState.pointerId !== null) {
-        event.preventDefault();
-      }
-    },
-    { passive: false }
-  );
-
-  document.addEventListener("dragstart", (event) => {
-    if (hasActiveDragInteraction() || event.target?.closest?.(".emoji-item")) {
-      event.preventDefault();
-    }
-  });
-
-  document.addEventListener("contextmenu", (event) => {
-    if (shouldOpenBatchContextMenu(event)) {
-      event.preventDefault();
-      openBatchContextMenu(event);
-      return;
-    }
-
-    closeBatchContextMenu();
-
-    if (hasActiveDragInteraction()) {
-      event.preventDefault();
-    }
-  });
-
-  document.addEventListener("click", (event) => {
-    const menu = elements.batchContextMenu;
-    if (!menu || menu.classList.contains("hidden")) return;
-    if (event.target.closest("#batch-context-menu")) return;
-    closeBatchContextMenu();
-  });
-
-  document.addEventListener("scroll", () => closeBatchContextMenu(), true);
-
-  document.addEventListener("selectstart", (event) => {
-    if (
-      hasActiveDragInteraction() ||
-      event.target?.closest?.(".emoji-item") ||
-      event.target?.closest?.(".emoji-upload")
-    ) {
-      event.preventDefault();
-    }
-  });
-
-  // ESC key cancels modals & drag
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && state.dragModeState.items.length > 0) {
-      clearDragMode();
-      showToast("已退出拖拽模式。", "info", "拖拽模式已关闭");
-      return;
-    }
-    if (event.key === "Escape" && elements.batchContextMenu) {
-      const isOpen = !elements.batchContextMenu.classList.contains("hidden");
-      if (isOpen) {
-        closeBatchContextMenu();
-        return;
-      }
-    }
-    if (event.key === "Escape" && isCompactViewport()) {
-      const isOpen = document.body.classList.contains("sidebar-open");
-      if (isOpen) {
-        closeSidebar();
-        return;
-      }
-    }
-    if (event.key === "Escape" && elements.moveTargetModalRoot) {
-      const isOpen = !elements.moveTargetModalRoot.classList.contains("hidden");
-      if (isOpen) {
-        closeMoveTargetModal();
-        return;
-      }
-    }
-    if (event.key === "Escape" && elements.categoryEditModalRoot) {
-      const isOpen = !elements.categoryEditModalRoot.classList.contains("hidden");
-      if (isOpen) {
-        closeCategoryEditModal();
-        return;
-      }
-    }
-    if (event.key === "Escape" && elements.confirmModalRoot) {
-      const isOpen = !elements.confirmModalRoot.classList.contains("hidden");
-      if (isOpen) {
-        closeConfirm(false);
-        return;
-      }
-    }
-    if (event.key === "Escape" && elements.dangerModalRoot) {
-      const isOpen = !elements.dangerModalRoot.classList.contains("hidden");
-      if (isOpen) {
-        closeDangerConfirm(false);
-      }
-    }
-  });
-
-  // Persona filter change listener
-  const filterSelect = document.getElementById("persona-filter");
-  if (filterSelect) {
-    filterSelect.addEventListener("change", () => {
-      fetchEmojis();
-    });
-  }
-
-  // Emoji Edit Modal cancel and save buttons
-  const emojiEditCancelBtn = document.getElementById("emoji-edit-cancel-btn");
-  if (emojiEditCancelBtn) {
-    emojiEditCancelBtn.addEventListener("click", closeEmojiEditModal);
-  }
-
-  const emojiEditSaveBtn = document.getElementById("emoji-edit-save-btn");
-  if (emojiEditSaveBtn) {
-    emojiEditSaveBtn.addEventListener("click", async () => {
-      const filename = elements.editEmojiFilename.value;
-      const emotionsStr = elements.editEmojiEmotions.value;
-      const emotions = emotionsStr.split(",").map(e => e.trim()).filter(e => e);
-
-      const checkedPersonas = [];
-      elements.editEmojiPersonasDiv.querySelectorAll("input:checked").forEach(cb => {
-        checkedPersonas.push(cb.value);
-      });
-
-      if (checkedPersonas.length === 0) {
-        checkedPersonas.push("*");
-      }
-
-      const { setButtonBusy, restoreButton } = await import("./modules/ui.js");
-      setButtonBusy(emojiEditSaveBtn, "正在保存...");
+      const personas = selectedPersonas.value.length === 0 ? ["*"] : selectedPersonas.value;
+      const emoji = activeDetailEmoji.value;
 
       try {
         const res = await fetch("/api/emoji/edit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            filename: filename,
-            emotions: emotions,
-            personas: checkedPersonas,
+            filename: emoji,
+            emotions: selectedEmotions.value,
+            personas: personas,
           }),
         });
+        if (!res.ok) throw new Error("保存属性失败");
 
-        if (!res.ok) throw new Error("保存表情包属性失败");
-
-        showToast("属性保存成功！", "success", "编辑成功");
-        closeEmojiEditModal();
+        showToast("属性保存成功！", "success", "修改成功");
+        closeDetailDrawer();
         await fetchEmojis();
       } catch (e) {
-        console.error(e);
-        showToast("保存失败: " + e.message, "error", "保存失败");
-      } finally {
-        restoreButton(emojiEditSaveBtn);
+        showToast(e.message, "error", "保存失败");
       }
-    });
-  }
+    };
 
-  // Initialize data and listeners
-  syncSidebarLayout();
-  updateSidebarToggleState();
+    // ----------------------------------------------------
+    // Actions - Delete Emoji
+    // ----------------------------------------------------
+    const deleteEmoji = async (category, emoji) => {
+      const confirmed = await confirm(
+        "删除表情包",
+        `确认删除分类「${category}」中的表情包「${emoji}」？此操作不可恢复。`,
+        "确认删除",
+        "danger"
+      );
+      if (!confirmed) return;
 
-  window.addEventListener("resize", () => {
-    syncSidebarLayout();
-    closeBatchContextMenu();
-  });
+      try {
+        const res = await fetch("/api/emoji/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category, image_file: emoji }),
+        });
+        if (!res.ok) throw new Error("删除失败");
 
-  window.addEventListener("beforeunload", () => {
-    cancelAllPendingRequests();
-  });
+        selectedEmojis.value.delete(`${category}:${emoji}`);
+        showToast("表情包已成功删除", "success", "删除成功");
+        await fetchEmojis();
+      } catch (e) {
+        showToast(e.message, "error", "删除失败");
+      }
+    };
 
-  void (async () => {
-    await fetchEmojis();
-    await fetchPersonas();
-    state.initialStatusTimerId = window.setTimeout(() => {
-      state.initialStatusTimerId = null;
+    // ----------------------------------------------------
+    // Modals & Overlays handlers (Confirm / Dialogs)
+    // ----------------------------------------------------
+    const confirm = (title, description, confirmLabel = "确认", confirmClass = "") => {
+      return new Promise((resolve) => {
+        confirmDialog.title = title;
+        confirmDialog.description = description;
+        confirmDialog.confirmLabel = confirmLabel;
+        confirmDialog.confirmClass = confirmClass;
+        confirmDialog.resolve = resolve;
+        confirmDialog.visible = true;
+      });
+    };
+
+    const handleConfirm = (value) => {
+      confirmDialog.visible = false;
+      if (confirmDialog.resolve) confirmDialog.resolve(value);
+    };
+
+    const showDangerConfirm = (title, description, actionLabel = "确认操作") => {
+      return new Promise((resolve) => {
+        dangerConfirmDialog.title = title;
+        dangerConfirmDialog.description = description;
+        dangerConfirmDialog.actionLabel = actionLabel;
+        dangerConfirmDialog.stage = "ack";
+        dangerConfirmDialog.countdown = 5;
+        dangerConfirmDialog.resolve = resolve;
+        dangerConfirmDialog.visible = true;
+      });
+    };
+
+    const startDangerCountdown = () => {
+      dangerConfirmDialog.stage = "countdown";
+      dangerConfirmDialog.timer = setInterval(() => {
+        if (dangerConfirmDialog.countdown > 1) {
+          dangerConfirmDialog.countdown--;
+        } else {
+          clearInterval(dangerConfirmDialog.timer);
+          dangerConfirmDialog.stage = "input";
+          nextTick(() => {
+            const input = document.getElementById("danger-modal-ack");
+            if (input) input.focus();
+          });
+        }
+      }, 1000);
+    };
+
+    const handleDangerConfirm = () => {
+      const input = document.getElementById("danger-modal-ack");
+      if (input && input.value.trim() === "CONFIRM") {
+        dangerConfirmDialog.visible = false;
+        if (dangerConfirmDialog.resolve) dangerConfirmDialog.resolve(true);
+      } else {
+        showToast("请输入大写的 CONFIRM 确认此操作！", "warning", "输入错误");
+      }
+    };
+
+    const cancelDangerConfirm = () => {
+      if (dangerConfirmDialog.timer) {
+        clearInterval(dangerConfirmDialog.timer);
+      }
+      dangerConfirmDialog.visible = false;
+      if (dangerConfirmDialog.resolve) dangerConfirmDialog.resolve(false);
+    };
+
+    // ----------------------------------------------------
+    // Batch Selection Operations
+    // ----------------------------------------------------
+    const toggleSelectionMode = () => {
+      selectionEnabled.value = !selectionEnabled.value;
+      if (!selectionEnabled.value) {
+        selectedEmojis.value.clear();
+      }
+    };
+
+    const isEmojiSelected = (category, emoji) => {
+      return selectedEmojis.value.has(`${category}:${emoji}`);
+    };
+
+    const toggleEmojiSelection = (category, emoji) => {
+      const key = `${category}:${emoji}`;
+      if (selectedEmojis.value.has(key)) {
+        selectedEmojis.value.delete(key);
+      } else {
+        selectedEmojis.value.set(key, { category, emoji });
+      }
+    };
+
+    const onEmojiClick = (category, emoji) => {
+      if (selectionEnabled.value) {
+        toggleEmojiSelection(category, emoji);
+      } else {
+        toggleDetailDrawer(category, emoji);
+      }
+    };
+
+    const getCategorySelectedCount = (category) => {
+      let count = 0;
+      for (const item of selectedEmojis.value.values()) {
+        if (item.category === category) count++;
+      }
+      return count;
+    };
+
+    const isAllSelectedInCategory = (category) => {
+      const list = emojiData.value[category] || [];
+      if (list.length === 0) return false;
+      return list.every((emoji) => isEmojiSelected(category, emoji));
+    };
+
+    const toggleCategorySelection = (category) => {
+      if (!selectionEnabled.value) {
+        selectionEnabled.value = true;
+      }
+      const list = emojiData.value[category] || [];
+      if (isAllSelectedInCategory(category)) {
+        list.forEach((emoji) => {
+          selectedEmojis.value.delete(`${category}:${emoji}`);
+        });
+      } else {
+        list.forEach((emoji) => {
+          selectedEmojis.value.set(`${category}:${emoji}`, { category, emoji });
+        });
+      }
+    };
+
+    // ----------------------------------------------------
+    // Actions - Batch Actions
+    // ----------------------------------------------------
+    const batchDeleteSelected = async () => {
+      const items = Array.from(selectedEmojis.value.values());
+      if (items.length === 0) return;
+
+      const confirmed = await confirm(
+        "批量删除表情包",
+        `确认删除已选中的 ${items.length} 个表情包？此操作不可恢复。`,
+        "确认批量删除",
+        "danger"
+      );
+      if (!confirmed) return;
+
+      // Group by category to hit Quart batch delete endpoint
+      const grouped = {};
+      items.forEach((item) => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item.emoji);
+      });
+
+      let successCount = 0;
+      for (const [cat, files] of Object.entries(grouped)) {
+        try {
+          const res = await fetch("/api/emoji/batch_delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: cat, image_files: files }),
+          });
+          if (res.ok) {
+            const result = await res.json();
+            successCount += result.deleted_count || 0;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      showToast(`已成功批量删除 ${successCount} 个表情包。`, "success", "批量删除完成");
+      selectedEmojis.value.clear();
+      await fetchEmojis();
+    };
+
+    const openMoveModal = () => {
+      moveModal.visible = true;
+    };
+
+    const closeMoveModal = () => {
+      moveModal.visible = false;
+    };
+
+    const handleMoveTarget = async (targetCategory) => {
+      const items = Array.from(selectedEmojis.value.values());
+      if (items.length === 0) return;
+
+      // Group by source category
+      const grouped = {};
+      items.forEach((item) => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item.emoji);
+      });
+
+      let movedCount = 0;
+      for (const [sourceCat, files] of Object.entries(grouped)) {
+        try {
+          const res = await fetch("/api/emoji/batch_move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              source_category: sourceCat,
+              target_category: targetCategory,
+              image_files: files,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            movedCount += data.moved_count || 0;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      showToast(`已成功将 ${movedCount} 个表情包移动到 ${targetCategory}`, "success", "移动成功");
+      closeMoveModal();
+      selectedEmojis.value.clear();
+      await fetchEmojis();
+    };
+
+    const clearAllEmojiFiles = async () => {
+      const totalCount = Object.values(emojiData.value).reduce((sum, list) => sum + (list?.length || 0), 0);
+      if (totalCount === 0) {
+        showToast("库中没有任何表情包可以清空", "warning");
+        return;
+      }
+
+      const confirmed = await showDangerConfirm(
+        "清空所有表情包",
+        `确认彻底清空库中的所有 ${totalCount} 个表情包？此操作将删除所有磁盘文件，但保留分类目录配置。`
+      );
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch("/api/emoji/clear_all", { method: "POST" });
+        if (!res.ok) throw new Error("清空失败");
+        const data = await res.json();
+
+        showToast(`已清空全部表情包，共删除 ${data.deleted_count} 个文件。`, "success", "清空成功");
+        selectedEmojis.value.clear();
+        await fetchEmojis();
+      } catch (e) {
+        showToast(e.message, "error", "清空失败");
+      }
+    };
+
+    // ----------------------------------------------------
+    // Actions - Categories Management
+    // ----------------------------------------------------
+    const openEditCategory = (category) => {
+      editCategoryModal.category = category;
+      editCategoryModal.originalCategory = category;
+      editCategoryModal.description = tagDescriptions.value[category] || "";
+      editCategoryModal.visible = true;
+    };
+
+    const saveEditCategory = async () => {
+      try {
+        const res = await fetch("/api/category/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category: editCategoryModal.category,
+            description: editCategoryModal.description,
+          }),
+        });
+        if (!res.ok) throw new Error("更新类别失败");
+
+        showToast(`类别「${editCategoryModal.category}」信息已更新。`, "success", "更新成功");
+        editCategoryModal.visible = false;
+        await fetchEmojis();
+        await checkSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "更新失败");
+      }
+    };
+
+    const saveNewCategory = async () => {
+      const name = addCategoryForm.name.trim();
+      const desc = addCategoryForm.description.trim() || "请添加描述";
+
+      if (!name) {
+        showToast("请输入分类名称再保存", "warning");
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/category/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: name, description: desc }),
+        });
+        if (!res.ok) throw new Error("添加分类失败");
+
+        showToast(`新分类「${name}」添加成功。`, "success", "保存成功");
+        addCategoryForm.name = "";
+        addCategoryForm.description = "";
+        addCategoryForm.visible = false;
+        await fetchEmojis();
+        await checkSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "添加失败");
+      }
+    };
+
+    const clearCategory = async (category) => {
+      const count = emojiData.value[category]?.length || 0;
+      if (count === 0) {
+        showToast("该类别当前为空，无需清空", "info");
+        return;
+      }
+
+      const confirmed = await showDangerConfirm(
+        `清空分类「${category}」`,
+        `确定要删除分类「${category}」下的全部 ${count} 个表情文件吗？保留分类名称和描述。`
+      );
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch("/api/category/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category }),
+        });
+        if (!res.ok) throw new Error("清空失败");
+        const data = await res.json();
+
+        showToast(`已清空分类 ${category}，删除了 ${data.deleted_count} 个表情包。`, "success", "清空成功");
+        await fetchEmojis();
+      } catch (e) {
+        showToast(e.message, "error", "清空失败");
+      }
+    };
+
+    const deleteCategory = async (category) => {
+      const count = emojiData.value[category]?.length || 0;
+      const confirmed = await showDangerConfirm(
+        `删除分类「${category}」`,
+        `确定要彻底删除分类「${category}」吗？这会同时删除磁盘文件夹以及其中 ${count} 个表情包。`
+      );
+      if (!confirmed) return;
+
+      try {
+        const res = await fetch("/api/category/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category }),
+        });
+        if (!res.ok) throw new Error("删除失败");
+
+        showToast(`已成功删除分类 ${category}`, "success", "删除成功");
+        await fetchEmojis();
+        await checkSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "删除失败");
+      }
+    };
+
+    // ----------------------------------------------------
+    // Drag & Drop (HTML5 standard API)
+    // ----------------------------------------------------
+    const onDragStart = (event, emoji, category) => {
+      let dragItems = [];
+      const key = `${category}:${emoji}`;
+      if (selectionEnabled.value && selectedEmojis.value.has(key)) {
+        dragItems = Array.from(selectedEmojis.value.values());
+      } else {
+        dragItems = [{ category, emoji }];
+      }
+
+      event.dataTransfer.setData("application/json", JSON.stringify({ items: dragItems, sourceCategory: category }));
+      event.dataTransfer.effectAllowed = "move";
+    };
+
+    const onDropEmoji = async (event, targetCategory) => {
+      try {
+        const dataStr = event.dataTransfer.getData("application/json");
+        if (!dataStr) return;
+        const { items, sourceCategory } = JSON.parse(dataStr);
+        if (sourceCategory === targetCategory) return;
+
+        const res = await fetch("/api/emoji/batch_move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_category: sourceCategory,
+            target_category: targetCategory,
+            image_files: items.map((i) => i.emoji),
+          }),
+        });
+        if (!res.ok) throw new Error("移动失败");
+        const result = await res.json();
+
+        showToast(`成功将 ${result.moved_count} 个表情包移动到分类 ${targetCategory}`, "success", "移动成功");
+        selectedEmojis.value.clear();
+        await fetchEmojis();
+      } catch (e) {
+        showToast(e.message, "error", "移动失败");
+      }
+    };
+
+    // ----------------------------------------------------
+    // File Upload Drag & Drop & Upload Progress
+    // ----------------------------------------------------
+    const triggerFileInput = (category) => {
+      const input = document.getElementById(`file-input-${category}`);
+      if (input) input.click();
+    };
+
+    const onFileSelected = (event, category) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        uploadFiles(files, category);
+      }
+      event.target.value = "";
+    };
+
+    const onUploadDrop = (event, category) => {
+      const files = event.dataTransfer.files;
+      if (files && files.length > 0) {
+        uploadFiles(files, category);
+      }
+    };
+
+    const uploadFiles = async (files, category) => {
+      if (uploadStateByCategory.value.has(category)) {
+        showToast(`当前分类 ${category} 正在上传中，请稍候。`, "warning");
+        return;
+      }
+
+      const total = files.length;
+      uploadStateByCategory.value.set(category, { progress: 0, text: `准备上传 0/${total}` });
+
+      let completed = 0;
+      let failed = 0;
+      let dups = 0;
+
+      for (let i = 0; i < total; i++) {
+        const file = files[i];
+        uploadStateByCategory.value.set(category, {
+          progress: Math.round((i / total) * 100),
+          text: `上传中: ${i + 1}/${total} (${file.name})`,
+        });
+
+        const formData = new FormData();
+        formData.append("category", category);
+        formData.append("image_file", file);
+
+        try {
+          const res = await fetch("/api/emoji/add", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (res.status === 409) {
+            dups++;
+          } else if (!res.ok) {
+            throw new Error();
+          } else {
+            completed++;
+          }
+        } catch (e) {
+          failed++;
+        }
+      }
+
+      uploadStateByCategory.value.delete(category);
+      showToast(
+        `上传完成！成功 ${completed} 个` +
+          (dups > 0 ? `，重复跳过 ${dups} 个` : "") +
+          (failed > 0 ? `，失败 ${failed} 个` : ""),
+        failed > 0 ? "warning" : "success",
+        "上传完毕"
+      );
+      await fetchEmojis();
+    };
+
+    // ----------------------------------------------------
+    // Context Menu Handling
+    // ----------------------------------------------------
+    const openContextMenu = (event, category, emoji) => {
+      const key = `${category}:${emoji}`;
+      let targetItems = [];
+      if (selectionEnabled.value && selectedEmojis.value.has(key)) {
+        targetItems = Array.from(selectedEmojis.value.values());
+      } else {
+        targetItems = [{ category, emoji }];
+      }
+
+      // Check pasteable items in clipboard
+      const pasteableItems = clipboardItems.value.filter((i) => i.category !== category);
+
+      contextMenu.x = event.clientX;
+      contextMenu.y = event.clientY;
+      contextMenu.targetCategory = category;
+      contextMenu.targetEmoji = emoji;
+      contextMenu.targetItems = targetItems;
+      contextMenu.pasteableItems = pasteableItems;
+      contextMenu.visible = true;
+    };
+
+    const closeContextMenu = () => {
+      contextMenu.visible = false;
+    };
+
+    const contextMenuDelete = async () => {
+      contextMenu.visible = false;
+      const count = contextMenu.targetItems.length;
+      if (count === 0) return;
+
+      const confirmed = await confirm(
+        "批量删除表情包",
+        `确认删除右键选中的 ${count} 个表情包吗？此操作不可恢复。`,
+        "确认删除",
+        "danger"
+      );
+      if (!confirmed) return;
+
+      const grouped = {};
+      contextMenu.targetItems.forEach((item) => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item.emoji);
+      });
+
+      let successCount = 0;
+      for (const [cat, files] of Object.entries(grouped)) {
+        try {
+          const res = await fetch("/api/emoji/batch_delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: cat, image_files: files }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            successCount += data.deleted_count || 0;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      showToast(`成功删除了 ${successCount} 个表情包`, "success", "删除成功");
+      // Prune select items
+      contextMenu.targetItems.forEach((i) => selectedEmojis.value.delete(`${i.category}:${i.emoji}`));
+      await fetchEmojis();
+    };
+
+    const contextMenuMove = () => {
+      contextMenu.visible = false;
+      openMoveModal();
+    };
+
+    const contextMenuCopy = () => {
+      contextMenu.visible = false;
+      clipboardItems.value = [...contextMenu.targetItems];
+      showToast(`已成功复制 ${clipboardItems.value.length} 个表情到剪贴板，可在其他分类右键粘贴。`, "success", "复制成功");
+    };
+
+    const contextMenuPaste = async () => {
+      contextMenu.visible = false;
+      const targetCategory = contextMenu.targetCategory;
+      const pasteable = contextMenu.pasteableItems;
+      if (pasteable.length === 0) return;
+
+      // Group by source category
+      const grouped = {};
+      pasteable.forEach((item) => {
+        if (!grouped[item.category]) grouped[item.category] = [];
+        grouped[item.category].push(item.emoji);
+      });
+
+      let copiedCount = 0;
+      for (const [sourceCat, files] of Object.entries(grouped)) {
+        try {
+          const res = await fetch("/api/emoji/batch_copy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              source_category: sourceCat,
+              target_category: targetCategory,
+              image_files: files,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            copiedCount += data.copied_count || 0;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+
+      showToast(`成功向分类 ${targetCategory} 复制粘贴了 ${copiedCount} 个表情包`, "success", "粘贴成功");
+      clipboardItems.value = [];
+      await fetchEmojis();
+    };
+
+    // ----------------------------------------------------
+    // Sync status & Operations
+    // ----------------------------------------------------
+    const checkSyncStatus = async (showAlert = true) => {
+      syncChecking.value = true;
+      try {
+        const res = await fetch("/api/sync/status");
+        if (!res.ok) throw new Error("获取状态失败");
+        const data = await res.json();
+
+        if (data.status === "error") throw new Error(data.message);
+
+        // Normalize differences
+        const diffs = data.differences || data;
+        syncStatus.value.missingInConfig = diffs.missing_in_config || [];
+        syncStatus.value.deletedCategories = diffs.deleted_categories || [];
+        syncStatus.value.inSync =
+          syncStatus.value.missingInConfig.length === 0 && syncStatus.value.deletedCategories.length === 0;
+
+        if (showAlert) {
+          showToast("配置同步状态检查完毕。", "success", "刷新成功");
+        }
+      } catch (e) {
+        showToast(e.message, "error", "同步检查失败");
+      } finally {
+        syncChecking.value = false;
+      }
+    };
+
+    const syncConfig = async () => {
+      try {
+        const res = await fetch("/api/sync", { method: "POST" });
+        if (!res.ok) throw new Error("同步失败");
+        showToast("已成功将磁盘文件夹同步至系统配置", "success", "配置同步完成");
+        await fetchEmojis();
+        await checkSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "同步失败");
+      }
+    };
+
+    const restoreCategory = async (category) => {
+      try {
+        const res = await fetch("/api/category/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category, description: "请添加描述" }),
+        });
+        if (!res.ok) throw new Error("恢复分类文件夹失败");
+        showToast(`分类「${category}」对应文件夹已成功重建。`, "success", "恢复成功");
+        await fetchEmojis();
+        await checkSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "恢复失败");
+      }
+    };
+
+    const removeFromConfig = async (category) => {
+      try {
+        const res = await fetch("/api/category/remove", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category }),
+        });
+        if (!res.ok) throw new Error("移除配置失败");
+        showToast(`已从配置中移除类别 「${category}」`, "success", "移除成功");
+        await fetchEmojis();
+        await checkSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "删除配置失败");
+      }
+    };
+
+    // ----------------------------------------------------
+    // Cloud & Image Host Synchronization
+    // ----------------------------------------------------
+    const checkImgHostSyncStatus = async (showAlert = true) => {
+      try {
+        const res = await fetch("/api/img_host/sync/status");
+        if (!res.ok) throw new Error("获取图床状态失败");
+        const data = await res.json();
+
+        const uploadCount = data.upload_count ?? data.to_upload?.length ?? 0;
+        const downloadCount = data.download_count ?? data.to_download?.length ?? 0;
+        const remoteImageCount = data.remote_image_count ?? data.remote_count ?? data.remote_images?.length ?? 0;
+        
+        let remoteStorageText = "未知";
+        if (typeof data.remote_total_bytes === "number") {
+          remoteStorageText = formatBytes(data.remote_total_bytes);
+        } else if (typeof data.remote_total_bytes_estimated === "number") {
+          remoteStorageText = `${formatBytes(data.remote_total_bytes_estimated)}（估算）`;
+        }
+
+        imgHostStatus.value.provider = data.provider_label || "未知图床";
+        imgHostStatus.value.remoteImageCount = remoteImageCount;
+        imgHostStatus.value.remoteStorageSize = remoteStorageText;
+        imgHostStatus.value.uploadCount = uploadCount;
+        imgHostStatus.value.downloadCount = downloadCount;
+
+        if (showAlert) {
+          showToast(
+            `${data.provider_label || "图床"}已刷新。云端：${remoteImageCount} 张，待上传：${uploadCount} 个。`,
+            "success",
+            "刷新成功"
+          );
+        }
+      } catch (e) {
+        showToast(e.message, "error", "图床同步检查失败");
+      }
+    };
+
+    const syncToRemote = async () => {
+      imgHostSyncing.value = true;
+      showToast("正在将待上传文件同步至云端图床...", "info", "上传同步中", 5000);
+      try {
+        const res = await fetch("/api/img_host/sync/upload", { method: "POST" });
+        if (!res.ok) throw new Error("上传同步失败");
+        showToast("本地表情包成功全量同步至云端图床", "success", "同步成功");
+        await checkImgHostSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "同步失败");
+      } finally {
+        imgHostSyncing.value = false;
+      }
+    };
+
+    const syncFromRemote = async () => {
+      imgHostSyncing.value = true;
+      showToast("正在从云端下载同步表情包...", "info", "下载同步中", 5000);
+      try {
+        const res = await fetch("/api/img_host/sync/download", { method: "POST" });
+        if (!res.ok) throw new Error("下载同步失败");
+        showToast("云端图床成功全量拉取同步至本地", "success", "同步成功");
+        await fetchEmojis();
+        await checkImgHostSyncStatus(false);
+      } catch (e) {
+        showToast(e.message, "error", "同步失败");
+      } finally {
+        imgHostSyncing.value = false;
+      }
+    };
+
+    // ----------------------------------------------------
+    // Lifecycle hooks
+    // ----------------------------------------------------
+    onMounted(async () => {
+      await fetchEmojis();
+      await fetchPersonas();
       void checkSyncStatus(false);
       void checkImgHostSyncStatus(false);
-    }, 180);
-  })();
+    });
 
-  // Expose legacy API on window object for HTML links/buttons
-  window.restoreCategory = restoreCategory;
-  window.removeFromConfig = removeFromConfig;
-  window.syncConfig = syncConfig;
-  window.editCategory = editCategory;
-  window.cancelEdit = cancelEdit;
-  window.saveCategory = saveCategory;
-  window.openEmojiEditModal = openEmojiEditModal;
-});
+    return {
+      emojiData,
+      tagDescriptions,
+      systemPersonas,
+      activeCategory,
+      activeDetailEmoji,
+      personaFilter,
+      toasts,
+      detailMetadata,
+      selectedEmotions,
+      selectedPersonas,
+      detailDrawerLoading,
+      uploadStateByCategory,
+      selectionEnabled,
+      selectedEmojis,
+      contextMenu,
+      clipboardItems,
+      confirmDialog,
+      dangerConfirmDialog,
+      moveModal,
+      addCategoryForm,
+      editCategoryModal,
+      syncChecking,
+      syncStatus,
+      imgHostSyncing,
+      imgHostStatus,
+      showToast,
+      removeToast,
+      fetchEmojis,
+      selectCategory,
+      getEmojiTags,
+      toggleDetailDrawer,
+      closeDetailDrawer,
+      toggleTagInDrawer,
+      togglePersonaInDrawer,
+      saveEmojiAttributes,
+      deleteEmoji,
+      handleConfirm,
+      startDangerCountdown,
+      handleDangerConfirm,
+      cancelDangerConfirm,
+      toggleSelectionMode,
+      isEmojiSelected,
+      toggleEmojiSelection,
+      onEmojiClick,
+      getCategorySelectedCount,
+      isAllSelectedInCategory,
+      toggleCategorySelection,
+      batchDeleteSelected,
+      openMoveModal,
+      closeMoveModal,
+      handleMoveTarget,
+      clearAllEmojiFiles,
+      openEditCategory,
+      saveEditCategory,
+      saveNewCategory,
+      clearCategory,
+      deleteCategory,
+      onDragStart,
+      onDropEmoji,
+      triggerFileInput,
+      onFileSelected,
+      onUploadDrop,
+      openContextMenu,
+      closeContextMenu,
+      contextMenuDelete,
+      contextMenuMove,
+      contextMenuCopy,
+      contextMenuPaste,
+      checkSyncStatus,
+      syncConfig,
+      restoreCategory,
+      removeFromConfig,
+      syncToRemote,
+      syncFromRemote,
+    };
+  },
+}).mount("#app");
