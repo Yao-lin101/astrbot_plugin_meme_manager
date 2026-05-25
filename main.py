@@ -311,6 +311,13 @@ class MemeSender(Star):
         async for res in CommandsHandler.overwrite_from_remote(self, event):
             yield res
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("压缩现有表情")
+    async def compress_existing_memes(self, event: AstrMessageEvent):
+        """手动压缩所有已存在的表情包文件"""
+        async for res in CommandsHandler.compress_existing_memes(self, event):
+            yield res
+
     @filter.event_message_type(EventMessageType.ALL)
     async def track_last_image(self, event: AstrMessageEvent):
         """记录会话中最后一次出现的图片，供“偷表情包”工具使用"""

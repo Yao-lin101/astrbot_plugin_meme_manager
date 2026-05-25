@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 from astrbot.api.event import AstrMessageEvent
@@ -8,7 +9,9 @@ from astrbot.core.utils.session_waiter import (
     session_waiter,
 )
 
+from ..config import MEMES_DIR
 from ..utils import (
+    compress_image,
     get_default_meme_categories,
     restore_default_memes,
 )
@@ -506,3 +509,82 @@ class CommandsHandler:
         except Exception as e:
             logger.error(f"从云端覆盖失败: {str(e)}")
             yield event.plain_result(f"从云端覆盖失败: {str(e)}")
+
+    @staticmethod
+    async def compress_existing_memes(sender, event: AstrMessageEvent):
+        """手动压缩所有已存在的表情包文件"""
+        cfg = sender.config
+        if not cfg.get("enable_compression", True):
+            yield event.plain_result(
+                "⚠️ 插件配置中未启用压缩功能，请先在配置中开启自动压缩。"
+            )
+            return
+
+        max_size_kb = cfg.get("compression_max_size_kb", 1024)
+        max_width = cfg.get("compression_max_width", 1024)
+        quality = cfg.get("compression_quality", 80)
+        compress_gif = cfg.get("compress_gif", False)
+
+        from .database import get_db_conn
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM memes")
+        rows = cursor.fetchall()
+        conn.close()
+
+        if not rows:
+            yield event.plain_result("📭 数据库中没有注册的表情包文件。")
+            return
+
+        yield event.plain_result(f"⚡ 开始检查并压缩 {len(rows)} 个表情包，请稍候...")
+
+        compressed_count = 0
+        skipped_count = 0
+        failed_count = 0
+        total_saved_bytes = 0
+
+        for row in rows:
+            filename = row["filename"]
+            file_path = os.path.join(MEMES_DIR, filename)
+
+            if not os.path.exists(file_path):
+                skipped_count += 1
+                continue
+
+            try:
+                with open(file_path, "rb") as f:
+                    orig_bytes = f.read()
+
+                orig_size = len(orig_bytes)
+
+                new_bytes = compress_image(
+                    image_bytes=orig_bytes,
+                    max_size_kb=max_size_kb,
+                    max_width=max_width,
+                    quality=quality,
+                    compress_gif=compress_gif,
+                    filename=filename,
+                )
+
+                new_size = len(new_bytes)
+                if new_size < orig_size:
+                    with open(file_path, "wb") as f:
+                        f.write(new_bytes)
+                    compressed_count += 1
+                    total_saved_bytes += orig_size - new_size
+                else:
+                    skipped_count += 1
+            except Exception as e:
+                logger.error(f"手动压缩表情包 {filename} 失败: {e}")
+                failed_count += 1
+
+        saved_mb = total_saved_bytes / (1024 * 1024)
+        yield event.plain_result(
+            f"📊 表情包压缩完成！\n"
+            f"━━━━━━━━━━━━━━\n"
+            f"✅ 成功压缩: {compressed_count} 个表情包\n"
+            f"⏩ 无需压缩: {skipped_count} 个表情包\n"
+            f"❌ 压缩失败: {failed_count} 个表情包\n"
+            f"💾 共节省空间: {saved_mb:.2f} MB"
+        )
