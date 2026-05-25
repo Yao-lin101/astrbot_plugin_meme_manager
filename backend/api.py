@@ -8,14 +8,13 @@ from .models import (
     DuplicateEmojiError,
     add_emoji_to_category,
     batch_copy_emojis,
-    batch_move_emojis,
     batch_delete_emojis,
+    batch_move_emojis,
     clear_all_emojis,
     clear_category_emojis,
     delete_emoji_from_category,
     get_emoji_by_category,
     move_emoji_to_category,
-    scan_emoji_folder,
 )
 
 api = Blueprint("api", __name__)
@@ -39,11 +38,48 @@ def _get_provider_label(img_sync) -> str:
 
 @api.route("/emoji", methods=["GET"])
 async def get_all_emojis():
-    """获取所有表情包（按类别分组）"""
-    emoji_data = await scan_emoji_folder()
-    for category in emoji_data:
-        if not isinstance(emoji_data[category], list):
-            emoji_data[category] = []
+    """获取所有表情包（按类别分组），支持按人格过滤"""
+    persona_id = request.args.get("persona_id")
+
+    from .database import get_db_conn
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+
+    if persona_id:
+        cursor.execute(
+            "SELECT filename, emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+            (f",{persona_id},",),
+        )
+    else:
+        cursor.execute("SELECT filename, emotions FROM memes")
+
+    rows = cursor.fetchall()
+    conn.close()
+
+    emoji_data = {}
+    for row in rows:
+        filename = row["filename"]
+        emotions = row["emotions"]
+
+        # Verify file exists
+        if not os.path.exists(os.path.join(MEMES_DIR, filename)):
+            continue
+
+        if emotions:
+            for emo in emotions.split(","):
+                emo = emo.strip()
+                if emo:
+                    emoji_data.setdefault(emo, []).append(filename)
+
+    # 补全配置中定义的所有分类，以防前端展示错乱
+    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+    category_manager = plugin_config.get("category_manager")
+    if category_manager:
+        for cat in category_manager.get_descriptions():
+            if cat not in emoji_data:
+                emoji_data[cat] = []
+
     return jsonify(emoji_data)
 
 
@@ -579,3 +615,110 @@ async def check_sync_process():
         return jsonify({"completed": False})
     except Exception as e:
         return jsonify({"message": str(e)}), 500
+
+
+@api.route("/personas", methods=["GET"])
+async def get_personas():
+    """获取所有系统注册的人格列表"""
+    try:
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        context = plugin_config.get("context")
+        if context:
+            personas = context.provider_manager.personas
+            result = []
+            for p in personas:
+                result.append(
+                    {
+                        "id": p.get("id") or p.get("name") or "",
+                        "name": p.get("name") or "",
+                        "prompt": p.get("prompt") or "",
+                    }
+                )
+            return jsonify(result)
+        elif "personas" in plugin_config:
+            return jsonify(plugin_config["personas"])
+        return jsonify([])
+    except Exception as e:
+        logger.error(f"获取人格列表失败: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@api.route("/emoji/edit", methods=["POST"])
+async def edit_emoji():
+    """编辑表情包的标签和允许的人格"""
+    try:
+        from pathlib import Path
+
+        data = await request.get_json()
+        filename = data.get("filename")
+        emotions = data.get("emotions")  # List of emotions
+        personas = data.get("personas")  # List of persona IDs, or ["*"]
+
+        if not filename:
+            return jsonify({"message": "Filename is required"}), 400
+
+        from .database import get_db_conn
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+
+        emotions_str = ",".join(emotions) if isinstance(emotions, list) else emotions
+        personas_str = ",".join(personas) if isinstance(personas, list) else personas
+
+        cursor.execute(
+            "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
+            (emotions_str, personas_str, filename),
+        )
+        conn.commit()
+
+        # Check if the meme has emotions. If not, delete it.
+        if not emotions_str:
+            cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
+            conn.commit()
+            file_path = Path(MEMES_DIR) / filename
+            if file_path.exists():
+                file_path.unlink()
+
+        conn.close()
+
+        # Reload
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        category_manager = plugin_config.get("category_manager")
+        if category_manager:
+            category_manager.sync_with_filesystem()
+
+        return jsonify({"message": "Emoji metadata updated successfully"}), 200
+    except Exception as e:
+        logger.error(f"更新表情元数据失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
+
+@api.route("/emoji/info/<filename>", methods=["GET"])
+async def get_emoji_info(filename):
+    """获取特定表情包的信息"""
+    try:
+        from .database import get_db_conn
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT emotions, personas FROM memes WHERE filename = ?", (filename,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return jsonify({"emotions": [], "personas": []}), 404
+
+        emotions = (
+            [e.strip() for e in row["emotions"].split(",")] if row["emotions"] else []
+        )
+        personas = (
+            [p.strip() for p in row["personas"].split(",")] if row["personas"] else []
+        )
+
+        return jsonify(
+            {"filename": filename, "emotions": emotions, "personas": personas}
+        ), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

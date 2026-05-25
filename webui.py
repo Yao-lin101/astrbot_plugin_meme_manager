@@ -77,7 +77,11 @@ async def index():
 @app.route("/memes/<category>/<filename>")
 async def serve_emoji(category, filename):
     category_path = os.path.join(MEMES_DIR, category)
-    if os.path.exists(os.path.join(category_path, filename)):
+    # Check absolute location
+    target_path = os.path.join(MEMES_DIR, filename)
+    if os.path.exists(target_path):
+        return await send_from_directory(MEMES_DIR, filename)
+    elif os.path.exists(os.path.join(category_path, filename)):
         return await send_from_directory(category_path, filename)
     else:
         return "File not found: " + os.path.join(category_path, filename), 404
@@ -104,6 +108,8 @@ async def start_server(config=None):
         "img_sync": config.get("img_sync", False),
         "category_manager": config.get("category_manager"),
         "webui_port": port,
+        "plugin_config": config.get("plugin_config", {}),
+        "personas": config.get("personas", []),
     }
 
     @app.before_serving
@@ -130,6 +136,8 @@ async def create_app(config=None):
             "img_sync": config.get("img_sync"),
             "category_manager": config.get("category_manager"),
             "webui_port": config.get("webui_port", 5000),
+            "plugin_config": config.get("plugin_config", {}),
+            "personas": config.get("personas", []),
         }
     else:
         print("警告: 配置格式不正确")

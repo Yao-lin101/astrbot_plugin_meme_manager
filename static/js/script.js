@@ -138,8 +138,11 @@ document.addEventListener("DOMContentLoaded", () => {
   async function fetchEmojis() {
     const requestToken = startLatestRequest("emojis");
     try {
+      const personaFilter = document.getElementById("persona-filter");
+      const personaId = personaFilter ? personaFilter.value : "";
+      const url = personaId ? `/api/emoji?persona_id=${encodeURIComponent(personaId)}` : "/api/emoji";
       const [emojiResponse, tagDescriptions] = await Promise.all([
-        fetch("/api/emoji", { signal: requestToken.controller.signal }).then((res) => {
+        fetch(url, { signal: requestToken.controller.signal }).then((res) => {
           if (!res.ok) throw new Error("获取表情包数据失败");
           return res.json();
         }),
@@ -1686,6 +1689,11 @@ document.addEventListener("DOMContentLoaded", () => {
       toggleEmojiSelection(category, emoji);
     });
 
+    emojiItem.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      openEmojiEditModal(emoji);
+    });
+
     emojiItem.addEventListener("keydown", (event) => {
       if (!selectionState.enabled) return;
       if (event.key === "Enter" || event.key === " ") {
@@ -2158,6 +2166,28 @@ document.addEventListener("DOMContentLoaded", () => {
             deleteEmoji(category, emoji);
           };
           emojiItem.appendChild(deleteBtn);
+
+          // 编辑按钮
+          const editBtn = document.createElement("button");
+          editBtn.className = "edit-btn";
+          editBtn.innerHTML = "<i class='fas fa-pen'></i>";
+          editBtn.style.position = "absolute";
+          editBtn.style.bottom = "5px";
+          editBtn.style.right = "5px";
+          editBtn.style.zIndex = "10";
+          editBtn.style.background = "rgba(0, 0, 0, 0.5)";
+          editBtn.style.color = "#fff";
+          editBtn.style.border = "none";
+          editBtn.style.borderRadius = "3px";
+          editBtn.style.padding = "2px 5px";
+          editBtn.style.fontSize = "10px";
+          editBtn.style.cursor = "pointer";
+          editBtn.onclick = (e) => {
+            e.stopPropagation();
+            openEmojiEditModal(emoji);
+          };
+          emojiItem.appendChild(editBtn);
+
           bindEmojiInteractions(emojiItem, category, emoji);
 
           // 使用 data-bg 存储图片URL
@@ -3746,4 +3776,180 @@ document.addEventListener("DOMContentLoaded", () => {
       finishLatestRequest("imgHostStatus", requestToken);
     }
   }
+
+  // Personas related variables
+  let systemPersonas = [];
+
+  // Fetch personas on load
+  async function fetchPersonas() {
+    try {
+      const res = await fetch("/api/personas");
+      if (!res.ok) throw new Error("获取人格列表失败");
+      systemPersonas = await res.json();
+      populatePersonaSelector();
+    } catch (e) {
+      console.error("加载系统人格失败", e);
+    }
+  }
+
+  function populatePersonaSelector() {
+    const filterSelect = document.getElementById("persona-filter");
+    if (!filterSelect) return;
+    
+    // Clear all except the first option
+    filterSelect.innerHTML = '<option value="">全部 / 全局</option>';
+    
+    systemPersonas.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.id})`;
+      filterSelect.appendChild(opt);
+    });
+  }
+
+  // Trigger reloading emojis when filtered persona changes
+  const filterSelect = document.getElementById("persona-filter");
+  if (filterSelect) {
+    filterSelect.addEventListener("change", () => {
+      fetchEmojis();
+    });
+  }
+
+  // Emoji Edit Modal handlers
+  const emojiEditModalRoot = document.getElementById("emoji-edit-modal");
+  const editEmojiFilename = document.getElementById("edit-emoji-filename");
+  const editEmojiEmotions = document.getElementById("edit-emoji-emotions");
+  const editEmojiPersonasDiv = document.getElementById("edit-emoji-personas-list");
+  
+  async function openEmojiEditModal(emoji) {
+    if (!emojiEditModalRoot) return;
+    
+    try {
+      // Fetch metadata from backend
+      const res = await fetch(`/api/emoji/info/${encodeURIComponent(emoji)}`);
+      if (!res.ok) throw new Error("获取表情包属性失败");
+      const metadata = await res.json();
+      
+      editEmojiFilename.value = emoji;
+      editEmojiEmotions.value = metadata.emotions ? metadata.emotions.join(", ") : "";
+      
+      // Populate personas checkboxes
+      if (editEmojiPersonasDiv) {
+        editEmojiPersonasDiv.innerHTML = "";
+        
+        // Add a global "*" checkbox
+        const globalLabel = document.createElement("label");
+        globalLabel.style.display = "flex";
+        globalLabel.style.alignItems = "center";
+        globalLabel.style.gap = "8px";
+        const globalCheckbox = document.createElement("input");
+        globalCheckbox.type = "checkbox";
+        globalCheckbox.value = "*";
+        globalCheckbox.checked = !metadata.personas || metadata.personas.includes("*");
+        const globalSpan = document.createElement("span");
+        globalSpan.textContent = "全局可用 (*)";
+        globalLabel.appendChild(globalCheckbox);
+        globalLabel.appendChild(globalSpan);
+        editEmojiPersonasDiv.appendChild(globalLabel);
+        
+        // When global is checked, uncheck all others. When others are checked, uncheck global.
+        globalCheckbox.addEventListener("change", () => {
+          if (globalCheckbox.checked) {
+            editEmojiPersonasDiv.querySelectorAll("input").forEach(cb => {
+              if (cb.value !== "*") cb.checked = false;
+            });
+          }
+        });
+        
+        systemPersonas.forEach(p => {
+          const label = document.createElement("label");
+          label.style.display = "flex";
+          label.style.alignItems = "center";
+          label.style.gap = "8px";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.value = p.id;
+          checkbox.checked = metadata.personas && metadata.personas.includes(p.id) && !metadata.personas.includes("*");
+          
+          checkbox.addEventListener("change", () => {
+            if (checkbox.checked) {
+              globalCheckbox.checked = false;
+            }
+          });
+          
+          const span = document.createElement("span");
+          span.textContent = `${p.name} (${p.id})`;
+          
+          label.appendChild(checkbox);
+          label.appendChild(span);
+          editEmojiPersonasDiv.appendChild(label);
+        });
+      }
+      
+      emojiEditModalRoot.classList.remove("hidden");
+      emojiEditModalRoot.setAttribute("aria-hidden", "false");
+    } catch (e) {
+      console.error(e);
+      showToast("无法获取表情包属性: " + e.message, "error", "加载失败");
+    }
+  }
+
+  function closeEmojiEditModal() {
+    if (emojiEditModalRoot) {
+      emojiEditModalRoot.classList.add("hidden");
+      emojiEditModalRoot.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  document.getElementById("emoji-edit-cancel-btn")?.addEventListener("click", closeEmojiEditModal);
+  
+  document.getElementById("emoji-edit-save-btn")?.addEventListener("click", async () => {
+    const filename = editEmojiFilename.value;
+    const emotionsStr = editEmojiEmotions.value;
+    
+    // Parse emotions
+    const emotions = emotionsStr.split(",").map(e => e.trim()).filter(e => e);
+    
+    // Get checked personas
+    const checkedPersonas = [];
+    editEmojiPersonasDiv.querySelectorAll("input:checked").forEach(cb => {
+      checkedPersonas.push(cb.value);
+    });
+    
+    // If none checked, default to "*" (global)
+    if (checkedPersonas.length === 0) {
+      checkedPersonas.push("*");
+    }
+    
+    try {
+      const saveBtn = document.getElementById("emoji-edit-save-btn");
+      setButtonBusy(saveBtn, "正在保存...");
+      
+      const res = await fetch("/api/emoji/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: filename,
+          emotions: emotions,
+          personas: checkedPersonas
+        })
+      });
+      
+      if (!res.ok) throw new Error("保存表情包属性失败");
+      
+      showToast("属性保存成功！", "success", "编辑成功");
+      closeEmojiEditModal();
+      await fetchEmojis();
+    } catch (e) {
+      console.error(e);
+      showToast("保存失败: " + e.message, "error", "保存失败");
+    } finally {
+      restoreButton(document.getElementById("emoji-edit-save-btn"));
+    }
+  });
+
+  // Call fetchPersonas during init
+  void fetchPersonas();
+  window.openEmojiEditModal = openEmojiEditModal;
+}
 });

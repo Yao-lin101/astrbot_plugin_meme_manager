@@ -1,12 +1,14 @@
 import hashlib
 import logging
 import os
-import shutil
 from pathlib import Path
 
+from quart import current_app
 from werkzeug.utils import secure_filename
 
 from ..config import MEMES_DIR
+from ..utils import compress_image
+from .database import get_db_conn
 
 logger = logging.getLogger(__name__)
 IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
@@ -24,86 +26,165 @@ def _is_supported_image(filename: str) -> bool:
     return filename.lower().endswith(IMAGE_EXTENSIONS)
 
 
-def _get_category_path(category: str) -> Path:
-    return Path(MEMES_DIR) / category
-
-
-def _iter_category_image_paths(category_path: Path) -> list[Path]:
-    if not category_path.is_dir():
-        return []
-    return [
-        path
-        for path in category_path.iterdir()
-        if path.is_file() and _is_supported_image(path.name)
-    ]
-
-
 def _calculate_file_hash(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def _find_duplicate_image(category_path: Path, content_hash: str) -> Path | None:
-    for existing_path in _iter_category_image_paths(category_path):
-        try:
-            if _calculate_file_hash(existing_path.read_bytes()) == content_hash:
-                return existing_path
-        except OSError as exc:
-            logger.warning(
-                "读取现有文件失败，跳过判重: %s, 错误: %s", existing_path, exc
-            )
+def _find_duplicate_image(content_hash: str) -> str | None:
+    # 扫描 memes 目录下的所有文件并计算 hash
+    if not os.path.exists(MEMES_DIR):
+        return None
+    for item in Path(MEMES_DIR).iterdir():
+        if item.is_file() and _is_supported_image(item.name):
+            try:
+                if _calculate_file_hash(item.read_bytes()) == content_hash:
+                    return item.name
+            except OSError:
+                continue
     return None
 
 
-def _build_available_file_path(category_path: Path, filename: str) -> Path:
-    candidate = category_path / filename
-    if not candidate.exists():
-        return candidate
-
-    suffix = Path(filename).suffix
-    stem = Path(filename).stem
-    index = 1
-    while True:
-        candidate = category_path / f"{stem}_{index}{suffix}"
-        if not candidate.exists():
-            return candidate
-        index += 1
+def _get_plugin_config() -> dict:
+    try:
+        return current_app.config.get("PLUGIN_CONFIG", {}).get("plugin_config", {})
+    except RuntimeError:
+        return {}
 
 
 async def scan_emoji_folder():
-    """扫描表情包文件夹，返回所有类别及其表情包"""
+    """扫描数据库，返回所有类别及其表情包列表"""
     emoji_data = {}
     if not os.path.exists(MEMES_DIR):
-        os.makedirs(MEMES_DIR)
-    for category in os.listdir(MEMES_DIR):
-        category_path = _get_category_path(category)
-        if not category_path.is_dir():
+        os.makedirs(MEMES_DIR, exist_ok=True)
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT filename, emotions FROM memes")
+    rows = cursor.fetchall()
+    conn.close()
+
+    for row in rows:
+        filename = row["filename"]
+        emotions = row["emotions"]
+
+        # 确认文件在本地确实存在
+        if not (Path(MEMES_DIR) / filename).exists():
             continue
 
-        emoji_data[category] = [
-            path.name for path in _iter_category_image_paths(category_path)
-        ]
+        if emotions:
+            for emotion in emotions.split(","):
+                emotion = emotion.strip()
+                if emotion:
+                    emoji_data.setdefault(emotion, []).append(filename)
+
     return emoji_data
 
 
 def get_emoji_by_category(category):
     """获取指定类别下的所有表情包"""
-    category_path = _get_category_path(category)
-    if not category_path.is_dir():
-        return []
-    return [path.name for path in _iter_category_image_paths(category_path)]
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    # 使用 SQL LIKE 精确匹配逗号分隔的值
+    cursor.execute(
+        "SELECT filename FROM memes WHERE ',' || emotions || ',' LIKE ?",
+        (f",{category},",),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = []
+    for row in rows:
+        filename = row["filename"]
+        if (Path(MEMES_DIR) / filename).exists():
+            result.append(filename)
+    return result
 
 
-def add_emoji_to_category(category, image_file):
+def save_and_register_meme(
+    image_bytes: bytes,
+    filename: str,
+    category: str,
+    personas: str = "*",
+    config: dict = None,
+) -> dict:
     """
-    添加表情包到指定类别
-
-    Args:
-        category: 类别名
-        image_file: 上传的文件对象
-
-    Returns:
-        dict[str, str]: 保存后的文件路径和最终文件名
+    保存并注册表情包到数据库和磁盘（由 chat 上传或 steal tool 调用）
     """
+    if not os.path.exists(MEMES_DIR):
+        os.makedirs(MEMES_DIR, exist_ok=True)
+
+    cfg = config or _get_plugin_config()
+
+    # 1. 自动压缩
+    if cfg.get("enable_compression", True):
+        max_size_kb = cfg.get("compression_max_size_kb", 1024)
+        max_width = cfg.get("compression_max_width", 1024)
+        quality = cfg.get("compression_quality", 80)
+        compress_gif = cfg.get("compress_gif", False)
+        image_bytes = compress_image(
+            image_bytes, max_size_kb, max_width, quality, compress_gif, filename
+        )
+
+    # 2. 生成安全文件名
+    safe_name = secure_filename(filename)
+    dest_path = Path(MEMES_DIR) / safe_name
+
+    # 避免覆盖重名文件
+    if dest_path.exists():
+        suffix = dest_path.suffix
+        stem = dest_path.stem
+        idx = 1
+        while True:
+            safe_name = f"{stem}_{idx}{suffix}"
+            dest_path = Path(MEMES_DIR) / safe_name
+            if not dest_path.exists():
+                break
+            idx += 1
+
+    # 3. 写入文件
+    with open(dest_path, "wb") as f:
+        f.write(image_bytes)
+
+    # 4. 插入或更新数据库记录
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT emotions, personas FROM memes WHERE filename = ?", (safe_name,)
+    )
+    row = cursor.fetchone()
+
+    if row:
+        existing_emotions = (
+            set(row["emotions"].split(",")) if row["emotions"] else set()
+        )
+        existing_emotions.add(category)
+
+        existing_personas = (
+            set(row["personas"].split(",")) if row["personas"] else set()
+        )
+        if personas != "*":
+            for p in personas.split(","):
+                existing_personas.add(p)
+        else:
+            existing_personas = {"*"}
+
+        cursor.execute(
+            "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
+            (",".join(existing_emotions), ",".join(existing_personas), safe_name),
+        )
+    else:
+        cursor.execute(
+            "INSERT INTO memes (filename, emotions, personas) VALUES (?, ?, ?)",
+            (safe_name, category, personas),
+        )
+    conn.commit()
+    conn.close()
+
+    return {"path": str(dest_path), "filename": safe_name}
+
+
+def add_emoji_to_category(category, image_file, personas="*"):
+    """添加表情包到指定类别（WebUI 上传端点调用）"""
     if not image_file:
         logger.error("没有接收到文件")
         raise ValueError("没有接收到文件")
@@ -112,120 +193,87 @@ def add_emoji_to_category(category, image_file):
         logger.error("文件名为空")
         raise ValueError("文件名为空")
 
-    # 确保类别目录存在
-    category_path = Path(MEMES_DIR) / category
-    category_path.mkdir(parents=True, exist_ok=True)
-
-    # 保存文件
     filename = image_file.filename
-    # 生成安全的文件名
-    safe_filename = secure_filename(filename)
+    image_file.stream.seek(0)
+    content = image_file.stream.read()
+    if not content:
+        logger.error("文件内容为空")
+        raise OSError("上传文件内容为空")
 
-    # 如果文件名被修改了，记录日志
-    if safe_filename != filename:
-        logger.info(f"文件名已从 {filename} 修改为安全的文件名 {safe_filename}")
-        filename = safe_filename
+    # 判重
+    content_hash = _calculate_file_hash(content)
+    duplicate_name = _find_duplicate_image(content_hash)
+    if duplicate_name is not None:
+        # 如果已存在，但在该类别下没有，则将该类别追加到现有文件的 emotions 中
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT emotions FROM memes WHERE filename = ?", (duplicate_name,)
+        )
+        row = cursor.fetchone()
+        if row:
+            emotions = set(row["emotions"].split(",")) if row["emotions"] else set()
+            if category not in emotions:
+                emotions.add(category)
+                cursor.execute(
+                    "UPDATE memes SET emotions = ? WHERE filename = ?",
+                    (",".join(emotions), duplicate_name),
+                )
+                conn.commit()
+        conn.close()
+        raise DuplicateEmojiError(duplicate_name)
 
-    file_path = category_path / filename
-
-    try:
-        # 检查目录是否可写
-        if not os.access(category_path, os.W_OK):
-            logger.error(f"没有权限写入目录: {category_path}")
-            raise OSError(f"没有权限写入目录: {category_path}")
-
-        # 检查磁盘空间是否足够
-        _, _, free = shutil.disk_usage(category_path)
-        # 假设文件不会超过10MB，保险起见检查是否至少有10MB
-        if free < 10 * 1024 * 1024:
-            logger.error(f"磁盘空间不足: 只有 {free / 1024 / 1024:.2f}MB")
-            raise OSError("磁盘空间不足")
-
-        # 直接以二进制方式读取和写入文件，避免FileStorage.save可能存在的问题
-        image_file.stream.seek(0)  # 确保从头开始读取
-        content = image_file.stream.read()
-        if not content:
-            logger.error("文件内容为空")
-            raise OSError("上传文件内容为空")
-
-        content_hash = _calculate_file_hash(content)
-        duplicate_path = _find_duplicate_image(category_path, content_hash)
-        if duplicate_path is not None:
-            logger.info(
-                "跳过重复文件上传: 类别=%s, 上传名=%s, 已存在文件=%s",
-                category,
-                filename,
-                duplicate_path.name,
-            )
-            raise DuplicateEmojiError(duplicate_path.name)
-
-        file_path = _build_available_file_path(category_path, filename)
-
-        # 记录日志，包括绝对路径
-        logger.info(f"准备保存文件到: {file_path.absolute()}")
-
-        # 以二进制写入模式保存文件
-        with open(file_path, "wb") as f:
-            f.write(content)
-
-        # 验证文件是否成功保存
-        if not file_path.exists():
-            logger.error(f"文件保存失败，{file_path} 不存在")
-            raise OSError(f"文件保存失败，{file_path} 不存在")
-
-        file_size = file_path.stat().st_size
-        if file_size == 0:
-            logger.error(f"文件保存失败，{file_path} 大小为0")
-            raise OSError(f"文件保存失败，{file_path} 大小为0")
-
-        logger.info(f"文件成功保存到 {file_path}, 大小: {file_size} 字节")
-        return {"path": str(file_path), "filename": file_path.name}
-
-    except Exception as e:
-        if isinstance(e, DuplicateEmojiError):
-            raise
-        logger.error(f"保存文件时出错: {str(e)}", exc_info=True)
-        # 如果文件已部分创建，尝试删除
-        if file_path.exists():
-            try:
-                file_path.unlink()  # 删除文件
-                logger.info(f"已删除部分上传的文件: {file_path}")
-            except Exception as del_e:
-                logger.error(f"无法删除部分上传的文件: {del_e}")
-        raise OSError(f"保存文件时出错: {str(e)}")
+    result = save_and_register_meme(content, filename, category, personas)
+    return result
 
 
 def delete_emoji_from_category(category, image_file):
-    """删除指定类别下的表情包"""
-    category_path = _get_category_path(category)
-    if not category_path.is_dir():
+    """从指定类别删除表情（实际是移除该标签，若没有标签则删除文件）"""
+    filename = Path(image_file).name
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT emotions FROM memes WHERE filename = ?", (filename,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
         return False
 
-    image_name = Path(image_file).name
-    image_path = category_path / image_name
-    if image_path.is_file() and _is_supported_image(image_path.name):
-        image_path.unlink()
+    emotions = set(row["emotions"].split(",")) if row["emotions"] else set()
+    if category in emotions:
+        emotions.remove(category)
+
+    if not emotions:
+        # 没有分类了，删除记录与文件
+        cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
+        conn.commit()
+        conn.close()
+
+        file_path = Path(MEMES_DIR) / filename
+        if file_path.exists():
+            file_path.unlink()
         return True
-    return False
+    else:
+        # 更新数据库分类
+        cursor.execute(
+            "UPDATE memes SET emotions = ? WHERE filename = ?",
+            (",".join(emotions), filename),
+        )
+        conn.commit()
+        conn.close()
+        return True
 
 
 def batch_delete_emojis(category: str, image_files: list[str]) -> dict[str, object]:
-    """批量删除指定类别下的表情包。"""
-    category_path = _get_category_path(category)
-    if not category_path.is_dir():
-        return {
-            "category_exists": False,
-            "deleted_files": [],
-            "missing_files": [],
-        }
-
+    """批量删除表情"""
     deleted_files = []
     missing_files = []
-    for image_file in dict.fromkeys(image_files):
-        if delete_emoji_from_category(category, image_file):
-            deleted_files.append(Path(image_file).name)
+
+    for file in dict.fromkeys(image_files):
+        if delete_emoji_from_category(category, file):
+            deleted_files.append(Path(file).name)
         else:
-            missing_files.append(Path(image_file).name)
+            missing_files.append(Path(file).name)
 
     return {
         "category_exists": True,
@@ -237,53 +285,41 @@ def batch_delete_emojis(category: str, image_files: list[str]) -> dict[str, obje
 def move_emoji_to_category(
     source_category: str, image_file: str, target_category: str
 ) -> dict[str, object]:
-    """将单个表情包移动到另一个类别。"""
-    source_category_path = _get_category_path(source_category)
-    if not source_category_path.is_dir():
+    """移动表情标签"""
+    filename = Path(image_file).name
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT emotions FROM memes WHERE filename = ?", (filename,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
         return {
-            "source_category_exists": False,
+            "source_category_exists": True,
             "target_category": target_category,
-            "filename": Path(image_file).name,
+            "filename": filename,
             "moved": False,
             "conflict": False,
             "missing": True,
         }
 
-    target_category_path = _get_category_path(target_category)
-    target_category_path.mkdir(parents=True, exist_ok=True)
+    emotions = set(row["emotions"].split(",")) if row["emotions"] else set()
+    if source_category in emotions:
+        emotions.remove(source_category)
+    emotions.add(target_category)
 
-    image_name = Path(image_file).name
-    source_image_path = source_category_path / image_name
-    target_image_path = target_category_path / image_name
+    cursor.execute(
+        "UPDATE memes SET emotions = ? WHERE filename = ?",
+        (",".join(emotions), filename),
+    )
+    conn.commit()
+    conn.close()
 
-    if not source_image_path.is_file() or not _is_supported_image(
-        source_image_path.name
-    ):
-        return {
-            "source_category_exists": True,
-            "target_category": target_category,
-            "filename": image_name,
-            "moved": False,
-            "conflict": False,
-            "missing": True,
-        }
-
-    if target_image_path.exists():
-        return {
-            "source_category_exists": True,
-            "target_category": target_category,
-            "filename": image_name,
-            "moved": False,
-            "conflict": True,
-            "missing": False,
-        }
-
-    shutil.move(str(source_image_path), str(target_image_path))
     return {
         "source_category_exists": True,
         "source_category": source_category,
         "target_category": target_category,
-        "filename": image_name,
+        "filename": filename,
         "moved": True,
         "conflict": False,
         "missing": False,
@@ -293,28 +329,17 @@ def move_emoji_to_category(
 def batch_move_emojis(
     source_category: str, image_files: list[str], target_category: str
 ) -> dict[str, object]:
-    """批量将表情包移动到另一个类别。"""
-    source_category_path = _get_category_path(source_category)
-    if not source_category_path.is_dir():
-        return {
-            "source_category_exists": False,
-            "moved_files": [],
-            "missing_files": [],
-            "conflicting_files": [],
-        }
-
+    """批量移动表情"""
     moved_files = []
     missing_files = []
     conflicting_files = []
 
     for image_file in dict.fromkeys(image_files):
-        result = move_emoji_to_category(source_category, image_file, target_category)
-        if result["moved"]:
-            moved_files.append(result["filename"])
-        elif result["conflict"]:
-            conflicting_files.append(result["filename"])
-        elif result["missing"]:
-            missing_files.append(result["filename"])
+        res = move_emoji_to_category(source_category, image_file, target_category)
+        if res["moved"]:
+            moved_files.append(res["filename"])
+        elif res["missing"]:
+            missing_files.append(res["filename"])
 
     return {
         "source_category_exists": True,
@@ -329,53 +354,39 @@ def batch_move_emojis(
 def copy_emoji_to_category(
     source_category: str, image_file: str, target_category: str
 ) -> dict[str, object]:
-    """将单个表情包复制到另一个类别。"""
-    source_category_path = _get_category_path(source_category)
-    if not source_category_path.is_dir():
+    """复制表情（即在已有记录上追加一个标签）"""
+    filename = Path(image_file).name
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT emotions FROM memes WHERE filename = ?", (filename,))
+    row = cursor.fetchone()
+
+    if not row:
+        conn.close()
         return {
-            "source_category_exists": False,
+            "source_category_exists": True,
             "target_category": target_category,
-            "filename": Path(image_file).name,
+            "filename": filename,
             "copied": False,
             "conflict": False,
             "missing": True,
         }
 
-    target_category_path = _get_category_path(target_category)
-    target_category_path.mkdir(parents=True, exist_ok=True)
+    emotions = set(row["emotions"].split(",")) if row["emotions"] else set()
+    emotions.add(target_category)
 
-    image_name = Path(image_file).name
-    source_image_path = source_category_path / image_name
-    target_image_path = target_category_path / image_name
+    cursor.execute(
+        "UPDATE memes SET emotions = ? WHERE filename = ?",
+        (",".join(emotions), filename),
+    )
+    conn.commit()
+    conn.close()
 
-    if not source_image_path.is_file() or not _is_supported_image(
-        source_image_path.name
-    ):
-        return {
-            "source_category_exists": True,
-            "target_category": target_category,
-            "filename": image_name,
-            "copied": False,
-            "conflict": False,
-            "missing": True,
-        }
-
-    if target_image_path.exists():
-        return {
-            "source_category_exists": True,
-            "target_category": target_category,
-            "filename": image_name,
-            "copied": False,
-            "conflict": True,
-            "missing": False,
-        }
-
-    shutil.copy2(source_image_path, target_image_path)
     return {
         "source_category_exists": True,
         "source_category": source_category,
         "target_category": target_category,
-        "filename": image_name,
+        "filename": filename,
         "copied": True,
         "conflict": False,
         "missing": False,
@@ -385,28 +396,17 @@ def copy_emoji_to_category(
 def batch_copy_emojis(
     source_category: str, image_files: list[str], target_category: str
 ) -> dict[str, object]:
-    """批量将表情包复制到另一个类别。"""
-    source_category_path = _get_category_path(source_category)
-    if not source_category_path.is_dir():
-        return {
-            "source_category_exists": False,
-            "copied_files": [],
-            "missing_files": [],
-            "conflicting_files": [],
-        }
-
+    """批量复制表情"""
     copied_files = []
     missing_files = []
     conflicting_files = []
 
     for image_file in dict.fromkeys(image_files):
-        result = copy_emoji_to_category(source_category, image_file, target_category)
-        if result["copied"]:
-            copied_files.append(result["filename"])
-        elif result["conflict"]:
-            conflicting_files.append(result["filename"])
-        elif result["missing"]:
-            missing_files.append(result["filename"])
+        res = copy_emoji_to_category(source_category, image_file, target_category)
+        if res["copied"]:
+            copied_files.append(res["filename"])
+        elif res["missing"]:
+            missing_files.append(res["filename"])
 
     return {
         "source_category_exists": True,
@@ -419,18 +419,36 @@ def batch_copy_emojis(
 
 
 def clear_category_emojis(category: str) -> dict[str, object]:
-    """清空指定类别下的所有表情包，但保留类别目录和配置。"""
-    category_path = _get_category_path(category)
-    if not category_path.is_dir():
-        return {
-            "category_exists": False,
-            "deleted_files": [],
-        }
+    """清除指定类别表情"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT filename, emotions FROM memes WHERE ',' || emotions || ',' LIKE ?",
+        (f",{category},",),
+    )
+    rows = cursor.fetchall()
 
     deleted_files = []
-    for image_path in _iter_category_image_paths(category_path):
-        image_path.unlink()
-        deleted_files.append(image_path.name)
+    for row in rows:
+        filename = row["filename"]
+        emotions = set(row["emotions"].split(",")) if row["emotions"] else set()
+        if category in emotions:
+            emotions.remove(category)
+
+        if not emotions:
+            cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
+            file_path = Path(MEMES_DIR) / filename
+            if file_path.exists():
+                file_path.unlink()
+        else:
+            cursor.execute(
+                "UPDATE memes SET emotions = ? WHERE filename = ?",
+                (",".join(emotions), filename),
+            )
+        deleted_files.append(filename)
+
+    conn.commit()
+    conn.close()
 
     return {
         "category_exists": True,
@@ -439,34 +457,30 @@ def clear_category_emojis(category: str) -> dict[str, object]:
 
 
 def clear_all_emojis() -> dict[str, object]:
-    """清空所有类别中的表情包，但保留目录和配置。"""
-    deleted_by_category = {}
-    memes_root = Path(MEMES_DIR)
-    if not memes_root.exists():
-        return {"deleted_by_category": deleted_by_category}
+    """清空所有表情"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT filename FROM memes")
+    rows = cursor.fetchall()
 
-    for category_path in memes_root.iterdir():
-        if not category_path.is_dir():
-            continue
-        result = clear_category_emojis(category_path.name)
-        deleted_files = result["deleted_files"]
-        if deleted_files:
-            deleted_by_category[category_path.name] = len(deleted_files)
+    deleted_by_category = {}
+    for row in rows:
+        filename = row["filename"]
+        file_path = Path(MEMES_DIR) / filename
+        if file_path.exists():
+            file_path.unlink()
+
+    cursor.execute("DELETE FROM memes")
+    conn.commit()
+    conn.close()
 
     return {"deleted_by_category": deleted_by_category}
 
 
 def update_emoji_in_category(category, old_image_file, new_image_file):
-    """更新（替换）表情包文件"""
-    category_path = os.path.join(MEMES_DIR, category)
-
-    if not os.path.isdir(category_path):
-        return False
-    old_image_path = os.path.join(category_path, old_image_file)
-    if os.path.exists(old_image_path):
-        os.remove(old_image_path)
-        filename = secure_filename(new_image_file.filename)
-        target_path = os.path.join(category_path, filename)
-        new_image_file.save(target_path)
-        return True
-    return False
+    """更新/替换表情包"""
+    # 移除旧的表情包分类标签
+    delete_emoji_from_category(category, old_image_file)
+    # 添加新的表情包到该分类
+    add_emoji_to_category(category, new_image_file)
+    return True

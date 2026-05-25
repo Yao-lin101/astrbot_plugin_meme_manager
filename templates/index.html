@@ -46,6 +46,12 @@
             支持批量选择、拖拽移动、图床同步和移动端管理。
           </p>
         </div>
+        <div class="header-actions" style="margin-left: auto; display: flex; align-items: center; gap: 10px; padding-right: 20px;">
+          <label for="persona-filter" style="font-weight: 500; font-size: 0.9em; color: var(--text-secondary, #64748b);">当前人格：</label>
+          <select id="persona-filter" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color, #e2e8f0); outline: none; background: var(--bg-card, #fff); font-size: 0.9em; cursor: pointer;">
+            <option value="">全部 / 全局</option>
+          </select>
+        </div>
       </div>
     </header>
 
@@ -275,6 +281,29 @@
         <span id="drag-hud-label">3s</span>
       </div>
       <div id="drag-hud-caption" class="drag-hud-caption">长按 3 秒进入拖拽</div>
+    </div>
+
+    <!-- 表情包编辑模态框 -->
+    <div id="emoji-edit-modal" class="category-edit-modal hidden" aria-hidden="true">
+      <div class="category-edit-modal-card" role="dialog" aria-modal="true" aria-labelledby="emoji-edit-modal-title">
+        <p class="category-edit-modal-eyebrow">表情包管理</p>
+        <h2 id="emoji-edit-modal-title">编辑表情包属性</h2>
+        <p id="emoji-edit-modal-description">修改表情包的分类标签（逗号分隔）和允许使用的人格限制。</p>
+        <div class="category-edit-form-panel">
+          <input type="hidden" id="edit-emoji-filename" />
+          <label for="edit-emoji-emotions">分类标签 (emotions)</label>
+          <input id="edit-emoji-emotions" type="text" placeholder="例如: happy, sad (逗号分隔)" style="padding: 8px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; width: 100%; box-sizing: border-box;" />
+          
+          <label style="margin-top: 15px; display: block; font-weight: 500;">允许的人格限制 (留空或勾选全部表示全局可用)</label>
+          <div id="edit-emoji-personas-list" style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto; padding: 10px; border: 1px solid var(--border-color, #e2e8f0); border-radius: 6px; background: var(--bg-card, #fff);">
+            <!-- 由 JS 动态填充 -->
+          </div>
+        </div>
+        <div class="category-edit-modal-actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 10px;">
+          <button id="emoji-edit-cancel-btn" class="secondary" style="padding: 8px 16px; border-radius: 6px; border: 1px solid var(--border-color, #e2e8f0); background: transparent; cursor: pointer;">取消</button>
+          <button id="emoji-edit-save-btn" style="padding: 8px 16px; border-radius: 6px; border: none; background: var(--primary-color, #3b82f6); color: #fff; cursor: pointer;">保存修改</button>
+        </div>
+      </div>
     </div>
 
 	    <script src="{{ url_for('static', filename='js/script.js') }}"></script>

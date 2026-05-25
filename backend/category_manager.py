@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 
 from ..config import DEFAULT_CATEGORY_DESCRIPTIONS, MEMES_DATA_PATH, MEMES_DIR
 from ..utils import ensure_dir_exists, load_json, save_json
@@ -26,15 +25,26 @@ class CategoryManager:
         return load_json(MEMES_DATA_PATH, DEFAULT_CATEGORY_DESCRIPTIONS)
 
     def get_local_categories(self) -> set[str]:
-        """获取本地文件夹中的类别"""
+        """获取本地表情包库中的类别标签"""
         try:
-            return {
-                d
-                for d in os.listdir(MEMES_DIR)
-                if os.path.isdir(os.path.join(MEMES_DIR, d))
-            }
+            from .database import get_db_conn
+
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT emotions FROM memes")
+            rows = cursor.fetchall()
+            conn.close()
+
+            categories = set()
+            for row in rows:
+                if row["emotions"]:
+                    for emo in row["emotions"].split(","):
+                        emo = emo.strip()
+                        if emo:
+                            categories.add(emo)
+            return categories
         except Exception as e:
-            logger.error(f"获取本地类别失败: {e}")
+            logger.error(f"从数据库获取类别标签失败: {e}")
             return set()
 
     def get_sync_status(self) -> tuple[list[str], list[str]]:
@@ -72,11 +82,28 @@ class CategoryManager:
             del self.descriptions[old_name]
             self.descriptions[new_name] = description
 
-            # 更新文件夹名称
-            old_path = os.path.join(MEMES_DIR, old_name)
-            new_path = os.path.join(MEMES_DIR, new_name)
-            if os.path.exists(old_path):
-                os.rename(old_path, new_path)
+            # 更新数据库中的表情标签
+            from .database import get_db_conn
+
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, emotions FROM memes WHERE ',' || emotions || ',' LIKE ?",
+                (f",{old_name},",),
+            )
+            rows = cursor.fetchall()
+            for row in rows:
+                row_id = row["id"]
+                emotions = set(row["emotions"].split(",")) if row["emotions"] else set()
+                if old_name in emotions:
+                    emotions.remove(old_name)
+                emotions.add(new_name)
+                cursor.execute(
+                    "UPDATE memes SET emotions = ? WHERE id = ?",
+                    (",".join(emotions), row_id),
+                )
+            conn.commit()
+            conn.close()
 
             # 同步更新内存中的数据
             return save_json(self.descriptions, MEMES_DATA_PATH)
@@ -92,10 +119,10 @@ class CategoryManager:
                 del self.descriptions[category]
                 save_json(self.descriptions, MEMES_DATA_PATH)
 
-            # 删除文件夹
-            category_path = os.path.join(MEMES_DIR, category)
-            if os.path.exists(category_path):
-                shutil.rmtree(category_path)
+            # 清除表情标签和空文件
+            from .models import clear_category_emojis
+
+            clear_category_emojis(category)
 
             return True
         except Exception as e:

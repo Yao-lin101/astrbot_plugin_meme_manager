@@ -1,12 +1,12 @@
-import json
 import hashlib
+import json
 import logging
 import os
-from pathlib import Path
 import random
 import re
 import shutil
 import string
+from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -229,3 +229,57 @@ async def get_public_ip():
                 continue
 
     return "[服务器公网ip]"
+
+
+def compress_image(
+    image_bytes: bytes,
+    max_size_kb: int,
+    max_width: int,
+    quality: int,
+    compress_gif: bool,
+    filename: str,
+) -> bytes:
+    """压缩单张图片"""
+    try:
+        import io
+
+        from PIL import Image as PILImage
+
+        size_kb = len(image_bytes) / 1024
+        if size_kb <= max_size_kb:
+            return image_bytes
+
+        ext = Path(filename).suffix.lower()
+        if ext == ".gif" and not compress_gif:
+            return image_bytes
+
+        img = PILImage.open(io.BytesIO(image_bytes))
+        orig_format = img.format or "JPEG"
+
+        width, height = img.size
+        if width > max_width:
+            new_width = max_width
+            new_height = int(height * (max_width / width))
+            img = img.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
+
+        out_io = io.BytesIO()
+
+        save_format = orig_format
+        save_args = {}
+        if save_format in ("JPEG", "JPG", "WEBP"):
+            save_args["quality"] = quality
+        elif save_format == "PNG":
+            save_args["optimize"] = True
+
+        img.save(out_io, format=save_format, **save_args)
+        compressed_bytes = out_io.getvalue()
+
+        if len(compressed_bytes) < len(image_bytes):
+            logger.info(
+                f"图片压缩成功: {size_kb:.1f}KB -> {len(compressed_bytes) / 1024:.1f}KB"
+            )
+            return compressed_bytes
+        return image_bytes
+    except Exception as e:
+        logger.error(f"压缩图片失败: {e}", exc_info=True)
+        return image_bytes

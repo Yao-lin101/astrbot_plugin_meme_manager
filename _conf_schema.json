@@ -215,5 +215,35 @@
     "type": "bool",
     "default": false,
     "hint": "开启后，在流式传输模式下表情图片将作为独立消息发送（流式模式下无法混合图文）"
+  },
+  "enable_compression": {
+    "description": "启用自动压缩表情包",
+    "type": "bool",
+    "default": true,
+    "hint": "上传或偷取表情包时，如果文件超出大小或分辨率限制，将自动进行压缩。"
+  },
+  "compression_max_size_kb": {
+    "description": "表情包最大大小 (KB)",
+    "type": "int",
+    "default": 1024,
+    "hint": "超出该大小的文件将被压缩"
+  },
+  "compression_max_width": {
+    "description": "表情包最大尺寸 (像素)",
+    "type": "int",
+    "default": 1024,
+    "hint": "图片宽度若超出此像素值，将等比例缩小"
+  },
+  "compression_quality": {
+    "description": "压缩质量 (1-100)",
+    "type": "int",
+    "default": 80,
+    "hint": "压缩静态图时所采用的质量比例，值越低图片越小但质量越差"
+  },
+  "compress_gif": {
+    "description": "启用GIF格式压缩",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后将尝试压缩动图GIF（由于可能损坏动画帧，建议关闭）"
   }
 }
