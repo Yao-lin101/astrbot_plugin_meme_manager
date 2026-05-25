@@ -253,17 +253,22 @@ def compress_image(
 
         target_format = None
         new_filename = filename
-        if compression_format == "webp" and ext != ".webp":
-            target_format = "WEBP"
-            new_filename = str(Path(filename).with_suffix(".webp"))
-        elif compression_format == "avif" and ext != ".avif":
-            if features.check("avif"):
-                target_format = "AVIF"
-                new_filename = str(Path(filename).with_suffix(".avif"))
-            else:
-                logger.warning("Pillow 不支持 AVIF，自动回退到 WEBP 格式进行压缩。")
+        if ext == ".gif":
+            if compression_format == "webp":
                 target_format = "WEBP"
                 new_filename = str(Path(filename).with_suffix(".webp"))
+        else:
+            if compression_format == "webp" and ext != ".webp":
+                target_format = "WEBP"
+                new_filename = str(Path(filename).with_suffix(".webp"))
+            elif compression_format == "avif" and ext != ".avif":
+                if features.check("avif"):
+                    target_format = "AVIF"
+                    new_filename = str(Path(filename).with_suffix(".avif"))
+                else:
+                    logger.warning("Pillow 不支持 AVIF，自动回退到 WEBP 格式进行压缩。")
+                    target_format = "WEBP"
+                    new_filename = str(Path(filename).with_suffix(".webp"))
 
         img = PILImage.open(io.BytesIO(image_bytes))
         orig_format = img.format or "JPEG"
@@ -273,11 +278,6 @@ def compress_image(
             save_format = "JPEG"
 
         width, height = img.size
-        if width > max_width:
-            new_width = max_width
-            new_height = int(height * (max_width / width))
-            img = img.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
-
         out_io = io.BytesIO()
 
         save_args = {}
@@ -286,7 +286,35 @@ def compress_image(
         elif save_format == "PNG":
             save_args["optimize"] = True
 
-        img.save(out_io, format=save_format, **save_args)
+        is_animated = getattr(img, "is_animated", False)
+        if is_animated and save_format in ("GIF", "WEBP"):
+            # Preserve loop and duration
+            duration = img.info.get("duration", 100)
+            loop = img.info.get("loop", 0)
+            save_args["duration"] = duration
+            save_args["loop"] = loop
+
+            frames = []
+            for frame_idx in range(img.n_frames):
+                img.seek(frame_idx)
+                frame = img.copy()
+                if width > max_width:
+                    new_width = max_width
+                    new_height = int(height * (max_width / width))
+                    frame = frame.resize(
+                        (new_width, new_height), PILImage.Resampling.LANCZOS
+                    )
+                frames.append(frame)
+            save_args["save_all"] = True
+            save_args["append_images"] = frames[1:]
+            frames[0].save(out_io, format=save_format, **save_args)
+        else:
+            if width > max_width:
+                new_width = max_width
+                new_height = int(height * (max_width / width))
+                img = img.resize((new_width, new_height), PILImage.Resampling.LANCZOS)
+            img.save(out_io, format=save_format, **save_args)
+
         compressed_bytes = out_io.getvalue()
 
         size_kb = len(image_bytes) / 1024
