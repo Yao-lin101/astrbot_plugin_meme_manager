@@ -370,7 +370,7 @@ class EventHandlers:
                         # 优先查找当前人格专属表情包
                         cursor.execute(
                             "SELECT filename FROM memes WHERE (',' || emotions || ',' LIKE ?) AND (',' || personas || ',' LIKE ?)",
-                            (f",{emotion},", f",{persona_id},"),
+                            (f"%,{emotion},%", f"%,{persona_id},%"),
                         )
                         rows = cursor.fetchall()
 
@@ -381,7 +381,7 @@ class EventHandlers:
                             # 降级查找全局表情包
                             cursor.execute(
                                 "SELECT filename FROM memes WHERE (',' || emotions || ',' LIKE ?) AND (personas = '*')",
-                                (f",{emotion},",),
+                                (f"%,{emotion},%",),
                             )
                             rows = cursor.fetchall()
 
@@ -1075,14 +1075,14 @@ class EventHandlers:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT filename FROM memes WHERE (',' || emotions || ',' LIKE ?) AND (',' || personas || ',' LIKE ?)",
-                    (f",{emotion},", f",{persona_id},"),
+                    (f"%,{emotion},%", f"%,{persona_id},%"),
                 )
                 rows = cursor.fetchall()
 
                 if not rows:
                     cursor.execute(
                         "SELECT filename FROM memes WHERE (',' || emotions || ',' LIKE ?) AND (personas = '*')",
-                        (f",{emotion},",),
+                        (f"%,{emotion},%",),
                     )
                     rows = cursor.fetchall()
 

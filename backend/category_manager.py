@@ -89,7 +89,7 @@ class CategoryManager:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT id, emotions FROM memes WHERE ',' || emotions || ',' LIKE ?",
-                (f",{old_name},",),
+                (f"%,{old_name},%",),
             )
             rows = cursor.fetchall()
             for row in rows:

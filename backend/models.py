@@ -86,7 +86,7 @@ def get_emoji_by_category(category):
     # 使用 SQL LIKE 精确匹配逗号分隔的值
     cursor.execute(
         "SELECT filename FROM memes WHERE ',' || emotions || ',' LIKE ?",
-        (f",{category},",),
+        (f"%,{category},%",),
     )
     rows = cursor.fetchall()
     conn.close()
@@ -447,7 +447,7 @@ def clear_category_emojis(category: str) -> dict[str, object]:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT filename, emotions FROM memes WHERE ',' || emotions || ',' LIKE ?",
-        (f",{category},",),
+        (f"%,{category},%",),
     )
     rows = cursor.fetchall()
 

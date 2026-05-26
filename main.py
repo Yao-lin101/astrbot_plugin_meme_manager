@@ -97,8 +97,7 @@ class MemeSender(Star):
             delattr(self, "_r2_bucket_name")
 
         # 构建表情包提示词
-        personas = self.context.provider_manager.personas
-        self.persona_backup = copy.deepcopy(personas)
+        self.persona_prompts_backup = {}
         self._reload_personas()
 
     def _ensure_default_category_descriptions(self, categories: list[str]) -> None:
@@ -126,21 +125,32 @@ class MemeSender(Star):
         )
         personas = self.context.provider_manager.personas
 
+        if not hasattr(self, "persona_prompts_backup"):
+            self.persona_prompts_backup = {}
+
+        for persona in personas:
+            name = persona.get("name") or ""
+            if name not in self.persona_prompts_backup:
+                self.persona_prompts_backup[name] = persona.get("prompt") or ""
+
         if self.emotion_llm_enabled:
-            for persona, persona_backup in zip(personas, self.persona_backup):
-                persona["prompt"] = persona_backup["prompt"]
+            for persona in personas:
+                name = persona.get("name") or ""
+                persona["prompt"] = self.persona_prompts_backup.get(name, "")
             return
 
         from .backend.database import get_db_conn
 
-        for persona, persona_backup in zip(personas, self.persona_backup):
-            persona_id = persona.get("id") or persona.get("name") or ""
+        for persona in personas:
+            name = persona.get("name") or ""
+            original_prompt = self.persona_prompts_backup.get(name, "")
+            persona_id = persona.get("id") or name or ""
 
             conn = get_db_conn()
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
-                (f",{persona_id},",),
+                (f"%,{persona_id},%",),
             )
             rows = cursor.fetchall()
             conn.close()
@@ -160,7 +170,7 @@ class MemeSender(Star):
             }
 
             if not persona_category_mapping:
-                persona["prompt"] = persona_backup["prompt"]
+                persona["prompt"] = original_prompt
                 continue
 
             persona_category_mapping_string = dict_to_string(persona_category_mapping)
@@ -171,7 +181,7 @@ class MemeSender(Star):
                 + str(self.max_emotions_per_message)
                 + self.prompt_tail_2
             )
-            persona["prompt"] = persona_backup["prompt"] + sys_prompt_add
+            persona["prompt"] = original_prompt + sys_prompt_add
 
     async def reload_emotions(self):
         """动态重新加载表情配置"""
@@ -343,8 +353,11 @@ class MemeSender(Star):
     async def terminate(self):
         """清理资源"""
         personas = self.context.provider_manager.personas
-        for persona, persona_backup in zip(personas, self.persona_backup):
-            persona["prompt"] = persona_backup["prompt"]
+        if hasattr(self, "persona_prompts_backup"):
+            for persona in personas:
+                name = persona.get("name") or ""
+                if name in self.persona_prompts_backup:
+                    persona["prompt"] = self.persona_prompts_backup[name]
 
         if self.img_sync:
             self.img_sync.stop_sync()

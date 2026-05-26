@@ -49,7 +49,7 @@ async def get_all_emojis():
     if persona_id:
         cursor.execute(
             "SELECT filename, emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
-            (f",{persona_id},",),
+            (f"%,{persona_id},%",),
         )
     else:
         cursor.execute("SELECT filename, emotions FROM memes")
