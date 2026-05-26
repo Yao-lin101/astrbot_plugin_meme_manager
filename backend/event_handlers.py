@@ -11,7 +11,7 @@ from PIL import Image as PILImage
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-from astrbot.core.message.components import Image, Plain
+from astrbot.core.message.components import Image, Plain, Reply
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 
 from ..config import MEMES_DIR
@@ -51,20 +51,6 @@ class EventHandlers:
             persona_id = "default"
 
         return persona_id
-
-    @staticmethod
-    async def track_last_image(sender, event: AstrMessageEvent):
-        """记录会话中最后一次出现的图片，供“偷表情包”工具使用"""
-        user_key = f"{event.session_id}_{event.get_sender_id()}"
-        if user_key in sender.upload_states:
-            return
-
-        images = [c for c in event.message_obj.message if isinstance(c, Image)]
-        if images:
-            if not hasattr(sender, "last_images"):
-                sender.last_images = {}
-            sender.last_images[event.unified_msg_origin] = images[-1].url
-            logger.debug(f"[meme_manager] 记录了最近的一张图片 URL: {images[-1].url}")
 
     @staticmethod
     async def resp(sender, event: AstrMessageEvent, response: LLMResponse):
@@ -642,12 +628,6 @@ class EventHandlers:
                 )
             ]
 
-            if sender.img_sync:
-                result_msg.append(Plain("\n"))
-                result_msg.append(
-                    Plain("☁️ 检测到已配置图床，如需同步到云端请使用命令：同步到云端")
-                )
-
             yield event.chain_result(result_msg)
             await sender.reload_emotions()
 
@@ -661,13 +641,27 @@ class EventHandlers:
         Args:
             categories(list): 对应的表情包类别/情绪分类名称列表（如 ["happy", "sad"] 等）
         """
-        # 1. 获取最近的图片记录
-        if not hasattr(sender, "last_images") or not sender.last_images:
-            return "没有在聊天记录中找到可以偷的表情包/图片哦。"
+        # 1. 从当前事件消息中提取图片（优先支持引用/回复图片，其次支持同消息内直发图片）
+        last_image_url = None
 
-        last_image_url = sender.last_images.get(event.unified_msg_origin)
+        # A. 检测当前事件是否引用了图片
+        for comp in event.message_obj.message:
+            if isinstance(comp, Reply) and comp.chain:
+                for sub_comp in comp.chain:
+                    if isinstance(sub_comp, Image):
+                        last_image_url = sub_comp.url
+                        break
+                if last_image_url:
+                    break
+
+        # B. 检测当前事件是否直发了图片
         if not last_image_url:
-            return "没有在聊天记录中找到可以偷的表情包/图片哦。"
+            images = [c for c in event.message_obj.message if isinstance(c, Image)]
+            if images:
+                last_image_url = images[-1].url
+
+        if not last_image_url:
+            return "没有在当前消息或引用的回复中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
 
         # 2. 检查分类是否合法（如果未启用多模态判定，且 categories 为空，则报错）
         if not getattr(sender, "multimodal_llm_enabled", False) and not categories:
