@@ -95,13 +95,21 @@ class EventHandlers:
             filename = row["filename"]
             full_path = os.path.join(MEMES_DIR, filename)
             if os.path.exists(full_path):
-                # 计算与当前匹配情绪列表的重合数作为评分
+                # 计算与当前匹配情绪列表的重合数作为基础评分，并加上基于顺序的偏置评分
                 meme_emotions = (
                     [e.strip() for e in row["emotions"].split(",") if e.strip()]
                     if row["emotions"]
                     else []
                 )
-                score = sum(1 for e in found_emotions if e in meme_emotions)
+                matched_count = sum(1 for e in found_emotions if e in meme_emotions)
+                
+                # 偏置评分：越靠前的标签越优先
+                position_bonus = 0
+                for idx, e in enumerate(found_emotions):
+                    if e in meme_emotions:
+                        position_bonus += max(0, 100 - idx)
+                
+                score = matched_count * 1000 + position_bonus
                 valid_memes.append((filename, score))
 
         if not valid_memes:
@@ -301,8 +309,8 @@ class EventHandlers:
                     valid_list = sorted(valid_emoticons)
                     prompt = (
                         "你是表情标签选择器，只能从给定标签中选择。\n"
-                        "请基于文本语义判断需要的表情，返回JSON格式："
-                        '{"emotions":["tag1","tag2"]}。\n'
+                        "请基于文本语义判断需要的表情，并将最契合、最相关的标签排在最前面，返回JSON格式：\n"
+                        '{"emotions":["tag1","tag2"]}\n'
                         "只输出JSON，不要解释。\n"
                         f"可用标签: {', '.join(valid_list)}\n"
                         f"文本: {clean_text}"
@@ -349,19 +357,17 @@ class EventHandlers:
             except Exception as e:
                 logger.error(f"[meme_manager] 情感模型调用失败: {e}")
 
-        # 去重并应用数量限制
+        # 去重
         seen = set()
         filtered_emotions = []
         for emo in sender.found_emotions:
             if emo not in seen:
                 seen.add(emo)
                 filtered_emotions.append(emo)
-            if len(filtered_emotions) >= sender.max_emotions_per_message:
-                break
 
         sender.found_emotions = filtered_emotions
         logger.info(
-            f"[meme_manager] 去重后的最终表情列表 (去重及限额后): {sender.found_emotions}"
+            f"[meme_manager] 去重后的最终表情标签列表: {sender.found_emotions}"
         )
 
         clean_text = re.sub(r"&&+", "", clean_text)
