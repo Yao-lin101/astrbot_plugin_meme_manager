@@ -1133,7 +1133,7 @@ createApp({
 
     const syncConfig = async () => {
       try {
-        const res = await fetch("/api/sync", { method: "POST" });
+        const res = await fetch("/api/sync/config", { method: "POST" });
         if (!res.ok) throw new Error("同步失败");
         showToast("已成功将磁盘文件夹同步至系统配置", "success", "配置同步完成");
         await fetchEmojis();
@@ -1332,6 +1332,7 @@ createApp({
       batchConvertToGif,
       contextMenuConvertToGif,
       checkSyncStatus,
+      checkImgHostSyncStatus,
       syncConfig,
       restoreCategory,
       removeFromConfig,

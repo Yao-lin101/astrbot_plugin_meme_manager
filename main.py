@@ -6,11 +6,12 @@ from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context, Star, register
 
+import os
 from .backend.category_manager import CategoryManager
 from .backend.commands_handler import CommandsHandler
 from .backend.event_handlers import EventHandlers
 from .backend.webui_manager import WebuiManager
-from .config import MEMES_DIR
+from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
 
@@ -31,6 +32,10 @@ class MemeSender(Star):
 
         # 初始化类别管理器
         self.category_manager = CategoryManager()
+        try:
+            self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
+        except Exception:
+            self._last_mtime = 0
 
         # 初始化图床同步客户端
         self.img_sync = None
@@ -159,8 +164,24 @@ class MemeSender(Star):
         try:
             self.category_manager.sync_with_filesystem()
             self._reload_personas()
+            try:
+                self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
+            except Exception:
+                self._last_mtime = 0
         except Exception as e:
             logger.error(f"重新加载表情配置失败: {str(e)}")
+
+    async def check_and_reload_if_changed(self):
+        """检查配置文件修改时间，如果有变动则自动重载分类和系统提示词"""
+        try:
+            current_mtime = os.path.getmtime(MEMES_DATA_PATH)
+            if current_mtime != self._last_mtime:
+                logger.info("[meme_manager] 检测到分类配置文件有变动，正在自动重新加载...")
+                self._last_mtime = current_mtime
+                self.category_manager.categories = self.category_manager._load_categories()
+                self._reload_personas()
+        except Exception as e:
+            logger.error(f"[meme_manager] 检查自动重载失败: {e}")
 
     @filter.command_group("表情管理")
     def meme_manager(self):
@@ -183,6 +204,7 @@ class MemeSender(Star):
     @meme_manager.command("查看图库")
     async def list_emotions(self, event: AstrMessageEvent):
         """查看所有可用表情包类别"""
+        await self.check_and_reload_if_changed()
         async for res in CommandsHandler.list_emotions(self, event):
             yield res
 
@@ -281,17 +303,20 @@ class MemeSender(Star):
     @filter.event_message_type(EventMessageType.ALL)
     async def handle_upload_image(self, event: AstrMessageEvent):
         """处理用户上传 of 图片"""
+        await self.check_and_reload_if_changed()
         async for res in EventHandlers.handle_upload_image(self, event):
             yield res
 
     @filter.on_llm_response(priority=99999)
     async def resp(self, event: AstrMessageEvent, response: LLMResponse):
         """处理 LLM 响应，识别表情"""
+        await self.check_and_reload_if_changed()
         await EventHandlers.resp(self, event, response)
 
     @filter.on_decorating_result(priority=99999)
     async def on_decorating_result(self, event: AstrMessageEvent):
         """在消息发送前清理文本中的表情标签，并添加表情图片"""
+        await self.check_and_reload_if_changed()
         await EventHandlers.on_decorating_result(self, event)
 
     @filter.after_message_sent()
@@ -312,6 +337,7 @@ class MemeSender(Star):
             categories(list): 表情包所属的类别列表，如 ["happy", "sad"] 等。注意：只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时才传入此参数；如果用户只是说“偷图/收录”或未明确指定，请保持此参数为 None，严禁自行推测或生成分类。
             category(string): 同上，表情包所属的类别（单标签兼容，仅在用户明确指定时传入，否则不传）
         """
+        await self.check_and_reload_if_changed()
         if not categories and category:
             categories = [category]
         return await EventHandlers.steal_meme(self, event, categories)
