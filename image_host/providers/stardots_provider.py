@@ -226,7 +226,7 @@ class StarDotsProvider(ImageHostInterface):
                 try:
                     rel_path = file_path.relative_to(base_dir)
                 except ValueError:
-                    rel_path = file_path.name
+                    rel_path = Path(file_path.name)
 
                 category = str(rel_path.parent).replace("\\", "/")
                 if category == ".":
@@ -266,6 +266,9 @@ class StarDotsProvider(ImageHostInterface):
                                 "id": str(rel_path),
                                 "filename": rel_path.name,
                                 "category": category,
+                                "size": file_path.stat().st_size
+                                if file_path.exists()
+                                else None,
                             }
                     else:
                         error_msg = f"HTTP {response.status_code}"
@@ -367,21 +370,16 @@ class StarDotsProvider(ImageHostInterface):
                             page += 1  # 获取下一页
                             break  # 成功获取数据，跳出重试循环
                         else:
-                            if "invalid timestamp" in result.get("message", "").lower():
+                            message = result.get("message", "未知错误")
+                            if (
+                                "invalid timestamp" in message.lower()
+                                or "invalid nonce" in message.lower()
+                            ):
                                 if attempt < max_retries - 1:
-                                    print("时间戳错误，重试中...")
+                                    print(f"{message}，重试中...")
                                     time.sleep(retry_delay)
                                     continue
-                            if "invalid nonce" in result.get("message", "").lower():
-                                if attempt < max_retries - 1:
-                                    print("nonce错误，重试中...")
-                                    time.sleep(retry_delay)
-                                    continue
-                            # 其他错误，打印消息但继续尝试下一页
-                            print(
-                                f"获取图片列表失败: {result.get('message', '未知错误')}"
-                            )
-                            continue
+                            raise Exception(f"接口返回失败: {message}")
 
                     else:
                         if attempt < max_retries - 1:
