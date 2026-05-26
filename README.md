@@ -6,14 +6,14 @@
 ![Python Version](https://img.shields.io/badge/Python-3.10.14%2B-blue)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 [![PRs Welcome](https://img.shields.io/badge/PRs-Welcome-brightgreen)](CONTRIBUTING.md)
-[![Contributors](https://img.shields.io/github/contributors/anka-afk/astrbot_plugin_meme_manager?color=green)](https://github.com/anka-afk/astrbot_plugin_meme_manager/graphs/contributors)
-[![Last Commit](https://img.shields.io/github/last-commit/anka-afk/astrbot_plugin_meme_manager)](https://github.com/anka-afk/astrbot_plugin_meme_manager/commits/main)
+[![Contributors](https://img.shields.io/github/contributors/Yao-lin101/astrbot_plugin_meme_manager?color=green)](https://github.com/Yao-lin101/astrbot_plugin_meme_manager/graphs/contributors)
+[![Last Commit](https://img.shields.io/github/last-commit/Yao-lin101/astrbot_plugin_meme_manager)](https://github.com/Yao-lin101/astrbot_plugin_meme_manager/commits/main)
 
 </div>
 
 <div align="center">
 
-[![Moe Counter](https://count.getloli.com/get/@GalChat?theme=moebooru)](https://github.com/anka-afk/astrbot_plugin_meme_manager)
+[![Moe Counter](https://count.getloli.com/get/@GalChat?theme=moebooru)](https://github.com/Yao-lin101/astrbot_plugin_meme_manager)
 
 </div>
 
@@ -64,7 +64,7 @@
 2. **Q: WebUI 无法访问怎么解决？**
 
    - A: 请按以下步骤排查：
-     1. Docker 部署用户请先确保已映射端口，详见：[ISSUE#1](https://github.com/anka-afk/astrbot_plugin_meme_manager/issues/1)
+     1. Docker 部署用户请先确保已映射端口，详见：[ISSUE#1](https://github.com/Yao-lin101/astrbot_plugin_meme_manager/issues/1)
      2. 使用内网穿透的用户需配置 NAT 转发，将内网 5000 端口映射到外网
      3. 云服务器用户请检查安全组是否已放行 5000 端口的入站规则
 
@@ -98,10 +98,12 @@
 | 功能                    | 描述                                                                 |
 | ----------------------- | -------------------------------------------------------------------- |
 | 🤖 AI 智能识别          | 自动识别对话场景，发送合适的表情                                     |
+| 📸 AI 自动收录 (偷图)   | 提供 LLM Tool 接口，机器人可智能识别指令自动偷取/收录表情并放入对应人格表情库 |
+| 👤 人格分类与绑定       | 表情包支持绑定到特定人格，不同人格在对话中只会发送自己专属的表情包   |
+| 📂 重构标签管理系统     | 优化标签分类匹配逻辑为 OR 模式（含任意一个即匹配）；WebUI 新增 "全部 (All)" 视图 |
+| 🌐 WebUI 管理界面       | 提供便捷的可视化 WebUI 管理界面，支持拖拽管理、批量右键、复制粘贴等  |
 | 🖼️ 快速上传和管理表情包 | 通过命令快速上传和管理表情包，WebUI 上传时可直接看到上传进度与结果    |
-| 🌐 WebUI 管理界面       | 提供便捷的 WebUI 管理界面，支持拖拽管理、批量操作和移动端适配         |
 | ☁️ 云端图床同步         | 支持与云端图床同步，方便多设备使用，并展示当前图床服务商与云端统计信息 |
-| 🎯 精确的表情分类系统   | 通过类别管理表情，提升使用体验，并支持按类别恢复默认表情包           |
 | 🔒 安全的访问控制机制   | 管理后台仅允许私聊开启，危险命令与危险操作均带确认流程               |
 | 📊 表情发送控制         | 可以控制每次发送的表情数量和频率                                     |
 | 🔄 自动维护 Prompt      | 所有 prompt 会根据修改的表情包文件夹目录自动维护，无需手动添加！     |
@@ -223,6 +225,23 @@
 - 这是由于分段回复机制会将消息组件逐个发送导致的
 - 如需完整的回复带图体验，请考虑关闭分段回复功能
 
+## 💡 特色功能说明
+
+### 🤖 AI 自动收录 (偷表情包)
+本插件内置了 `steal_meme` LLM 工具（通过 `llm_tool` 注册）。当用户说“收录这张表情包”或“把这张图偷到 happy 分类”时，大模型将智能调用该工具，自动下载上一条消息中出现的图片，并将其自动保存和注册到对应的人格表情包分类库中。
+- 只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时，才传入对应类别。
+- 若未明确指定，则默认收录为通用表情，稍后您可在 WebUI 中对其手动归类或分配人格。
+
+### 👤 人格绑定与独立分类
+为了让多个人格共存时表现更加自然独立，我们支持了表情包人格属性：
+- 表情包可以设置为仅对一个或多个人格有效，不同人格在对话中只会触发自己专属的表情分类。
+- 支持在 WebUI 中快捷编辑表情包适用的“人格列表”（如 `default` 或自定义人格 ID）。
+- 支持完善的 fallback 降级机制：若当前对话会话的人格未指定，插件将自动读取 AstrBot 的默认人格设置（`provider_settings.default_personality`），让表情分类判定更加准确。
+
+### 📂 重构标签管理系统
+- **模糊匹配 OR 逻辑**：重构了表情包分类匹配机制，将 SQLite 查询语句优化为 `LIKE` 模糊匹配。对于含有多个标签的表情包，只要其中任意一个标签命中即可加入随机池，避免了以往必须全部命中才触发的问题。
+- **WebUI 全部 (All) 视图**：在管理后台添加了“全部 (All)”标签页，集中展示当前选择人格下的所有表情包，方便用户进行批量删除、复制或重命名等操作，且在该视图下自动隐藏上传和排序以防误操作。
+
 ## 📝 使用指令
 
 | 指令                              | 描述                                        |
@@ -256,6 +275,15 @@
 | 表情包管理界面 | ![表情包管理界面](.github/img/meme_management_screenshot.png) |
 
 ## 📜 更新日志
+
+### v4.1.0 (Major Fork Update)
+
+- 📸 **AI 自动收录 (偷图)**：新增了 `steal_meme` LLM 工具支持，允许机器人自动识别收录表情的聊天指令，自动提取上一条消息的图片并存入当前人格所属的分类库中。
+- 👤 **人格分类与绑定**：支持表情包的人格绑定，不同人格只会发送自己专属的表情包；增加会话人格 fallback 机制，保证默认人格判定顺畅。
+- 📂 **重构标签匹配与管理**：
+  - 重构了标签分类匹配机制，支持多标签 OR 逻辑（匹配任意一个标签即触发），且底层 SQLite 模糊查询使用通配符优化，解决多人格、多标签表情包无法匹配的问题。
+  - WebUI 中新增了 **全部 (All)** 分类展示页，可直接浏览所选人格下的所有表情包，支持批量跨分类删除与批量右键等功能。
+- 🔧 **代码重构与优化**：重构了大部分后端逻辑脚本，使用 `pathlib.Path` 进行路径操作，优化数据迁移和兼容性，完美适配 AstrBot v4.x 的数据规范（落在 `data/plugin_data/meme_manager/` 下）。
 
 ### v3.20
 

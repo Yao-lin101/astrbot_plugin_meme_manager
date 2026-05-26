@@ -1,6 +1,6 @@
 name: astrbot_plugin_meme_manager
-desc: anka - 表情包管理器 Astrbot表情包管理器3.0版本已发布! 提供便捷的 WebUI 管理界面(/表情管理 开启管理后台) , 所有 prompt 会根据修改的表情包文件夹目录自动维护，无需手动添加！可以控制每次发送的表情数量和频率(进入设置配置一次发送最大数量与发送概率) 更多信息与功能预览请前往仓库页面查看:https://github.com/anka-afk/astrbot_plugin_meme_manager
-help: 功能包含： 1. AI自动发送表情包（识别⬡表情⬡符号） 2. /表情管理 查看图库 - 列出所有可用表情类别  3. /表情管理 添加表情 [类别] - 添加新表情到指定分类  4. /表情管理 开启管理后台  5. /表情管理 关闭管理后台  6. /表情管理 同步到云端  7. /表情管理 从云端同步  8. /表情管理 同步状态
-version: v3.20
-author: anka
-repo: https://github.com/anka-afk/astrbot_plugin_meme_manager
+desc: Astrbot表情包管理器重大升级版！基于原作者 v3.2 版进行深度重构与定制，新增了 AI 自动“偷图”（表情收录）功能、支持表情包人格分类与绑定、重新设计并重构了标签管理系统与大部分后端逻辑及数据库脚本。提供便捷的可视化 WebUI 管理界面(/表情管理 开启管理后台)，所有 prompt 提示词会根据表情库结构和绑定人格自动维护。
+help: 功能包含： 1. AI 智能识别并发送表情包（支持 &&标签&& 符号与情感模型） 2. AI 自动“偷表情”收录至指定人格表情库（通过 llm_tool 接口） 3. /表情管理 开启管理后台 - 启动 WebUI 界面（支持“全部”展示、拖拽、右键批量操作等） 4. /表情管理 查看图库 5. /表情管理 添加表情 [类别] 6. 支持 Stardots/Cloudflare R2 图床云端同步
+version: v4.1.0
+author: anka & Yao-lin101
+repo: https://github.com/Yao-lin101/astrbot_plugin_meme_manager
