@@ -87,41 +87,12 @@ class MemeSender(Star):
         self.pending_images = {}
         self.last_images = {}
 
-        self.fault_tolerant_symbols = self.config.get("fault_tolerant_symbols", ["⬡"])
+        # 所有的配置属性现在通过下方的 @property 动态获取，以便在 WebUI 修改设置后实时生效
+        pass
 
         if hasattr(self, "_r2_bucket_name"):
             logger.info(f"Cloudflare R2 图床已初始化: {self._r2_bucket_name}")
             delattr(self, "_r2_bucket_name")
-
-        self.prompt_head = self.config.get("prompt").get("prompt_head")
-        self.prompt_tail_1 = self.config.get("prompt").get("prompt_tail_1")
-        self.prompt_tail_2 = self.config.get("prompt").get("prompt_tail_2")
-        self.max_emotions_per_message = self.config.get("max_emotions_per_message")
-        self.emotions_probability = self.config.get("emotions_probability")
-        self.strict_max_emotions_per_message = self.config.get(
-            "strict_max_emotions_per_message"
-        )
-        self.emotion_llm_enabled = self.config.get("emotion_llm_enabled", False)
-        self.emotion_llm_provider_id = self.config.get("emotion_llm_provider_id", "")
-        self.multimodal_llm_enabled = self.config.get("multimodal_llm_enabled", False)
-        self.multimodal_llm_provider_id = self.config.get(
-            "multimodal_llm_provider_id", ""
-        )
-
-        self.enable_mixed_message = self.config.get("enable_mixed_message", True)
-        self.mixed_message_probability = self.config.get(
-            "mixed_message_probability", 80
-        )
-        self.remove_invalid_alternative_markup = self.config.get(
-            "remove_invalid_alternative_markup", False
-        )
-        self.convert_static_to_gif = self.config.get("convert_static_to_gif", False)
-
-        self.streaming_compatibility = self.config.get("streaming_compatibility", False)
-
-        self.content_cleanup_rule = self.config.get(
-            "content_cleanup_rule", "&&[a-zA-Z]*&&"
-        )
 
         # 构建表情包提示词
         personas = self.context.provider_manager.personas
@@ -376,3 +347,71 @@ class MemeSender(Star):
 
         await WebuiManager._shutdown(self)
         await WebuiManager._cleanup_resources(self)
+
+    @property
+    def fault_tolerant_symbols(self) -> list[str]:
+        return self.config.get("fault_tolerant_symbols", ["⬡"])
+
+    @property
+    def prompt_head(self) -> str:
+        return self.config.get("prompt", {}).get("prompt_head", "")
+
+    @property
+    def prompt_tail_1(self) -> str:
+        return self.config.get("prompt", {}).get("prompt_tail_1", "")
+
+    @property
+    def prompt_tail_2(self) -> str:
+        return self.config.get("prompt", {}).get("prompt_tail_2", "")
+
+    @property
+    def max_emotions_per_message(self) -> int:
+        return self.config.get("max_emotions_per_message", 2)
+
+    @property
+    def emotions_probability(self) -> int:
+        return self.config.get("emotions_probability", 50)
+
+    @property
+    def strict_max_emotions_per_message(self) -> bool:
+        return self.config.get("strict_max_emotions_per_message", True)
+
+    @property
+    def emotion_llm_enabled(self) -> bool:
+        return self.config.get("emotion_llm_enabled", False)
+
+    @property
+    def emotion_llm_provider_id(self) -> str:
+        return self.config.get("emotion_llm_provider_id", "")
+
+    @property
+    def multimodal_llm_enabled(self) -> bool:
+        return self.config.get("multimodal_llm_enabled", False)
+
+    @property
+    def multimodal_llm_provider_id(self) -> str:
+        return self.config.get("multimodal_llm_provider_id", "")
+
+    @property
+    def enable_mixed_message(self) -> bool:
+        return self.config.get("enable_mixed_message", True)
+
+    @property
+    def mixed_message_probability(self) -> int:
+        return self.config.get("mixed_message_probability", 80)
+
+    @property
+    def remove_invalid_alternative_markup(self) -> bool:
+        return self.config.get("remove_invalid_alternative_markup", False)
+
+    @property
+    def convert_static_to_gif(self) -> bool:
+        return self.config.get("convert_static_to_gif", False)
+
+    @property
+    def streaming_compatibility(self) -> bool:
+        return self.config.get("streaming_compatibility", False)
+
+    @property
+    def content_cleanup_rule(self) -> str:
+        return self.config.get("content_cleanup_rule", "&&[a-zA-Z]*&&")
