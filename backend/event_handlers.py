@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 import random
 import re
@@ -9,14 +8,13 @@ import traceback
 
 from PIL import Image as PILImage
 
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.provider import LLMResponse
 from astrbot.core.message.components import Image, Plain
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 
 from ..config import MEMES_DIR
-
-logger = logging.getLogger(__name__)
 
 
 class EventHandlers:
