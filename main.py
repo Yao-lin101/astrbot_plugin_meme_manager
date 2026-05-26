@@ -358,8 +358,8 @@ class MemeSender(Star):
         """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
 
         Args:
-            categories(list): 表情包所属的类别列表，如 ["happy", "funny"] 等
-            category(string): 表情包所属的类别，如 happy, sad, angry 等（单标签兼容）
+            categories(list): 表情包所属的类别列表，如 ["happy", "sad"] 等。注意：只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时才传入此参数；如果用户只是说“偷图/收录”或未明确指定，请保持此参数为 None，严禁自行推测或生成分类。
+            category(string): 同上，表情包所属的类别（单标签兼容，仅在用户明确指定时传入，否则不传）
         """
         if not categories and category:
             categories = [category]

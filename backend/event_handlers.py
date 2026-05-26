@@ -650,7 +650,7 @@ class EventHandlers:
             resolved_categories = []
             invalid_categories = []
 
-            if getattr(sender, "multimodal_llm_enabled", False):
+            if getattr(sender, "multimodal_llm_enabled", False) and not categories:
                 provider_id = getattr(sender, "multimodal_llm_provider_id", "")
                 if not provider_id:
                     provider_id = await sender.context.get_current_chat_provider_id(
