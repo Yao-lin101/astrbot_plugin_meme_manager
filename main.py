@@ -1,4 +1,3 @@
-import copy
 
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403

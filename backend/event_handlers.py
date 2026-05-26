@@ -19,6 +19,40 @@ from ..config import MEMES_DIR
 
 class EventHandlers:
     @staticmethod
+    async def _get_persona_id(sender, event: AstrMessageEvent) -> str:
+        """获取当前会话人格 ID，若为空或为 'default' 则降级查找配置文件中指定的人格"""
+        persona_id = ""
+        try:
+            curr_cid = (
+                await sender.context.conversation_manager.get_curr_conversation_id(
+                    event.unified_msg_origin
+                )
+            )
+            if curr_cid:
+                conv = await sender.context.conversation_manager.get_conversation(
+                    event.unified_msg_origin, curr_cid
+                )
+                if conv:
+                    persona_id = conv.persona_id or ""
+        except Exception as e:
+            logger.warning(f"获取当前会话人格失败: {e}")
+
+        if not persona_id or persona_id == "default":
+            try:
+                cfg = sender.context.get_config(event.unified_msg_origin)
+                persona_id = cfg.get("provider_settings", {}).get(
+                    "default_personality",
+                    "default",
+                )
+            except Exception:
+                persona_id = "default"
+
+        if not persona_id:
+            persona_id = "default"
+
+        return persona_id
+
+    @staticmethod
     async def track_last_image(sender, event: AstrMessageEvent):
         """记录会话中最后一次出现的图片，供“偷表情包”工具使用"""
         user_key = f"{event.session_id}_{event.get_sender_id()}"
@@ -337,20 +371,7 @@ class EventHandlers:
 
                 if random_value <= threshold:
                     # 获取当前人格 ID
-                    persona_id = ""
-                    try:
-                        curr_cid = await sender.context.conversation_manager.get_curr_conversation_id(
-                            event.unified_msg_origin
-                        )
-                        if curr_cid:
-                            conv = await sender.context.conversation_manager.get_conversation(
-                                event.unified_msg_origin, curr_cid
-                            )
-                            if conv:
-                                persona_id = conv.persona_id or ""
-                    except Exception as e:
-                        logger.warning(f"获取当前会话人格失败: {e}")
-
+                    persona_id = await EventHandlers._get_persona_id(sender, event)
                     logger.info(f"[meme_manager] 当前会话人格 ID: '{persona_id}'")
                     emotion_images = []
                     temp_files = []
@@ -653,32 +674,8 @@ class EventHandlers:
             return "请输入至少一个有效的标签/分类名称。"
 
         # 3. 获取当前会话的人格 ID (persona_id)
-        persona_id = ""
-        try:
-            curr_cid = (
-                await sender.context.conversation_manager.get_curr_conversation_id(
-                    event.unified_msg_origin
-                )
-            )
-            if curr_cid:
-                conv = await sender.context.conversation_manager.get_conversation(
-                    event.unified_msg_origin, curr_cid
-                )
-                if conv:
-                    persona_id = conv.persona_id or ""
-        except Exception as e:
-            logger.warning(f"获取当前会话人格失败: {e}")
-
-        if not persona_id:
-            personas_list = getattr(sender.context.provider_manager, "personas", [])
-            if personas_list:
-                persona_id = (
-                    personas_list[0].get("id")
-                    or personas_list[0].get("name")
-                    or "default"
-                )
-            else:
-                persona_id = "default"
+        # 3. 获取当前会话的人格 ID (persona_id)
+        persona_id = await EventHandlers._get_persona_id(sender, event)
 
         # 4. 下载图片
         import hashlib
@@ -1055,21 +1052,7 @@ class EventHandlers:
 
                 from .database import get_db_conn
 
-                persona_id = ""
-                try:
-                    curr_cid = await sender.context.conversation_manager.get_curr_conversation_id(
-                        event.unified_msg_origin
-                    )
-                    if curr_cid:
-                        conv = (
-                            await sender.context.conversation_manager.get_conversation(
-                                event.unified_msg_origin, curr_cid
-                            )
-                        )
-                        if conv:
-                            persona_id = conv.persona_id or ""
-                except Exception as e:
-                    logger.warning(f"获取当前会话人格失败: {e}")
+                persona_id = await EventHandlers._get_persona_id(sender, event)
 
                 conn = get_db_conn()
                 cursor = conn.cursor()
