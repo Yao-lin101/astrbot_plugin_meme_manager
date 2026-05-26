@@ -670,7 +670,9 @@ class EventHandlers:
             # B. 如果解析后没有得到任何合法的分类，且启用了多模态，则调用多模态模型自动分类
             multimodal_called = False
             multimodal_failed = False
-            if not resolved_categories and getattr(sender, "multimodal_llm_enabled", False):
+            if not resolved_categories and getattr(
+                sender, "multimodal_llm_enabled", False
+            ):
                 provider_id = getattr(sender, "multimodal_llm_provider_id", "")
                 if not provider_id:
                     provider_id = await sender.context.get_current_chat_provider_id(
@@ -679,6 +681,7 @@ class EventHandlers:
                 if provider_id:
                     multimodal_called = True
                     import base64
+
                     mime_type = "image/jpeg"
                     if file_type == "png":
                         mime_type = "image/png"

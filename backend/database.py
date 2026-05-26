@@ -150,6 +150,15 @@ def migrate_filesystem_to_db():
                         # 移动文件到 memes 根目录
                         shutil.move(str(file_path), str(dest_path))
 
+                        # 计算文件哈希值
+                        file_hash = None
+                        try:
+                            file_hash = _calculate_file_hash(dest_path)
+                        except Exception as e:
+                            logger.warning(
+                                f"迁移表情包 {dest_filename} 计算哈希失败: {e}"
+                            )
+
                         # 写入/更新数据库
                         cursor.execute(
                             "SELECT emotions FROM memes WHERE filename = ?",
@@ -162,13 +171,13 @@ def migrate_filesystem_to_db():
                             )
                             existing_emotions.add(category)
                             cursor.execute(
-                                "UPDATE memes SET emotions = ? WHERE filename = ?",
-                                (",".join(existing_emotions), dest_filename),
+                                "UPDATE memes SET emotions = ?, original_hash = ? WHERE filename = ?",
+                                (",".join(existing_emotions), file_hash, dest_filename),
                             )
                         else:
                             cursor.execute(
-                                "INSERT INTO memes (filename, emotions, personas) VALUES (?, ?, ?)",
-                                (dest_filename, category, "*"),
+                                "INSERT INTO memes (filename, emotions, personas, original_hash) VALUES (?, ?, ?, ?)",
+                                (dest_filename, category, "*", file_hash),
                             )
 
                 # 移除已空的旧分类目录
