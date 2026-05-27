@@ -1,3 +1,5 @@
+import os
+
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403
 from astrbot.api.event import AstrMessageEvent, filter
@@ -6,7 +8,6 @@ from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context, Star, register
 
-import os
 from .backend.category_manager import CategoryManager
 from .backend.commands_handler import CommandsHandler
 from .backend.event_handlers import EventHandlers
@@ -176,9 +177,13 @@ class MemeSender(Star):
         try:
             current_mtime = os.path.getmtime(MEMES_DATA_PATH)
             if current_mtime != self._last_mtime:
-                logger.info("[meme_manager] 检测到分类配置文件有变动，正在自动重新加载...")
+                logger.info(
+                    "[meme_manager] 检测到分类配置文件有变动，正在自动重新加载..."
+                )
                 self._last_mtime = current_mtime
-                self.category_manager.categories = self.category_manager._load_categories()
+                self.category_manager.categories = (
+                    self.category_manager._load_categories()
+                )
                 self._reload_personas()
         except Exception as e:
             logger.error(f"[meme_manager] 检查自动重载失败: {e}")

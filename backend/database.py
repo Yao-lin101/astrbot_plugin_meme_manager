@@ -32,6 +32,18 @@ def init_db():
         original_hash TEXT
     )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS meme_steal_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_hash TEXT,
+        persona_id TEXT,
+        is_matched INTEGER,
+        attempt_time INTEGER
+    )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_steal_attempts_hash_persona ON meme_steal_attempts (image_hash, persona_id)"
+    )
     conn.commit()
 
     # 检查 original_hash 列是否存在
@@ -193,3 +205,30 @@ def migrate_filesystem_to_db():
     with open(MIGRATION_MARKER, "w") as f:
         f.write("migrated")
     logger.info("表情包数据库结构迁移完成！")
+
+
+def get_steal_attempt(image_hash: str, persona_id: str) -> sqlite3.Row | None:
+    """查询指定图片哈希和人格ID的盗图尝试记录"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT is_matched FROM meme_steal_attempts WHERE image_hash = ? AND persona_id = ?",
+        (image_hash, persona_id),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def save_steal_attempt(image_hash: str, persona_id: str, is_matched: bool) -> None:
+    """保存盗图尝试记录"""
+    import time
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO meme_steal_attempts (image_hash, persona_id, is_matched, attempt_time) VALUES (?, ?, ?, ?)",
+        (image_hash, persona_id, 1 if is_matched else 0, int(time.time())),
+    )
+    conn.commit()
+    conn.close()
