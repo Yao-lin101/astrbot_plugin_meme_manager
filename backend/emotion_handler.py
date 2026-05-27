@@ -55,6 +55,15 @@ async def _select_memes_by_emotions_priority(
     rows = cursor.fetchall()
     conn.close()
 
+    # 获取人格专属标签，用于评分加分（而不是计入 matched_count）
+    from .helpers import load_persona_tags
+    p_tags = load_persona_tags()
+    dedicated_tag = p_tags.get(persona_id)
+    if dedicated_tag:
+        dedicated_tag = dedicated_tag.strip()
+
+    emotions_to_match = [e for e in found_emotions if e != dedicated_tag] if dedicated_tag else found_emotions
+
     # 评分并筛选出本地确实存在的文件
     valid_memes = []
     for row in rows:
@@ -67,15 +76,20 @@ async def _select_memes_by_emotions_priority(
                 if row["emotions"]
                 else []
             )
-            matched_count = sum(1 for e in found_emotions if e in meme_emotions)
+            matched_count = sum(1 for e in emotions_to_match if e in meme_emotions)
 
             # 偏置评分：越靠前的标签越优先
             position_bonus = 0
-            for idx, e in enumerate(found_emotions):
+            for idx, e in enumerate(emotions_to_match):
                 if e in meme_emotions:
                     position_bonus += max(0, 100 - idx)
 
-            score = matched_count * 1000 + position_bonus
+            # 专属标签额外加分（500分）
+            dedicated_bonus = 0
+            if dedicated_tag and dedicated_tag in meme_emotions:
+                dedicated_bonus = 500
+
+            score = matched_count * 1000 + position_bonus + dedicated_bonus
             valid_memes.append((filename, score))
 
     if not valid_memes:
@@ -316,18 +330,20 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
             seen.add(emo)
             filtered_emotions.append(emo)
 
-    # 仅在至少检测出一个情绪标签时，才追加人格专属标签
+    # 仅在至少检测出一个情绪标签时，以约 70% 的概率追加人格专属标签，保持 30% 概率使用通用表情以保障多样性
     if filtered_emotions:
-        persona_id = await get_persona_id(sender, event)
-        from .helpers import load_persona_tags
+        import random
+        if random.random() < 0.7:
+            persona_id = await get_persona_id(sender, event)
+            from .helpers import load_persona_tags
 
-        p_tags = load_persona_tags()
-        dedicated_tag = p_tags.get(persona_id)
-        if dedicated_tag:
-            dedicated_tag = dedicated_tag.strip()
-            if dedicated_tag and dedicated_tag not in seen:
-                seen.add(dedicated_tag)
-                filtered_emotions.append(dedicated_tag)
+            p_tags = load_persona_tags()
+            dedicated_tag = p_tags.get(persona_id)
+            if dedicated_tag:
+                dedicated_tag = dedicated_tag.strip()
+                if dedicated_tag and dedicated_tag not in seen:
+                    seen.add(dedicated_tag)
+                    filtered_emotions.append(dedicated_tag)
 
     sender.found_emotions = filtered_emotions
     logger.info(f"[meme_manager] 去重后的最终表情标签列表: {sender.found_emotions}")
