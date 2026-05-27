@@ -138,7 +138,7 @@
         <!-- 批量操作与工具栏 -->
         <div class="page-toolbar">
           <div class="selection-toolbar">
-            <div class="filter-group">
+            <div class="filter-group" style="display: flex; align-items: center; gap: 15px;">
               <div class="persona-filter-wrapper">
                 <label for="persona-filter"><i class="fas fa-user-gear icon"></i>过滤人格:</label>
                 <select id="persona-filter" v-model="personaFilter" @change="fetchEmojis">
@@ -147,6 +147,13 @@
                     {% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})
                   </option>
                 </select>
+              </div>
+              <div v-if="personaFilter" class="persona-tag-wrapper" style="display: inline-flex; align-items: center; gap: 8px;">
+                <label for="persona-tag-input"><i class="fas fa-tag icon"></i>专属标签:</label>
+                <input list="categories-list" id="persona-tag-input" v-model="personaDedicatedTag" @change="savePersonaDedicatedTag" class="form-control" style="width: 160px; height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);" placeholder="(可选) 如 maid" />
+                <datalist id="categories-list">
+                  <option v-for="cat in Object.keys(emojiData)" :key="cat" :value="cat"></option>
+                </datalist>
               </div>
             </div>
             <div class="selection-toolbar-actions">

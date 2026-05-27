@@ -9,6 +9,8 @@ createApp({
     const emojiData = ref({});
     const tagDescriptions = ref({});
     const systemPersonas = ref([]);
+    const personaTags = ref({});
+    const personaDedicatedTag = ref("");
 
     // UI States
     const activeCategory = ref(null);
@@ -141,6 +143,7 @@ createApp({
     const fetchEmojis = async () => {
       try {
         const personaId = personaFilter.value;
+        personaDedicatedTag.value = personaTags.value[personaId] || "";
         const url = personaId ? `/api/emoji?persona_id=${encodeURIComponent(personaId)}` : "/api/emoji";
         
         const [emojiRes, tagRes] = await Promise.all([
@@ -182,6 +185,43 @@ createApp({
         systemPersonas.value = await res.json();
       } catch (e) {
         console.error(e);
+      }
+    };
+
+    const fetchPersonaTags = async () => {
+      try {
+        const res = await fetch("/api/persona_tags");
+        if (!res.ok) throw new Error("获取人格专属标签失败");
+        personaTags.value = await res.json();
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    const savePersonaDedicatedTag = async () => {
+      const personaId = personaFilter.value;
+      if (!personaId) return;
+
+      const tag = personaDedicatedTag.value;
+      try {
+        const res = await fetch("/api/persona_tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            persona_id: personaId,
+            tag: tag
+          })
+        });
+        if (!res.ok) throw new Error("保存专属标签失败");
+
+        if (!tag || !tag.trim()) {
+          delete personaTags.value[personaId];
+        } else {
+          personaTags.value[personaId] = tag.trim();
+        }
+        showToast("专属标签已保存！", "success", "保存成功");
+      } catch (e) {
+        showToast(e.message, "error", "保存失败");
       }
     };
 
@@ -1248,6 +1288,7 @@ createApp({
     // Lifecycle hooks
     // ----------------------------------------------------
     onMounted(async () => {
+      await fetchPersonaTags();
       await fetchEmojis();
       await fetchPersonas();
       void checkSyncStatus(false);
@@ -1338,6 +1379,8 @@ createApp({
       removeFromConfig,
       syncToRemote,
       syncFromRemote,
+      personaDedicatedTag,
+      savePersonaDedicatedTag,
     };
   },
 }).mount("#app");

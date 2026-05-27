@@ -316,6 +316,19 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
             seen.add(emo)
             filtered_emotions.append(emo)
 
+    # 仅在至少检测出一个情绪标签时，才追加人格专属标签
+    if filtered_emotions:
+        persona_id = await get_persona_id(sender, event)
+        from .helpers import load_persona_tags
+
+        p_tags = load_persona_tags()
+        dedicated_tag = p_tags.get(persona_id)
+        if dedicated_tag:
+            dedicated_tag = dedicated_tag.strip()
+            if dedicated_tag and dedicated_tag not in seen:
+                seen.add(dedicated_tag)
+                filtered_emotions.append(dedicated_tag)
+
     sender.found_emotions = filtered_emotions
     logger.info(f"[meme_manager] 去重后的最终表情标签列表: {sender.found_emotions}")
 

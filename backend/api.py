@@ -738,3 +738,43 @@ async def batch_edit_personas():
     except Exception as e:
         logger.error(f"批量更新人格限制失败: {e}", exc_info=True)
         return jsonify({"message": str(e)}), 500
+
+
+@api.route("/persona_tags", methods=["GET"])
+async def get_persona_tags():
+    """获取所有的人格专属标签"""
+    from .helpers import load_persona_tags
+
+    return jsonify(load_persona_tags())
+
+
+@api.route("/persona_tags", methods=["POST"])
+async def save_persona_tag():
+    """保存某个人格的专属标签"""
+    try:
+        data = await request.get_json()
+        persona_id = data.get("persona_id")
+        tag = data.get("tag")
+
+        if not persona_id:
+            return jsonify({"message": "Persona ID is required"}), 400
+
+        from .helpers import load_persona_tags, save_persona_tags
+
+        tags = load_persona_tags()
+
+        # 如果 tag 为空，则移除此配置
+        if not tag or not tag.strip():
+            if persona_id in tags:
+                del tags[persona_id]
+        else:
+            tags[persona_id] = tag.strip()
+
+        save_persona_tags(tags)
+        return (
+            jsonify({"message": "Persona tag updated successfully", "tags": tags}),
+            200,
+        )
+    except Exception as e:
+        logger.error(f"保存人格专属标签失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500

@@ -234,3 +234,29 @@ def merge_components_with_images(sender, components, images):
     )
 
     return merged_components
+
+
+PERSONA_TAGS_PATH = None
+
+
+def _get_persona_tags_path():
+    global PERSONA_TAGS_PATH
+    if PERSONA_TAGS_PATH is None:
+        from ..config import PLUGIN_DATA_DIR
+
+        PERSONA_TAGS_PATH = PLUGIN_DATA_DIR / "persona_tags.json"
+    return PERSONA_TAGS_PATH
+
+
+def load_persona_tags() -> dict[str, str]:
+    from ..utils import load_json
+
+    path = _get_persona_tags_path()
+    return load_json(path, {})
+
+
+def save_persona_tags(tags: dict[str, str]) -> None:
+    from ..utils import save_json
+
+    path = _get_persona_tags_path()
+    save_json(tags, path)
