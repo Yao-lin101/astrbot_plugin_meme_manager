@@ -38,7 +38,8 @@ def init_db():
         image_hash TEXT,
         persona_id TEXT,
         is_matched INTEGER,
-        attempt_time INTEGER
+        attempt_time INTEGER,
+        reason TEXT
     )
     """)
     cursor.execute(
@@ -56,6 +57,14 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_seen_records_hash ON meme_seen_records (image_hash)"
     )
     conn.commit()
+
+    # 检查 meme_steal_attempts 表中的 reason 字段是否存在
+    cursor.execute("PRAGMA table_info(meme_steal_attempts)")
+    steal_columns = [row["name"] for row in cursor.fetchall()]
+    if "reason" not in steal_columns:
+        logger.info("数据库表 meme_steal_attempts 缺少 reason 字段，正在进行升级...")
+        cursor.execute("ALTER TABLE meme_steal_attempts ADD COLUMN reason TEXT")
+        conn.commit()
 
     # 检查 original_hash 列是否存在
     cursor.execute("PRAGMA table_info(memes)")
@@ -223,7 +232,7 @@ def get_steal_attempt(image_hash: str, persona_id: str) -> sqlite3.Row | None:
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT is_matched FROM meme_steal_attempts WHERE image_hash = ? AND persona_id = ?",
+        "SELECT is_matched, reason FROM meme_steal_attempts WHERE image_hash = ? AND persona_id = ?",
         (image_hash, persona_id),
     )
     row = cursor.fetchone()
@@ -231,15 +240,15 @@ def get_steal_attempt(image_hash: str, persona_id: str) -> sqlite3.Row | None:
     return row
 
 
-def save_steal_attempt(image_hash: str, persona_id: str, is_matched: bool) -> None:
+def save_steal_attempt(image_hash: str, persona_id: str, is_matched: bool, reason: str = "") -> None:
     """保存盗图尝试记录"""
     import time
 
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO meme_steal_attempts (image_hash, persona_id, is_matched, attempt_time) VALUES (?, ?, ?, ?)",
-        (image_hash, persona_id, 1 if is_matched else 0, int(time.time())),
+        "INSERT INTO meme_steal_attempts (image_hash, persona_id, is_matched, reason, attempt_time) VALUES (?, ?, ?, ?, ?)",
+        (image_hash, persona_id, 1 if is_matched else 0, reason, int(time.time())),
     )
     conn.commit()
     conn.close()

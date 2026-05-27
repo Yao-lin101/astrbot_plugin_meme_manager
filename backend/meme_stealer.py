@@ -211,7 +211,11 @@ async def steal_meme(
             f"[meme_manager] 发现缓存记录：image_hash={raw_hash}, persona_id={persona_id}, is_matched={is_matched}"
         )
         if not is_matched:
-            return "该图片不符合当前人格的表情包收集偏好，拒绝收录。"
+            reason = attempt["reason"] if "reason" in attempt.keys() and attempt["reason"] else ""
+            if reason:
+                return f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {reason}"
+            else:
+                return "该图片不符合当前人格的表情包收集偏好，拒绝收录。"
     else:
         is_matched, match_reason = await _check_meme_preference_match(
             sender, event, content, file_type, preference_text
@@ -226,7 +230,7 @@ async def steal_meme(
             else:
                 # 明确的拒绝，记录缓存
                 try:
-                    save_steal_attempt(raw_hash, persona_id, False)
+                    save_steal_attempt(raw_hash, persona_id, False, match_reason)
                 except Exception as ex:
                     logger.warning(f"保存尝试记录失败: {ex}")
                 return f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {match_reason}"
