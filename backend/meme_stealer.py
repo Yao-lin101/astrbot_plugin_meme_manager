@@ -111,7 +111,7 @@ async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
     # 1. 获取当前会话的人格 ID (persona_id) 和人格提示词，并检查表情包收集偏好配置
     persona_id = await get_persona_id(sender, event)
     persona_prompt = await get_persona_prompt(sender, event)
-    logger.info(
+    logger.debug(
         f"[meme_manager] 当前解析的人格 ID: {persona_id}, 提示词长度: {len(persona_prompt)}, 提示词内容: {persona_prompt}"
     )
 
