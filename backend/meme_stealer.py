@@ -13,7 +13,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Reply
 
 from .database import get_db_conn, get_steal_attempt, save_steal_attempt
-from .helpers import get_persona_id
+from .helpers import get_persona_id, get_persona_prompt
 from .models import save_and_register_meme
 
 
@@ -110,10 +110,7 @@ async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
     """
     # 1. 获取当前会话的人格 ID (persona_id) 和人格提示词，并检查表情包收集偏好配置
     persona_id = await get_persona_id(sender, event)
-    persona_obj = sender.context.provider_manager.persona_mgr.get_persona_v3_by_id(
-        persona_id
-    )
-    persona_prompt = persona_obj.get("prompt", "") if persona_obj else ""
+    persona_prompt = await get_persona_prompt(sender, event)
 
     pref_match = re.search(
         r"<meme_preference>(.*?)</meme_preference>",
@@ -125,6 +122,8 @@ async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
     preference_text = pref_match.group(1).strip()
     if not preference_text:
         return "当前人格未配置表情包收集偏好（需要使用 <meme_preference> 标签包裹偏好设置），拒绝收录。"
+
+    logger.info(f"[meme_manager] 人格 {persona_id} 的表情包收集偏好: {preference_text}")
 
     # 2. 从当前事件消息中提取图片（优先支持引用/回复图片，其次支持同消息内直发图片）
     last_image_url = None

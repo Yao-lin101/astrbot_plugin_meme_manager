@@ -12,8 +12,8 @@ from astrbot.core.message.components import Plain
 
 
 async def get_persona_id(sender, event: AstrMessageEvent) -> str:
-    """获取当前会话人格 ID，若为空或为 'default' 则降级查找配置文件中指定的人格"""
-    persona_id = ""
+    """获取当前会话实际生效的人格 ID"""
+    conversation_persona_id = None
     try:
         curr_cid = await sender.context.conversation_manager.get_curr_conversation_id(
             event.unified_msg_origin
@@ -23,10 +23,30 @@ async def get_persona_id(sender, event: AstrMessageEvent) -> str:
                 event.unified_msg_origin, curr_cid
             )
             if conv:
-                persona_id = conv.persona_id or ""
+                conversation_persona_id = conv.persona_id
     except Exception as e:
-        logger.warning(f"获取当前会话人格失败: {e}")
+        logger.warning(f"获取当前会话失败: {e}")
 
+    try:
+        cfg = sender.context.get_config(event.unified_msg_origin)
+        (
+            persona_id,
+            _,
+            _,
+            _,
+        ) = await sender.context.persona_manager.resolve_selected_persona(
+            umo=event.unified_msg_origin,
+            conversation_persona_id=conversation_persona_id,
+            platform_name=event.get_platform_name(),
+            provider_settings=cfg,
+        )
+        if persona_id:
+            return persona_id
+    except Exception as e:
+        logger.warning(f"解析当前会话实际生效人格失败，使用降级逻辑: {e}")
+
+    # 降级逻辑
+    persona_id = conversation_persona_id or ""
     if not persona_id or persona_id == "default":
         try:
             cfg = sender.context.get_config(event.unified_msg_origin)
@@ -41,6 +61,20 @@ async def get_persona_id(sender, event: AstrMessageEvent) -> str:
         persona_id = "default"
 
     return persona_id
+
+
+async def get_persona_prompt(sender, event: AstrMessageEvent) -> str:
+    """获取当前会话实际生效的人格系统提示词"""
+    persona_id = await get_persona_id(sender, event)
+    try:
+        persona_obj = sender.context.provider_manager.persona_mgr.get_persona_v3_by_id(
+            persona_id
+        )
+        if persona_obj:
+            return persona_obj.get("prompt", "") or ""
+    except Exception as e:
+        logger.warning(f"获取当前会话实际生效人格 Prompt 失败: {e}")
+    return ""
 
 
 def convert_to_gif(image_path: str, sender) -> str:
