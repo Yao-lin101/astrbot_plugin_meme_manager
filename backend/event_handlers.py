@@ -65,6 +65,12 @@ class EventHandlers:
         return await steal_meme(sender, event, categories)
 
     @staticmethod
+    async def auto_steal_meme(sender, event: AstrMessageEvent):
+        from .meme_stealer import auto_steal_meme
+
+        await auto_steal_meme(sender, event)
+
+    @staticmethod
     def _is_likely_emotion_markup(markup, text, position):
         from .helpers import is_likely_emotion_markup
 

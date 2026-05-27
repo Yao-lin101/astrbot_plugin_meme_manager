@@ -223,6 +223,23 @@
       "step": 10
     }
   },
+  "auto_steal_enabled": {
+    "description": "启用暗中自动偷表情包",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，若群聊消息中的图片命中概率，将暗中执行偷表情包行为（需要多模态模型以自动判定偏好并分类）"
+  },
+  "auto_steal_probability": {
+    "description": "自动偷表情包概率",
+    "type": "int",
+    "default": 30,
+    "hint": "自动偷表情包触发的概率，范围为1-100",
+    "slider": {
+      "min": 1,
+      "max": 100,
+      "step": 1
+    }
+  },
   "streaming_compatibility": {
     "description": "流式传输兼容",
     "type": "bool",

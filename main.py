@@ -1,3 +1,4 @@
+import asyncio
 import os
 
 from astrbot.api import logger
@@ -87,6 +88,9 @@ class MemeSender(Star):
         self.found_emotions = []
         self.upload_states = {}
         self.pending_images = {}
+        self.auto_steal_semaphore = asyncio.Semaphore(
+            2
+        )  # 限制并发自动偷图的协程数量为 2
 
         # 所有的配置属性现在通过下方的 @property 动态获取，以便在 WebUI 修改设置后实时生效
         pass
@@ -312,6 +316,41 @@ class MemeSender(Star):
         async for res in EventHandlers.handle_upload_image(self, event):
             yield res
 
+    @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
+    async def handle_group_message(self, event: AstrMessageEvent):
+        """处理群聊消息以实现暗中自动偷表情包"""
+        if not self.auto_steal_enabled:
+            return
+
+        # 1. 检查是否为图片消息
+        images = [c for c in event.message_obj.message if isinstance(c, Image)]
+        if not images:
+            return
+
+        # 2. 概率判定
+        import random
+
+        probability = self.auto_steal_probability
+        if random.randint(1, 100) > probability:
+            logger.debug(f"[meme_manager] 自动偷图概率未命中: {probability}%")
+            return
+
+        # 3. 检查多模态模型是否启用
+        if not self.multimodal_llm_enabled:
+            logger.debug(
+                "[meme_manager] 未开启多模态大模型分类表情包，跳过自动偷表情。"
+            )
+            return
+
+        # 4. 执行暗中自动偷表情包（带并发限制）
+        await self.check_and_reload_if_changed()
+
+        async def run_steal_task():
+            async with self.auto_steal_semaphore:
+                await EventHandlers.auto_steal_meme(self, event)
+
+        asyncio.create_task(run_steal_task())
+
     @filter.on_llm_response(priority=99999)
     async def resp(self, event: AstrMessageEvent, response: LLMResponse):
         """处理 LLM 响应，识别表情"""
@@ -365,6 +404,14 @@ class MemeSender(Star):
     @property
     def fault_tolerant_symbols(self) -> list[str]:
         return self.config.get("fault_tolerant_symbols", ["⬡"])
+
+    @property
+    def auto_steal_enabled(self) -> bool:
+        return self.config.get("auto_steal_enabled", False)
+
+    @property
+    def auto_steal_probability(self) -> int:
+        return self.config.get("auto_steal_probability", 30)
 
     @property
     def prompt_head(self) -> str:

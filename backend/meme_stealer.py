@@ -55,8 +55,9 @@ async def _check_meme_preference_match(
         f"【当前人格的表情包收集偏好】：\n"
         f"{preference_text}\n\n"
         f"【判定规则（极其重要）】：\n"
-        f"1. 仔细分析图片内容和风格，结合上述偏好描述进行判定。\n"
-        f"2. 请仅以 JSON 格式返回，包含 `match`（布尔值：true 或 false）和 `reason`（字符串：简短的判定理由）。\n"
+        f"1. 先判断图片是否属于表情包范畴，如果是截图、照片等非相关内容直接判false。\n"
+        f"2. 仔细分析图片内容和风格，结合上述偏好描述进行判定。\n"
+        f"3. 请仅以 JSON 格式返回，包含 `match`（布尔值：true 或 false）和 `reason`（字符串：简短的判定理由）。\n"
         f"例如：\n"
         f'{{"match": true, "reason": "符合科幻与警告风格"}}\n'
         f"或：\n"
@@ -102,7 +103,14 @@ async def _check_meme_preference_match(
         return False, f"调用多模态模型出错: {str(e)}"
 
 
-async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
+async def steal_meme(
+    sender,
+    event: AstrMessageEvent,
+    categories: list[str] | None = None,
+    image_content: bytes | None = None,
+    image_hash: str | None = None,
+    image_type: str | None = None,
+):
     """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
 
     Args:
@@ -147,7 +155,7 @@ async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
         if images:
             last_image_url = images[-1].url
 
-    if not last_image_url:
+    if not last_image_url and image_content is None:
         return "没有在当前消息或引用的回复中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
 
     # 3. 检查分类是否合法（如果未启用多模态判定，且 categories 为空，则报错）
@@ -155,40 +163,45 @@ async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
         return "请输入至少一个有效的标签/分类名称。"
 
     # 4. 下载图片
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
+    content = image_content
+    file_type = image_type
+    raw_hash = image_hash
 
-    try:
-        if "multimedia.nt.qq.com.cn" in last_image_url:
-            insecure_url = last_image_url.replace("https://", "http://", 1)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(insecure_url) as resp:
-                    content = await resp.read()
-        else:
-            async with aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=ssl_context)
-            ) as session:
-                async with session.get(last_image_url) as resp:
-                    content = await resp.read()
+    if content is None or file_type is None or raw_hash is None:
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
 
-        if not content:
-            return "下载图片失败，文件内容为空。"
-
-        # 检测图片类型
         try:
-            with PILImage.open(io.BytesIO(content)) as img_obj:
-                file_type = img_obj.format.lower()
+            if "multimedia.nt.qq.com.cn" in last_image_url:
+                insecure_url = last_image_url.replace("https://", "http://", 1)
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(insecure_url) as resp:
+                        content = await resp.read()
+            else:
+                async with aiohttp.ClientSession(
+                    connector=aiohttp.TCPConnector(ssl=ssl_context)
+                ) as session:
+                    async with session.get(last_image_url) as resp:
+                        content = await resp.read()
+
+            if not content:
+                return "下载图片失败，文件内容为空。"
+
+            # 检测图片类型
+            try:
+                with PILImage.open(io.BytesIO(content)) as img_obj:
+                    file_type = img_obj.format.lower()
+            except Exception as e:
+                logger.error(f"图片格式检测失败: {str(e)}")
+                file_type = "unknown"
+
+            # 5. 保存前哈希计算
+            raw_hash = hashlib.sha256(content).hexdigest()
+
         except Exception as e:
-            logger.error(f"图片格式检测失败: {str(e)}")
-            file_type = "unknown"
-
-        # 5. 保存前哈希计算
-        raw_hash = hashlib.sha256(content).hexdigest()
-
-    except Exception as e:
-        logger.error(f"下载图片或检测格式失败: {e}", exc_info=True)
-        return f"下载/解析图片失败：{str(e)}"
+            logger.error(f"下载图片或检测格式失败: {e}", exc_info=True)
+            return f"下载/解析图片失败：{str(e)}"
 
     # 6. 表情包收集偏好判定
     attempt = get_steal_attempt(raw_hash, persona_id)
@@ -442,3 +455,120 @@ async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
             except Exception:
                 pass
         raise e
+
+
+async def auto_steal_meme(sender, event: AstrMessageEvent):
+    """暗中自动偷表情包功能（被动监听群聊消息）"""
+    # 1. 获取当前会话的人格 ID，并检查偏好设置
+    persona_id = await get_persona_id(sender, event)
+    persona_prompt = await get_persona_prompt(sender, event)
+
+    pref_match = re.search(
+        r"<meme_preference>(.*?)</meme_preference>",
+        persona_prompt,
+        re.DOTALL | re.IGNORECASE,
+    )
+    if not pref_match or not pref_match.group(1).strip():
+        logger.debug(
+            f"[meme_manager] 当前人格 {persona_id} 未配置表情包收集偏好，跳过自动偷表情。"
+        )
+        return
+
+    # 2. 从消息中提取图片 URL
+    last_image_url = None
+    for comp in event.message_obj.message:
+        if isinstance(comp, Reply) and comp.chain:
+            for sub_comp in comp.chain:
+                if isinstance(sub_comp, Image):
+                    last_image_url = sub_comp.url
+                    break
+            if last_image_url:
+                break
+
+    if not last_image_url:
+        images = [c for c in event.message_obj.message if isinstance(c, Image)]
+        if images:
+            last_image_url = images[-1].url
+
+    if not last_image_url:
+        return
+
+    # 3. 下载图片并计算 hash
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
+    try:
+        if "multimedia.nt.qq.com.cn" in last_image_url:
+            insecure_url = last_image_url.replace("https://", "http://", 1)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(insecure_url) as resp:
+                    content = await resp.read()
+        else:
+            async with aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(ssl=ssl_context)
+            ) as session:
+                async with session.get(last_image_url) as resp:
+                    content = await resp.read()
+
+        if not content:
+            logger.warning("[meme_manager] 自动偷表情失败：下载图片内容为空")
+            return
+
+        try:
+            with PILImage.open(io.BytesIO(content)) as img_obj:
+                file_type = img_obj.format.lower()
+        except Exception as e:
+            logger.error(f"[meme_manager] 自动偷表情：图片格式检测失败: {str(e)}")
+            file_type = "unknown"
+
+        raw_hash = hashlib.sha256(content).hexdigest()
+
+    except Exception as e:
+        logger.error(
+            f"[meme_manager] 自动偷表情：下载图片或解析格式失败: {e}", exc_info=True
+        )
+        return
+
+    # 4. 判断是否被当前人格使用工具盗取/尝试过
+    # A. 检查 attempts 表
+    attempt = get_steal_attempt(raw_hash, persona_id)
+    if attempt is not None:
+        logger.debug(
+            f"[meme_manager] 自动偷表情：图片 {raw_hash} 存在历史处理记录，跳过。"
+        )
+        return
+
+    # B. 检查 memes 表中是否已经包含这个 original_hash 且已被此 persona 拥有
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT personas FROM memes WHERE original_hash = ?",
+        (raw_hash,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        personas = row["personas"]
+        if personas:
+            persona_list = [p.strip() for p in personas.split(",")]
+            if "*" in persona_list or persona_id in persona_list:
+                logger.debug(
+                    f"[meme_manager] 自动偷表情：图片 {raw_hash} 已经在当前人格的图库中，跳过。"
+                )
+                return
+
+    # 5. 调用原本的 steal_meme 工具流程进行盗取
+    logger.info(f"[meme_manager] 自动偷表情：开始对图片 {raw_hash} 进行暗中收录判定...")
+    try:
+        result = await steal_meme(
+            sender=sender,
+            event=event,
+            categories=None,
+            image_content=content,
+            image_hash=raw_hash,
+            image_type=file_type,
+        )
+        logger.info(f"[meme_manager] 自动偷表情执行结果: {result}")
+    except Exception as e:
+        logger.error(f"[meme_manager] 自动偷表情执行失败: {e}", exc_info=True)
