@@ -334,7 +334,7 @@ async def steal_meme(
                                 resolved_categories.append(cat)
                             else:
                                 # 允许作为自定义的新标签
-                                clean_cat = category.lower()
+                                clean_cat = cat.lower()
                                 if len(clean_cat) <= 20:
                                     resolved_categories.append(clean_cat)
                                 else:
