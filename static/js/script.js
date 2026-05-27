@@ -89,6 +89,11 @@ createApp({
       originalCategory: "",
     });
 
+    const importModal = reactive({
+      visible: false,
+      selectedEmojis: new Set(),
+    });
+
     // Sync state tracking
     const syncChecking = ref(false);
     const syncStatus = ref({
@@ -266,6 +271,12 @@ createApp({
         }
       });
       return Array.from(allSet).sort();
+    });
+
+    const importableEmojisList = computed(() => {
+      if (!activeCategory.value || activeCategory.value === 'all') return [];
+      const currentList = emojiData.value[activeCategory.value] || [];
+      return allEmojisList.value.filter((emoji) => !currentList.includes(emoji));
     });
 
     const getEmojiTags = (emoji) => {
@@ -863,6 +874,47 @@ createApp({
       }
     };
 
+    const openImportModal = () => {
+      importModal.selectedEmojis = new Set();
+      importModal.visible = true;
+    };
+
+    const closeImportModal = () => {
+      importModal.visible = false;
+      importModal.selectedEmojis = new Set();
+    };
+
+    const toggleImportEmoji = (emoji) => {
+      if (importModal.selectedEmojis.has(emoji)) {
+        importModal.selectedEmojis.delete(emoji);
+      } else {
+        importModal.selectedEmojis.add(emoji);
+      }
+    };
+
+    const submitImport = async () => {
+      const category = activeCategory.value;
+      if (!category || category === 'all') return;
+
+      const filenames = Array.from(importModal.selectedEmojis);
+      if (filenames.length === 0) return;
+
+      try {
+        const res = await fetch("/api/emoji/batch_import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category, filenames }),
+        });
+        if (!res.ok) throw new Error("批量导入失败");
+
+        showToast(`成功导入 ${filenames.length} 个表情到分类 ${category}`, "success", "导入成功");
+        closeImportModal();
+        await fetchEmojis();
+      } catch (e) {
+        showToast(e.message, "error", "导入失败");
+      }
+    };
+
     // ----------------------------------------------------
     // Drag & Drop (HTML5 standard API)
     // ----------------------------------------------------
@@ -1379,6 +1431,12 @@ createApp({
       removeFromConfig,
       syncToRemote,
       syncFromRemote,
+      importModal,
+      importableEmojisList,
+      openImportModal,
+      closeImportModal,
+      toggleImportEmoji,
+      submitImport,
       personaDedicatedTag,
       savePersonaDedicatedTag,
     };

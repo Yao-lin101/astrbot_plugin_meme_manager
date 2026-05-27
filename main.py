@@ -142,12 +142,17 @@ class MemeSender(Star):
             rows = cursor.fetchall()
             conn.close()
 
+            from .backend.helpers import load_persona_tags
+
+            p_tags = load_persona_tags()
+            dedicated_tag = p_tags.get(persona_id)
+
             allowed_categories = set()
             for row in rows:
                 if row["emotions"]:
                     for emo in row["emotions"].split(","):
                         emo = emo.strip()
-                        if emo:
+                        if emo and emo != dedicated_tag:
                             allowed_categories.add(emo)
 
             if not allowed_categories:

@@ -778,3 +778,55 @@ async def save_persona_tag():
     except Exception as e:
         logger.error(f"保存人格专属标签失败: {e}", exc_info=True)
         return jsonify({"message": str(e)}), 500
+
+
+@api.route("/emoji/batch_import", methods=["POST"])
+async def batch_import_emojis():
+    """批量导入已存在的表情包到指定类别（为选中的表情包文件追加该类别标签）"""
+    try:
+        data = await request.get_json()
+        category = data.get("category")
+        filenames = data.get("filenames")
+
+        if not category or not isinstance(filenames, list) or not filenames:
+            return jsonify({"message": "Category and filenames list are required"}), 400
+
+        from .database import get_db_conn
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+
+        # 遍历更新每个表情包的 emotions 字段
+        for filename in filenames:
+            cursor.execute("SELECT emotions FROM memes WHERE filename = ?", (filename,))
+            row = cursor.fetchone()
+            if row:
+                existing_emotions = (
+                    set(row["emotions"].split(",")) if row["emotions"] else set()
+                )
+                existing_emotions.add(category)
+                cursor.execute(
+                    "UPDATE memes SET emotions = ? WHERE filename = ?",
+                    (",".join(existing_emotions), filename),
+                )
+        conn.commit()
+        conn.close()
+
+        # 重新加载类别
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        category_manager = plugin_config.get("category_manager")
+        if category_manager:
+            category_manager.sync_with_filesystem()
+
+        return (
+            jsonify(
+                {
+                    "message": "Batch import completed successfully",
+                    "count": len(filenames),
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        logger.error(f"批量导入表情包失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
