@@ -55,7 +55,12 @@ async def _check_meme_preference_match(
         f"【当前人格的表情包收集偏好】：\n"
         f"{preference_text}\n\n"
         f"【判定规则（极其重要）】：\n"
-        f"1. 先判断图片是否属于表情包范畴，如果是截图、照片等非相关内容直接判false。\n"
+        f"1. 严格判断图片是否属于表情包（Meme/梗图）范畴。必须判定为 false 拒绝收录的类型：\n"
+        f"   - 手机或电脑系统界面截图、聊天记录截图、网页/文档截图；\n"
+        f"   - 普通同人图、精美插画、壁纸、画作；\n"
+        f"   - 真实人物照片、风景/实物照片；\n"
+        f"   - 没有任何表情包属性（如配字、夸张表情动作、沙雕搞笑元素、网络流行梗图模因等）的常规动漫/游戏单帧截图。\n"
+        f"   *注意*：只有具备明显表情包属性（包含配字/字幕、夸张幽默情绪、特定网络流行模因或丑萌沙雕卡通形象）的图片，才属于表情包。\n"
         f"2. 仔细分析图片内容和风格，结合上述偏好描述进行判定。\n"
         f"3. 请仅以 JSON 格式返回，包含 `match`（布尔值：true 或 false）和 `reason`（字符串：简短的判定理由）。\n"
         f"例如：\n"
@@ -439,14 +444,9 @@ async def steal_meme(
         invalid_tip = (
             f"（忽略了无效的标签 {invalid_categories}）" if invalid_categories else ""
         )
-
-        sync_tip = ""
-        if sender.img_sync:
-            sync_tip = "\n☁️ 检测到已配置图床，如需同步到云端请使用命令：同步到云端"
-
         await sender.reload_emotions()
 
-        return f"成功收录表情包「{res['filename']}」到标签【{', '.join(resolved_categories)}】中，且仅供人格【{persona_id}】使用。{invalid_tip}{sync_tip}"
+        return f"成功收录表情包「{res['filename']}」到标签【{', '.join(resolved_categories)}】中，且仅供人格【{persona_id}】使用。{invalid_tip}"
 
     except Exception as e:
         if conn:
@@ -558,8 +558,19 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
                 )
                 return
 
+    # C. 统计并递增该图片哈希的全局看见次数，若小于设定的阈值，则仅记录次数不触发偷图
+    from .database import increment_image_seen_count
+
+    min_seen = sender.config.get("auto_steal_min_seen", 2)
+    seen_count = increment_image_seen_count(raw_hash)
+    if seen_count < min_seen:
+        logger.info(
+            f"[meme_manager] 自动偷表情：图片 {raw_hash} 全局第 {seen_count} 次被看见，未达到设定阈值 {min_seen}，仅记录次数并跳过偷图。"
+        )
+        return
+
     # 5. 调用原本的 steal_meme 工具流程进行盗取
-    logger.info(f"[meme_manager] 自动偷表情：开始对图片 {raw_hash} 进行暗中收录判定...")
+    logger.info(f"[meme_manager] 自动偷表情：开始对图片 {raw_hash} 进行暗中收录判定 (已看见 {seen_count} 次)...")
     try:
         result = await steal_meme(
             sender=sender,

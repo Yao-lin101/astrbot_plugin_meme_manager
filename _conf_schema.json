@@ -240,6 +240,12 @@
       "step": 1
     }
   },
+  "auto_steal_min_seen": {
+    "description": "自动偷表情包最少出现次数",
+    "type": "int",
+    "default": 2,
+    "hint": "图片在群聊中总计被看见达到多少次后，才触发多模态模型偷表情判定。设为 1 表示首次看到就判定，设为 2 可有效过滤一次性截图或插画"
+  },
   "streaming_compatibility": {
     "description": "流式传输兼容",
     "type": "bool",

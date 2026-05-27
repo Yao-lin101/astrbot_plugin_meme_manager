@@ -44,6 +44,17 @@ def init_db():
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_steal_attempts_hash_persona ON meme_steal_attempts (image_hash, persona_id)"
     )
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS meme_seen_records (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        image_hash TEXT UNIQUE,
+        seen_count INTEGER DEFAULT 1,
+        last_seen_time INTEGER
+    )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_seen_records_hash ON meme_seen_records (image_hash)"
+    )
     conn.commit()
 
     # 检查 original_hash 列是否存在
@@ -232,3 +243,44 @@ def save_steal_attempt(image_hash: str, persona_id: str, is_matched: bool) -> No
     )
     conn.commit()
     conn.close()
+
+
+def get_image_seen_count(image_hash: str) -> int:
+    """获取图片哈希的全局出现次数"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT seen_count FROM meme_seen_records WHERE image_hash = ?",
+        (image_hash,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row["seen_count"] if row else 0
+
+
+def increment_image_seen_count(image_hash: str) -> int:
+    """递增图片哈希的全局出现次数，并返回新的次数"""
+    import time
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT seen_count FROM meme_seen_records WHERE image_hash = ?",
+        (image_hash,),
+    )
+    row = cursor.fetchone()
+    if row:
+        new_count = row["seen_count"] + 1
+        cursor.execute(
+            "UPDATE meme_seen_records SET seen_count = ?, last_seen_time = ? WHERE image_hash = ?",
+            (new_count, int(time.time()), image_hash),
+        )
+    else:
+        new_count = 1
+        cursor.execute(
+            "INSERT INTO meme_seen_records (image_hash, seen_count, last_seen_time) VALUES (?, ?, ?)",
+            (image_hash, 1, int(time.time())),
+        )
+    conn.commit()
+    conn.close()
+    return new_count
