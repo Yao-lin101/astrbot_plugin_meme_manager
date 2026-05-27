@@ -126,9 +126,31 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
 
     text = response.completion_text
     sender.found_emotions = []  # 重置表情列表
-    valid_emoticons = set(
-        sender.category_manager.get_categories()
-    )  # 预加载合法表情集合
+    persona_id = await get_persona_id(sender, event)
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+        (f"%,{persona_id},%",),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    valid_emoticons = set()
+    for row in rows:
+        if row["emotions"]:
+            for emo in row["emotions"].split(","):
+                emo = emo.strip()
+                if emo:
+                    valid_emoticons.add(emo)
+
+    from .helpers import load_persona_tags
+    p_tags = load_persona_tags()
+    dedicated_tag = p_tags.get(persona_id)
+    if dedicated_tag:
+        dedicated_tag = dedicated_tag.strip()
+        if dedicated_tag:
+            valid_emoticons.add(dedicated_tag)
     logger.debug(
         f"[meme_manager] 收到 LLM 响应，开始表情识别。文本: {text[:100]}...，启用情感模型: {sender.emotion_llm_enabled}"
     )
