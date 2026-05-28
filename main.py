@@ -132,6 +132,7 @@ class MemeSender(Star):
                 sys_prompt_add = (
                     "\n\n你在对话中如果想发出某种表情包或配合某种动作，请在合适的位置自由输出描述它的标签词，表情需用&&包裹，格式如 &&情感词&&（例如 &&高兴&& 或 &&猫&&）。"
                     "请尽量贴合对话内容进行自由表达。"
+                    "\n\n【重要约束】：当用户要求你发送表情包、图片或特定表情时，严禁使用任何搜索工具去网络查找图片，也严禁调用工具直接发图。你只需直接在回复文本中输出对应的 &&标签&&，系统会自动在后台匹配并发送。"
                 )
                 persona["prompt"] = original_prompt + sys_prompt_add
             return
@@ -176,6 +177,7 @@ class MemeSender(Star):
                 + self.prompt_tail_1
                 + str(self.max_emotions_per_message)
                 + self.prompt_tail_2
+                + "\n\n【重要约束】：当用户要求你发送表情包、图片或特定表情时，严禁使用任何搜索工具去网络查找图片，也严禁调用工具直接发图。你只需直接在回复文本中输出对应的 &&标签&&，系统会自动在后台匹配并发送。"
             )
             persona["prompt"] = original_prompt + sys_prompt_add
 
