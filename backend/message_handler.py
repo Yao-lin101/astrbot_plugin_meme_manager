@@ -45,22 +45,14 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
 
         if original_chain:
             if isinstance(original_chain, str):
-                cleaned = (
-                    re.sub(sender.content_cleanup_rule, "", original_chain)
-                    if sender.content_cleanup_rule
-                    else original_chain
-                )
+                cleaned = original_chain
                 if cleaned.strip():
                     cleaned_components.append(Plain(cleaned.strip()))
 
-            elif isinstance(original_chain, MessageChain):
-                for component in original_chain.chain:
+            elif isinstance(original_chain, list):
+                for component in original_chain:
                     if isinstance(component, Plain):
-                        cleaned = (
-                            re.sub(sender.content_cleanup_rule, "", component.text)
-                            if sender.content_cleanup_rule
-                            else component.text
-                        )
+                        cleaned = component.text
                         if cleaned.strip():
                             cleaned_components.append(Plain(cleaned.strip()))
                     else:
@@ -108,8 +100,12 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                             existing_temp_files + temp_files,
                         )
 
+                    # If the message has no text components, we MUST force mixed message
+                    # so that the image is sent as the primary message content instead of being skipped.
                     use_mixed_message = False
-                    if sender.enable_mixed_message:
+                    if not cleaned_components:
+                        use_mixed_message = True
+                    elif sender.enable_mixed_message:
                         use_mixed_message = (
                             random.randint(1, 100) <= sender.mixed_message_probability
                         )
@@ -132,17 +128,40 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
             sender.found_emotions = []
 
         if cleaned_components:
-            result.chain = cleaned_components
+            final_cleaned_components = []
+            for comp in cleaned_components:
+                if isinstance(comp, Plain):
+                    text_val = re.sub(
+                        r"<emotions>.*?</emotions>",
+                        "",
+                        comp.text,
+                        flags=re.DOTALL | re.IGNORECASE,
+                    )
+                    if text_val.strip():
+                        final_cleaned_components.append(Plain(text_val.strip()))
+                else:
+                    final_cleaned_components.append(comp)
+            result.chain = final_cleaned_components
         elif original_chain:
             if isinstance(original_chain, str):
-                final_cleaned = re.sub(r"&&+", "", original_chain)
+                final_cleaned = re.sub(
+                    r"<emotions>.*?</emotions>",
+                    "",
+                    original_chain,
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
                 if final_cleaned.strip():
                     result.chain = [Plain(final_cleaned.strip())]
-            elif isinstance(original_chain, MessageChain):
+            elif isinstance(original_chain, list):
                 final_components = []
-                for component in original_chain.chain:
+                for component in original_chain:
                     if isinstance(component, Plain):
-                        final_cleaned = re.sub(r"&&+", "", component.text)
+                        final_cleaned = re.sub(
+                            r"<emotions>.*?</emotions>",
+                            "",
+                            component.text,
+                            flags=re.DOTALL | re.IGNORECASE,
+                        )
                         if final_cleaned.strip():
                             final_components.append(Plain(final_cleaned.strip()))
                     else:

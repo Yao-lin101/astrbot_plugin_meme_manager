@@ -7,7 +7,7 @@ from quart import current_app
 from werkzeug.utils import secure_filename
 
 from ..config import MEMES_DIR
-from ..utils import compress_image
+from ..utils import compress_image, get_config_value
 from .database import get_db_conn
 
 logger = logging.getLogger(__name__)
@@ -116,12 +116,12 @@ def save_and_register_meme(
     cfg = config or _get_plugin_config()
 
     # 1. 自动压缩
-    if cfg.get("enable_compression", True):
-        max_size_kb = cfg.get("compression_max_size_kb", 1024)
-        max_width = cfg.get("compression_max_width", 1024)
-        quality = cfg.get("compression_quality", 80)
-        compress_gif = cfg.get("compress_gif", False)
-        compression_format = cfg.get("compression_format", "original")
+    if get_config_value(cfg, "enable_compression", True):
+        max_size_kb = get_config_value(cfg, "compression_max_size_kb", 1024)
+        max_width = get_config_value(cfg, "compression_max_width", 1024)
+        quality = get_config_value(cfg, "compression_quality", 80)
+        compress_gif = get_config_value(cfg, "compress_gif", False)
+        compression_format = get_config_value(cfg, "compression_format", "original")
         image_bytes, filename = compress_image(
             image_bytes,
             max_size_kb,
