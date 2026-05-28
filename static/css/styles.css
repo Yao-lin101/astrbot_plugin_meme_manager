@@ -980,7 +980,7 @@ button:disabled {
   border-radius: var(--radius-lg);
   padding: 24px;
   width: min(100%, 1200px);
-  height: min(90vh, 680px);
+  height: min(90vh, 700px);
   max-height: 90vh;
   box-shadow: var(--shadow-md);
   display: flex;
@@ -1001,6 +1001,7 @@ button:disabled {
 .drawer-preview-column {
   flex: 1.2;
   min-width: 300px;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1008,18 +1009,23 @@ button:disabled {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 16px;
+  box-sizing: border-box;
 }
 
 .drawer-preview-column img {
   max-width: 100%;
   max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-sm);
+  display: block;
 }
 
 .drawer-edit-column {
   flex: 1.8;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1027,18 +1033,100 @@ button:disabled {
   padding-right: 4px;
 }
 
+/* Loading overlay for the modal */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border-radius: var(--radius-lg);
+}
+
+.loading-overlay i {
+  color: var(--primary-color);
+}
+
+/* Modal action layout overrides */
+.emoji-detail-modal-card .drawer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.emoji-detail-modal-card .navigation-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.emoji-detail-modal-card .navigation-group .icon-only-btn {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 0;
+}
+
+.emoji-detail-modal-card .navigation-group .btn-secondary:not(.icon-only-btn) {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  padding: 0 12px;
+  border-radius: 18px;
+  margin-left: 4px;
+}
+
+.emoji-detail-modal-card .action-group {
+  display: flex;
+  gap: 12px;
+}
+
 @media (max-width: 768px) {
   .emoji-detail-modal-card {
     width: 95%;
-    max-height: 95vh;
+    height: min(90vh, 680px);
+    max-height: 90vh;
   }
   .drawer-body-layout {
     flex-direction: column;
-    overflow-y: auto;
-    max-height: calc(95vh - 140px);
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+    gap: 16px;
   }
   .drawer-preview-column {
     min-width: unset;
+    height: 240px;
+    flex: none;
+    min-height: 0;
+  }
+  .drawer-edit-column {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .emoji-detail-modal-card .drawer-actions {
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+  }
+  .emoji-detail-modal-card .navigation-group,
+  .emoji-detail-modal-card .action-group {
+    justify-content: center;
+    width: 100%;
   }
 }
 
