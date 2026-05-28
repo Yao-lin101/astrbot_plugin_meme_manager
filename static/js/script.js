@@ -20,6 +20,8 @@ createApp({
     const toasts = ref([]);
     const syncDrawerVisible = ref(false);
     let toastIdCounter = 0;
+    const tabSearchQuery = ref("");
+    const drawerTagSearchQuery = ref("");
 
     // Properties Editor (Inline Grid Drawer)
     const detailMetadata = ref(null);
@@ -31,8 +33,8 @@ createApp({
     const uploadStateByCategory = ref(new Map());
 
     // Batch Selection Mode
-    const selectionEnabled = ref(false);
     const selectedEmojis = ref(new Map()); // Key: 'category:emoji' -> { category, emoji }
+    const selectionEnabled = computed(() => selectedEmojis.value.size > 0);
 
     // Context Menu State (right click / long press)
     const contextMenu = reactive({
@@ -249,6 +251,20 @@ createApp({
       closeDetailDrawer();
     };
 
+    const filteredCategories = computed(() => {
+      const query = tabSearchQuery.value.trim().toLowerCase();
+      const categories = Object.keys(emojiData.value);
+      if (!query) return categories;
+      return categories.filter(category => category.toLowerCase().includes(query));
+    });
+
+    const filteredDrawerTags = computed(() => {
+      const query = drawerTagSearchQuery.value.trim().toLowerCase();
+      const tags = Object.keys(emojiData.value);
+      if (!query) return tags;
+      return tags.filter(tag => tag.toLowerCase().includes(query));
+    });
+
     // ----------------------------------------------------
     // Multi-tag Emoji mapping computed
     // ----------------------------------------------------
@@ -366,6 +382,7 @@ createApp({
       detailMetadata.value = null;
       selectedEmotions.value = [];
       selectedPersonas.value = [];
+      drawerTagSearchQuery.value = "";
     };
 
     const toggleTagInDrawer = (tag) => {
@@ -524,10 +541,7 @@ createApp({
     // Batch Selection Operations
     // ----------------------------------------------------
     const toggleSelectionMode = () => {
-      selectionEnabled.value = !selectionEnabled.value;
-      if (!selectionEnabled.value) {
-        selectedEmojis.value.clear();
-      }
+      selectedEmojis.value.clear();
     };
 
     const isEmojiSelected = (category, emoji) => {
@@ -897,9 +911,11 @@ createApp({
 
     const deleteCategory = async (category) => {
       const count = emojiData.value[category]?.length || 0;
-      const confirmed = await showDangerConfirm(
+      const confirmed = await confirm(
         `删除分类「${category}」`,
-        `确认删除分类「${category}」吗？此操作将清除该分类的所有表情包分类标签，若表情包不属于其他任何分类，对应的磁盘文件将被物理删除。`
+        `确认删除分类「${category}」吗？此操作将清除该分类的所有表情包分类标签，若表情包不属于其他任何分类，对应的磁盘文件将被物理删除。`,
+        "确认删除",
+        "danger"
       );
       if (!confirmed) return;
 
@@ -1486,6 +1502,10 @@ createApp({
       submitImport,
       personaDedicatedTag,
       savePersonaDedicatedTag,
+      tabSearchQuery,
+      drawerTagSearchQuery,
+      filteredCategories,
+      filteredDrawerTags,
     };
   },
 }).mount("#app");

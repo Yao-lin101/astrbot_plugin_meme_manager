@@ -604,14 +604,17 @@ button:disabled {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  border: 2px solid #fff;
-  background: rgba(0, 0, 0, 0.2);
-  display: none;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  background: rgba(15, 23, 42, 0.25);
+  display: block; /* Permanently visible */
   z-index: 5;
+  transition: var(--transition);
+  backdrop-filter: blur(2px);
 }
 
-.emoji-item.selection-mode .selection-indicator {
-  display: block;
+.emoji-item:hover .selection-indicator {
+  background: rgba(15, 23, 42, 0.45);
+  border-color: #ffffff;
 }
 
 .emoji-item.selected .selection-indicator {
@@ -754,8 +757,7 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.drawer-tags-picker,
-.drawer-personas-list {
+.drawer-tags-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -763,13 +765,20 @@ button:disabled {
   background: rgba(0, 0, 0, 0.02);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  max-height: 110px;
+  max-height: 250px;
   overflow-y: auto;
 }
 
 .drawer-personas-list {
+  display: flex;
   flex-direction: column;
-  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  max-height: 250px;
+  overflow-y: auto;
 }
 
 .picker-tag-pill {
@@ -952,13 +961,24 @@ button:disabled {
 .confirm-modal-card,
 .danger-modal-card,
 .move-target-modal-card,
-.category-edit-modal-card,
-.emoji-detail-modal-card {
+.category-edit-modal-card {
   background: #ffffff;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 20px 24px;
   width: min(100%, 540px);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.emoji-detail-modal-card {
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  width: min(100%, 800px);
   box-shadow: var(--shadow-md);
   display: flex;
   flex-direction: column;
