@@ -45,22 +45,14 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
 
         if original_chain:
             if isinstance(original_chain, str):
-                cleaned = (
-                    re.sub(sender.content_cleanup_rule, "", original_chain)
-                    if sender.content_cleanup_rule
-                    else original_chain
-                )
+                cleaned = original_chain
                 if cleaned.strip():
                     cleaned_components.append(Plain(cleaned.strip()))
 
             elif isinstance(original_chain, MessageChain):
                 for component in original_chain.chain:
                     if isinstance(component, Plain):
-                        cleaned = (
-                            re.sub(sender.content_cleanup_rule, "", component.text)
-                            if sender.content_cleanup_rule
-                            else component.text
-                        )
+                        cleaned = component.text
                         if cleaned.strip():
                             cleaned_components.append(Plain(cleaned.strip()))
                     else:
@@ -108,8 +100,12 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                             existing_temp_files + temp_files,
                         )
 
+                    # If the message has no text components, we MUST force mixed message
+                    # so that the image is sent as the primary message content instead of being skipped.
                     use_mixed_message = False
-                    if sender.enable_mixed_message:
+                    if not cleaned_components:
+                        use_mixed_message = True
+                    elif sender.enable_mixed_message:
                         use_mixed_message = (
                             random.randint(1, 100) <= sender.mixed_message_probability
                         )
