@@ -97,6 +97,30 @@ createApp({
       emojiActions.closeDetailDrawer();
     };
 
+    const currentEmojiIndex = computed(() => {
+      if (!emojiActions.activeDetailEmoji.value) return -1;
+      return api.activeCategoryEmojisList.value.indexOf(emojiActions.activeDetailEmoji.value);
+    });
+
+    const hasPreviousEmoji = computed(() => {
+      return currentEmojiIndex.value > 0;
+    });
+
+    const hasNextEmoji = computed(() => {
+      const idx = currentEmojiIndex.value;
+      return idx > -1 && idx < api.activeCategoryEmojisList.value.length - 1;
+    });
+
+    const navigateToSiblingEmoji = (direction) => {
+      const idx = currentEmojiIndex.value;
+      if (idx === -1) return;
+      const targetIdx = idx + direction;
+      if (targetIdx >= 0 && targetIdx < api.activeCategoryEmojisList.value.length) {
+        const targetEmoji = api.activeCategoryEmojisList.value[targetIdx];
+        emojiActions.toggleDetailDrawer(activeCategory.value, targetEmoji);
+      }
+    };
+
     // Scroll listener for client-side pagination (infinite scroll)
     const handleScroll = () => {
       if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
@@ -193,6 +217,9 @@ createApp({
       // UI States & Navigation
       syncDrawerVisible,
       selectCategory,
+      hasPreviousEmoji,
+      hasNextEmoji,
+      navigateToSiblingEmoji,
 
       // Sync
       syncChecking: sync.syncChecking,

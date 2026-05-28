@@ -483,9 +483,27 @@
                 </div>
               </div>
             </div>
-            <div class="drawer-actions">
-              <button class="btn-secondary" @click="closeDetailDrawer">取消</button>
-              <button class="btn-primary" @click="saveEmojiAttributes">保存修改</button>
+            <div class="drawer-actions" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+              <div class="navigation-group" style="display: flex; gap: 8px;">
+                <button class="btn-secondary icon-only-btn" 
+                        :disabled="!hasPreviousEmoji" 
+                        @click="navigateToSiblingEmoji(-1)"
+                        title="上一张"
+                        style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;">
+                  <i class="fas fa-chevron-left"></i>
+                </button>
+                <button class="btn-secondary icon-only-btn" 
+                        :disabled="!hasNextEmoji" 
+                        @click="navigateToSiblingEmoji(1)"
+                        title="下一张"
+                        style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;">
+                  <i class="fas fa-chevron-right"></i>
+                </button>
+              </div>
+              <div class="action-group" style="display: flex; gap: 12px;">
+                <button class="btn-secondary" @click="closeDetailDrawer">取消</button>
+                <button class="btn-primary" @click="saveEmojiAttributes">保存修改</button>
+              </div>
             </div>
           </template>
         </div>
