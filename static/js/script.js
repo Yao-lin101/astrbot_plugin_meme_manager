@@ -133,6 +133,7 @@ createApp({
       activeCategories: api.activeCategories,
       activeCategory,
       activeCategoriesDisplayName,
+      activeCategoryEmojisList: api.activeCategoryEmojisList,
       activeEmojisCount: api.activeEmojisCount,
       tabSearchQuery: api.tabSearchQuery,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
