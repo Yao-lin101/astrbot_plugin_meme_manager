@@ -189,12 +189,11 @@
             <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
           </div>
           <div id="emoji-tabs" class="emoji-tabs-container">
-            <!-- "All" Tab -->
-            <button class="emoji-tab-btn" 
-                    :class="{ active: activeCategories.includes('all') }" 
+            <!-- Reset Button -->
+            <button class="emoji-tab-btn reset-tabs-btn" 
+                    v-if="!activeCategories.includes('all') && activeCategories.length > 0"
                     @click="selectCategory('all')">
-              <span class="tab-name">全部 (All)</span>
-              <span class="tab-badge">{% raw %}{{ allEmojisList.length }}{% endraw %}</span>
+              <i class="fas fa-rotate-left"></i>重置筛选
             </button>
 
             <button v-for="category in filteredCategories" 
@@ -302,7 +301,7 @@
                         <button type="button" class="selection-indicator" aria-label="选择表情包" @click.stop="toggleEmojiSelection(activeCategory, emoji)"></button>
                         
                         <!-- 删除按钮 -->
-                        <button v-if="activeCategory !== 'all'" class="delete-btn" @click.stop="deleteEmoji(activeCategory, emoji)">&times;</button>
+                         <button class="delete-btn" @click.stop="deleteEmoji(activeCategory, emoji)">&times;</button>
                       </div>
 
                       <!-- 表情包卡片底部多标签 -->

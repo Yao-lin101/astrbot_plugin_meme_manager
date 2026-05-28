@@ -70,7 +70,7 @@ createApp({
 
     const activeCategoriesDisplayName = computed(() => {
       if (api.activeCategories.value.includes('all') || api.activeCategories.value.length === 0) {
-        return '全部 (All)';
+        return '全部表情';
       }
       return api.activeCategories.value.join(' & ');
     });

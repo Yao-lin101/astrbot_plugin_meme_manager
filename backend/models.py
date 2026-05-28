@@ -266,8 +266,8 @@ def delete_emoji_from_category(category, image_file):
     if category in emotions:
         emotions.remove(category)
 
-    if not emotions:
-        # 没有分类了，删除记录与文件
+    if not emotions or category == "all":
+        # 没有分类了，或者指定为 'all' (代表彻底删除)，删除记录与文件
         cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
         conn.commit()
         conn.close()

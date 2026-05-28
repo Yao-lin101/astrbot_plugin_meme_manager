@@ -170,9 +170,15 @@ export function useEmojiActions({
   };
 
   const deleteEmoji = async (category, emoji) => {
+    const isAll = category === "all";
+    const title = isAll ? "物理删除表情包" : "删除标签 / 文件";
+    const promptText = isAll
+      ? "确认物理删除该表情包吗？此操作将永久从磁盘和所有分类下删除该表情文件！"
+      : `确认从分类「${category}」下移除表情包？若该表情包不属于其他任何分类，它将被物理删除。`;
+
     const confirmed = await confirm(
-      "删除标签 / 文件",
-      `确认从分类「${category}」下移除表情包？若该表情包不属于其他任何分类，它将被物理删除。`,
+      title,
+      promptText,
       "确认删除",
       "danger"
     );

@@ -1345,3 +1345,19 @@ button:disabled {
 .edit-btn {
   padding: 0 !important;
 }
+
+/* Reset Tabs Filter Button */
+.reset-tabs-btn {
+  border: 1px dashed var(--border-color) !important;
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reset-tabs-btn:hover {
+  border-color: var(--danger-color) !important;
+  color: var(--danger-color) !important;
+  background: rgba(239, 68, 68, 0.05) !important;
+}
