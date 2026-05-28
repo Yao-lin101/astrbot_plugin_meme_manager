@@ -140,7 +140,7 @@ export function useEmojiActions({
     }
   };
 
-  const saveEmojiAttributes = async () => {
+  const saveEmojiAttributes = async (closeAfterSave = true) => {
     if (selectedEmotions.value.length === 0) {
       showToast("请至少选择一个分类标签。", "warning", "保存提示");
       return;
@@ -162,7 +162,9 @@ export function useEmojiActions({
       if (!res.ok) throw new Error("保存属性失败");
 
       showToast("属性保存成功！", "success", "修改成功");
-      closeDetailDrawer();
+      if (closeAfterSave) {
+        closeDetailDrawer();
+      }
       await fetchEmojis();
     } catch (e) {
       showToast(e.message, "error", "保存失败");
