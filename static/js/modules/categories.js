@@ -7,7 +7,7 @@ export function useCategories(
   renameCategoryModal,
   addCategoryForm,
   emojiData,
-  activeCategory,
+  activeCategories,
   confirm,
   showDangerConfirm
 ) {
@@ -41,8 +41,9 @@ export function useCategories(
 
       showToast(`标签已成功从「${oldName}」重命名为「${newName}」。`, "success", "重命名成功");
       renameCategoryModal.visible = false;
-      if (activeCategory.value === oldName) {
-        activeCategory.value = newName;
+      const idx = activeCategories.value.indexOf(oldName);
+      if (idx > -1) {
+        activeCategories.value[idx] = newName;
       }
       await fetchEmojis();
       await checkSyncStatus(false);

@@ -3,7 +3,7 @@ const { ref, reactive, nextTick } = window.Vue;
 export function useEmojiActions({
   showToast,
   fetchEmojis,
-  activeCategory,
+  activeCategories,
   selectionEnabled,
   selectedEmojis,
   systemPersonas,
@@ -368,7 +368,7 @@ export function useEmojiActions({
   };
 
   const submitImport = async () => {
-    const category = activeCategory.value;
+    const category = activeCategories.value[0];
     if (!category || category === 'all') return;
 
     const filenames = Array.from(importModal.selectedEmojis);

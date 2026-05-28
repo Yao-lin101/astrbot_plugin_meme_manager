@@ -8,7 +8,7 @@ export function useApi(showToast, pruneSelections) {
   const personaTags = ref({});
   const personaDedicatedTag = ref("");
   const personaFilter = ref("");
-  const activeCategory = ref(null);
+  const activeCategories = ref(['all']);
   
   const tabSearchQuery = ref("");
   const drawerTagSearchQuery = ref("");
@@ -38,14 +38,17 @@ export function useApi(showToast, pruneSelections) {
 
       if (pruneSelections) pruneSelections();
 
-      // Default to 'all' if activeCategory is unset or missing
+      // Default to 'all' if activeCategories is empty or has missing tags
       const categories = Object.keys(emojiData.value);
-      if (categories.length > 0) {
-        if (!activeCategory.value || (!emojiData.value[activeCategory.value] && activeCategory.value !== 'all')) {
-          activeCategory.value = 'all';
-        }
+      if (activeCategories.value.length === 0) {
+        activeCategories.value = ['all'];
       } else {
-        activeCategory.value = null;
+        activeCategories.value = activeCategories.value.filter(
+          (cat) => cat === 'all' || categories.includes(cat)
+        );
+        if (activeCategories.value.length === 0) {
+          activeCategories.value = ['all'];
+        }
       }
     } catch (e) {
       console.error(e);
@@ -137,15 +140,33 @@ export function useApi(showToast, pruneSelections) {
     return Array.from(allSet).sort();
   });
 
+  const activeCategoryEmojisList = computed(() => {
+    if (activeCategories.value.includes('all') || activeCategories.value.length === 0) {
+      return allEmojisList.value;
+    }
+    
+    const firstCat = activeCategories.value[0];
+    let intersection = new Set(emojiData.value[firstCat] || []);
+    
+    for (let i = 1; i < activeCategories.value.length; i++) {
+      const cat = activeCategories.value[i];
+      const emojisInCat = new Set(emojiData.value[cat] || []);
+      intersection = new Set([...intersection].filter(x => emojisInCat.has(x)));
+    }
+    
+    return Array.from(intersection).sort();
+  });
+
   const importableEmojisList = computed(() => {
-    if (!activeCategory.value || activeCategory.value === 'all') return [];
-    const currentList = emojiData.value[activeCategory.value] || [];
+    if (activeCategories.value.includes('all') || activeCategories.value.length === 0) return [];
+    if (activeCategories.value.length > 1) return [];
+    const currentList = emojiData.value[activeCategories.value[0]] || [];
     return allEmojisList.value.filter((emoji) => !currentList.includes(emoji));
   });
 
   const activeCategoryTimeGroups = computed(() => {
-    if (!activeCategory.value) return [];
-    const list = activeCategory.value === 'all' ? allEmojisList.value : (emojiData.value[activeCategory.value] || []);
+    if (activeCategories.value.length === 0) return [];
+    const list = activeCategoryEmojisList.value;
     
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -217,7 +238,9 @@ export function useApi(showToast, pruneSelections) {
     personaTags,
     personaDedicatedTag,
     personaFilter,
-    activeCategory,
+    activeCategories,
+    activeCategoryEmojisList,
+    activeEmojisCount: computed(() => activeCategoryEmojisList.value.length),
     tabSearchQuery,
     drawerTagSearchQuery,
     fetchEmojis,

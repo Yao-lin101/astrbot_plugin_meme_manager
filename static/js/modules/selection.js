@@ -38,15 +38,24 @@ export function useSelection(emojiData, allEmojisList) {
     return count;
   };
 
-  const isAllSelectedInCategory = (category) => {
-    const list = category === 'all' ? allEmojisList.value : (emojiData.value[category] || []);
+  const getVisibleSelectedCount = (visibleList, category) => {
+    let count = 0;
+    if (!visibleList) return 0;
+    visibleList.forEach((emoji) => {
+      if (selectedEmojis.value.has(`${category}:${emoji}`)) count++;
+    });
+    return count;
+  };
+
+  const isAllSelectedInCategory = (category, visibleList) => {
+    const list = visibleList || (category === 'all' ? allEmojisList.value : (emojiData.value[category] || []));
     if (list.length === 0) return false;
     return list.every((emoji) => isEmojiSelected(category, emoji));
   };
 
-  const toggleCategorySelection = (category) => {
-    const list = category === 'all' ? allEmojisList.value : (emojiData.value[category] || []);
-    if (isAllSelectedInCategory(category)) {
+  const toggleCategorySelection = (category, visibleList) => {
+    const list = visibleList || (category === 'all' ? allEmojisList.value : (emojiData.value[category] || []));
+    if (isAllSelectedInCategory(category, list)) {
       list.forEach((emoji) => {
         selectedEmojis.value.delete(`${category}:${emoji}`);
       });
@@ -65,6 +74,7 @@ export function useSelection(emojiData, allEmojisList) {
     isEmojiSelected,
     toggleEmojiSelection,
     getCategorySelectedCount,
+    getVisibleSelectedCount,
     isAllSelectedInCategory,
     toggleCategorySelection,
   };

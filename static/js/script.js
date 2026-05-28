@@ -6,7 +6,7 @@ import { useSync } from './modules/sync.js';
 import { useCategories } from './modules/categories.js';
 import { useEmojiActions } from './modules/emojiActions.js';
 
-const { createApp, ref, onMounted, onUnmounted } = Vue;
+const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
 createApp({
   setup() {
@@ -34,7 +34,7 @@ createApp({
       modals.renameCategoryModal,
       modals.addCategoryForm,
       api.emojiData,
-      api.activeCategory,
+      api.activeCategories,
       modals.confirm,
       modals.showDangerConfirm
     );
@@ -43,7 +43,7 @@ createApp({
     const emojiActions = useEmojiActions({
       showToast,
       fetchEmojis: api.fetchEmojis,
-      activeCategory: api.activeCategory,
+      activeCategories: api.activeCategories,
       selectionEnabled: selection.selectionEnabled,
       selectedEmojis: selection.selectedEmojis,
       systemPersonas: api.systemPersonas,
@@ -62,8 +62,37 @@ createApp({
     // Local UI states
     const syncDrawerVisible = ref(false);
 
+    const activeCategory = computed(() => {
+      if (api.activeCategories.value.includes('all')) return 'all';
+      if (api.activeCategories.value.length === 0) return 'all';
+      return api.activeCategories.value[0];
+    });
+
+    const activeCategoriesDisplayName = computed(() => {
+      if (api.activeCategories.value.includes('all') || api.activeCategories.value.length === 0) {
+        return '全部 (All)';
+      }
+      return api.activeCategories.value.join(' & ');
+    });
+
     const selectCategory = (category) => {
-      api.activeCategory.value = category;
+      if (category === 'all') {
+        api.activeCategories.value = ['all'];
+      } else {
+        const allIdx = api.activeCategories.value.indexOf('all');
+        if (allIdx > -1) api.activeCategories.value.splice(allIdx, 1);
+
+        const idx = api.activeCategories.value.indexOf(category);
+        if (idx > -1) {
+          api.activeCategories.value.splice(idx, 1);
+        } else {
+          api.activeCategories.value.push(category);
+        }
+
+        if (api.activeCategories.value.length === 0) {
+          api.activeCategories.value = ['all'];
+        }
+      }
       api.visibleLimit.value = 40;
       emojiActions.closeDetailDrawer();
     };
@@ -71,10 +100,7 @@ createApp({
     // Scroll listener for client-side pagination (infinite scroll)
     const handleScroll = () => {
       if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
-        const total = api.activeCategory.value === 'all' 
-          ? api.allEmojisList.value.length 
-          : (api.emojiData.value[api.activeCategory.value]?.length || 0);
-          
+        const total = api.activeEmojisCount.value;
         if (api.visibleLimit.value < total) {
           api.visibleLimit.value += 20;
         }
@@ -104,7 +130,10 @@ createApp({
       personaTags: api.personaTags,
       personaDedicatedTag: api.personaDedicatedTag,
       personaFilter: api.personaFilter,
-      activeCategory: api.activeCategory,
+      activeCategories: api.activeCategories,
+      activeCategory,
+      activeCategoriesDisplayName,
+      activeEmojisCount: api.activeEmojisCount,
       tabSearchQuery: api.tabSearchQuery,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
       fetchEmojis: api.fetchEmojis,
@@ -133,6 +162,7 @@ createApp({
       isEmojiSelected: selection.isEmojiSelected,
       toggleEmojiSelection: selection.toggleEmojiSelection,
       getCategorySelectedCount: selection.getCategorySelectedCount,
+      getVisibleSelectedCount: selection.getVisibleSelectedCount,
       isAllSelectedInCategory: selection.isAllSelectedInCategory,
       toggleCategorySelection: selection.toggleCategorySelection,
 

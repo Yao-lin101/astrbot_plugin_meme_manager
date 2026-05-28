@@ -191,7 +191,7 @@
           <div id="emoji-tabs" class="emoji-tabs-container">
             <!-- "All" Tab -->
             <button class="emoji-tab-btn" 
-                    :class="{ active: activeCategory === 'all' }" 
+                    :class="{ active: activeCategories.includes('all') }" 
                     @click="selectCategory('all')">
               <span class="tab-name">全部 (All)</span>
               <span class="tab-badge">{% raw %}{{ allEmojisList.length }}{% endraw %}</span>
@@ -200,7 +200,7 @@
             <button v-for="category in filteredCategories" 
                     :key="category" 
                     class="emoji-tab-btn" 
-                    :class="{ active: activeCategory === category }" 
+                    :class="{ active: activeCategories.includes(category) }" 
                     @click="selectCategory(category)"
                     @dragover.prevent
                     @drop="onDropEmoji($event, category)">
@@ -216,18 +216,18 @@
             <div class="category-title">
               <div class="category-header">
                 <div class="category-title-main">
-                  <div class="category-name">{% raw %}{{ activeCategory === 'all' ? '全部 (All)' : activeCategory }}{% endraw %}</div>
+                  <div class="category-name">{% raw %}{{ activeCategoriesDisplayName }}{% endraw %}</div>
                   <span class="category-selection-summary">
-                    {% raw %}{{ selectionEnabled ? '已选 ' + getCategorySelectedCount(activeCategory) + ' / ' + (activeCategory === 'all' ? allEmojisList.length : (emojiData[activeCategory]?.length || 0)) : '勾选表情包即可进行批量操作' }}{% endraw %}
+                    {% raw %}{{ selectionEnabled ? '已选 ' + getVisibleSelectedCount(activeCategoryEmojisList, activeCategory) + ' / ' + activeCategoryEmojisList.length : '勾选表情包即可进行批量操作' }}{% endraw %}
                   </span>
                 </div>
-                <div class="category-actions" v-if="activeCategory !== 'all'">
+                <div class="category-actions" v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'">
                   <button class="btn-secondary" @click="openRenameCategory(activeCategory)">重命名标签</button>
                   <button class="btn-secondary" @click="openImportModal">导入已存表情</button>
                   <button class="btn-secondary" 
                           :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
-                          @click="toggleCategorySelection(activeCategory)">
-                    {% raw %}{{ isAllSelectedInCategory(activeCategory) ? '取消选择' : '全选' }}{% endraw %}
+                          @click="toggleCategorySelection(activeCategory, null)">
+                    {% raw %}{{ isAllSelectedInCategory(activeCategory, null) ? '取消选择' : '全选' }}{% endraw %}
                   </button>
                   <button class="btn-danger-outline icon-only-btn" :title="'删除分类 ' + activeCategory" @click="deleteCategory(activeCategory)">
                     <i class="fas fa-trash"></i>
@@ -235,18 +235,19 @@
                 </div>
                 <div class="category-actions" v-else>
                   <button class="btn-secondary" 
-                          :disabled="allEmojisList.length === 0"
-                          @click="toggleCategorySelection(activeCategory)">
-                    {% raw %}{{ isAllSelectedInCategory(activeCategory) ? '取消选择' : '全选' }}{% endraw %}
+                          :disabled="activeCategoryEmojisList.length === 0"
+                          @click="toggleCategorySelection(activeCategory, activeCategoryEmojisList)">
+                    {% raw %}{{ isAllSelectedInCategory(activeCategory, activeCategoryEmojisList) ? '取消选择' : '全选' }}{% endraw %}
                   </button>
                 </div>
               </div>
-              <p class="description" v-if="activeCategory === 'all'">展示当前过滤人格下的所有表情包</p>
+              <p class="description" v-if="activeCategories.includes('all')">展示当前过滤人格下的所有表情包</p>
+              <p class="description" v-else-if="activeCategories.length > 1">展示同时包含 「{% raw %}{{ activeCategoriesDisplayName }}{% endraw %}」 标签的表情包交集</p>
             </div>
 
             <!-- 表情包 Grid 网格 -->
             <!-- 上传区域 (横跨顶部的 Banner 样式) -->
-            <div v-if="activeCategory && activeCategory !== 'all'"
+            <div v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'"
                  class="emoji-upload-banner" 
                  @click="triggerFileInput(activeCategory)"
                  @dragover.prevent
@@ -273,7 +274,7 @@
             <!-- 空状态展示 -->
             <div v-if="activeCategoryTimeGroups.length === 0" style="padding: 60px; text-align: center; color: var(--text-secondary);">
               <i class="far fa-face-smile" style="font-size: 32px; margin-bottom: 12px; color: var(--border-color);"></i>
-              <p>当前分类下暂无表情包</p>
+              <p>没有符合当前组合标签的表情包</p>
             </div>
 
             <!-- 表情包分级网格 -->
@@ -292,10 +293,10 @@
                       <div class="emoji-item" 
                            :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
                            :style="{ backgroundImage: 'url(/memes/file/' + encodeURIComponent(emoji) + ')' }"
-                           :draggable="activeCategory !== 'all'" 
+                           :draggable="activeCategories.length === 1 && activeCategories[0] !== 'all'" 
                            @dragstart="onDragStart($event, emoji, activeCategory)"
                            @click="onEmojiClick(activeCategory, emoji)"
-                           @contextmenu.prevent="activeCategory !== 'all' && openContextMenu($event, activeCategory, emoji)">
+                           @contextmenu.prevent="activeCategories.length === 1 && activeCategories[0] !== 'all' && openContextMenu($event, activeCategory, emoji)">
                         
                         <!-- 选中标记按钮 -->
                         <button type="button" class="selection-indicator" aria-label="选择表情包" @click.stop="toggleEmojiSelection(activeCategory, emoji)"></button>
@@ -438,38 +439,46 @@
               <span class="drawer-title">编辑属性: {% raw %}{{ activeDetailEmoji }}{% endraw %}</span>
               <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
             </div>
-            <div class="drawer-content">
-              <!-- 标签多选 -->
-              <div class="drawer-section">
-                <label>分类标签 (点击进行选择/取消选择)</label>
-                <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
-                  <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-                  <input type="text" v-model="drawerTagSearchQuery" @keyup.enter="handleCreateTagInDrawer" placeholder="搜索或输入后回车新建标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
-                  <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
-                </div>
-                <div class="drawer-tags-picker">
-                  <span v-for="cat in filteredDrawerTags" 
-                        :key="cat" 
-                        class="picker-tag-pill" 
-                        :class="{ active: selectedEmotions.includes(cat) }" 
-                        @click="toggleTagInDrawer(cat)">
-                    {% raw %}{{ cat }}{% endraw %}
-                  </span>
-                </div>
+            <div class="drawer-body-layout">
+              <!-- 左侧大图预览 -->
+              <div class="drawer-preview-column">
+                <img :src="'/memes/file/' + encodeURIComponent(activeDetailEmoji)" :alt="activeDetailEmoji" />
               </div>
 
-              <!-- 人格可用性多选 -->
-              <div class="drawer-section">
-                <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
-                <div class="drawer-personas-list">
-                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                    <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" style="width: 14px; height: 14px;" />
-                    <span>全局可用 (*)</span>
-                  </label>
-                  <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                    <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" style="width: 14px; height: 14px;" />
-                    <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
-                  </label>
+              <!-- 右侧编辑区域 -->
+              <div class="drawer-edit-column">
+                <!-- 标签多选 -->
+                <div class="drawer-section">
+                  <label>分类标签 (点击进行选择/取消选择)</label>
+                  <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
+                    <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
+                    <input type="text" v-model="drawerTagSearchQuery" @keyup.enter="handleCreateTagInDrawer" placeholder="搜索或输入后回车新建标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
+                    <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
+                  </div>
+                  <div class="drawer-tags-picker">
+                    <span v-for="cat in filteredDrawerTags" 
+                          :key="cat" 
+                          class="picker-tag-pill" 
+                          :class="{ active: selectedEmotions.includes(cat) }" 
+                          @click="toggleTagInDrawer(cat)">
+                      {% raw %}{{ cat }}{% endraw %}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- 人格可用性多选 -->
+                <div class="drawer-section">
+                  <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
+                  <div class="drawer-personas-list">
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
+                      <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" style="width: 14px; height: 14px;" />
+                      <span>全局可用 (*)</span>
+                    </label>
+                    <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
+                      <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" style="width: 14px; height: 14px;" />
+                      <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
