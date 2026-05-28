@@ -1,0 +1,672 @@
+const { ref, reactive, nextTick } = window.Vue;
+
+export function useEmojiActions({
+  showToast,
+  fetchEmojis,
+  activeCategory,
+  selectionEnabled,
+  selectedEmojis,
+  systemPersonas,
+  emojiData,
+  allEmojisList,
+  getEmojiTags,
+  confirm,
+  showDangerConfirm,
+  moveModal,
+  batchPersonaModal,
+  importModal,
+  closeImportModal,
+  drawerTagSearchQuery,
+}) {
+  const activeDetailEmoji = ref(null);
+  const detailMetadata = ref(null);
+  const selectedEmotions = ref([]);
+  const selectedPersonas = ref([]);
+  const detailDrawerLoading = ref(false);
+
+  // Upload state tracking
+  const uploadStateByCategory = ref(new Map());
+
+  // Context Menu State
+  const contextMenu = reactive({
+    visible: false,
+    x: 0,
+    y: 0,
+    targetCategory: null,
+    targetEmoji: null,
+    targetItems: [],
+    pasteableItems: [],
+  });
+
+  const clipboardItems = ref([]);
+
+  const toggleDetailDrawer = async (category, emoji) => {
+    if (activeDetailEmoji.value === emoji) {
+      closeDetailDrawer();
+      return;
+    }
+    
+    closeDetailDrawer();
+    activeDetailEmoji.value = emoji;
+    detailDrawerLoading.value = true;
+
+    try {
+      const res = await fetch(`/api/emoji/info/${encodeURIComponent(emoji)}`);
+      if (!res.ok) throw new Error("获取属性失败");
+      const metadata = await res.json();
+
+      if (activeDetailEmoji.value !== emoji) return;
+
+      detailMetadata.value = metadata;
+      selectedEmotions.value = metadata.emotions || [];
+      selectedPersonas.value = metadata.personas || [];
+    } catch (e) {
+      showToast(e.message, "error", "加载表情属性失败");
+      closeDetailDrawer();
+    } finally {
+      detailDrawerLoading.value = false;
+    }
+  };
+
+  const closeDetailDrawer = () => {
+    activeDetailEmoji.value = null;
+    detailMetadata.value = null;
+    selectedEmotions.value = [];
+    selectedPersonas.value = [];
+    drawerTagSearchQuery.value = "";
+  };
+
+  const toggleTagInDrawer = (tag) => {
+    const idx = selectedEmotions.value.indexOf(tag);
+    if (idx > -1) {
+      selectedEmotions.value.splice(idx, 1);
+    } else {
+      selectedEmotions.value.push(tag);
+    }
+  };
+
+  const togglePersonaInDrawer = (personaId) => {
+    if (personaId === "*") {
+      if (selectedPersonas.value.includes("*")) {
+        selectedPersonas.value = [];
+      } else {
+        selectedPersonas.value = ["*"];
+      }
+    } else {
+      const gIdx = selectedPersonas.value.indexOf("*");
+      if (gIdx > -1) selectedPersonas.value.splice(gIdx, 1);
+
+      const idx = selectedPersonas.value.indexOf(personaId);
+      if (idx > -1) {
+        selectedPersonas.value.splice(idx, 1);
+      } else {
+        selectedPersonas.value.push(personaId);
+      }
+    }
+  };
+
+  const saveEmojiAttributes = async () => {
+    if (selectedEmotions.value.length === 0) {
+      showToast("请至少选择一个分类标签。", "warning", "保存提示");
+      return;
+    }
+
+    const personas = selectedPersonas.value.length === 0 ? ["*"] : selectedPersonas.value;
+    const emoji = activeDetailEmoji.value;
+
+    try {
+      const res = await fetch("/api/emoji/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: emoji,
+          emotions: selectedEmotions.value,
+          personas: personas,
+        }),
+      });
+      if (!res.ok) throw new Error("保存属性失败");
+
+      showToast("属性保存成功！", "success", "修改成功");
+      closeDetailDrawer();
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "保存失败");
+    }
+  };
+
+  const deleteEmoji = async (category, emoji) => {
+    const confirmed = await confirm(
+      "删除标签 / 文件",
+      `确认从分类「${category}」下移除表情包？若该表情包不属于其他任何分类，它将被物理删除。`,
+      "确认删除",
+      "danger"
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/api/emoji/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, image_file: emoji }),
+      });
+      if (!res.ok) throw new Error("删除失败");
+
+      selectedEmojis.value.delete(`${category}:${emoji}`);
+      showToast("表情包已成功删除", "success", "删除成功");
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "删除失败");
+    }
+  };
+
+  const batchDeleteSelected = async () => {
+    const items = Array.from(selectedEmojis.value.values());
+    if (items.length === 0) return;
+
+    const confirmed = await confirm(
+      "批量删除表情包",
+      `确认删除已选中的 ${items.length} 个表情包？这会移除其分类标签，若该表情包不属于其他任何分类，它将被物理删除。`,
+      "确认批量删除",
+      "danger"
+    );
+    if (!confirmed) return;
+
+    const grouped = {};
+    items.forEach((item) => {
+      const cats = item.category === 'all' ? getEmojiTags(item.emoji) : [item.category];
+      cats.forEach((cat) => {
+        if (!grouped[cat]) grouped[cat] = [];
+        if (!grouped[cat].includes(item.emoji)) {
+          grouped[cat].push(item.emoji);
+        }
+      });
+    });
+
+    let successCount = 0;
+    for (const [cat, files] of Object.entries(grouped)) {
+      try {
+        const res = await fetch("/api/emoji/batch_delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: cat, image_files: files }),
+        });
+        if (res.ok) {
+          const result = await res.json();
+          successCount += result.deleted_count || 0;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    showToast(`已成功批量删除 ${successCount} 个表情包。`, "success", "批量删除完成");
+    selectedEmojis.value.clear();
+    await fetchEmojis();
+  };
+
+  const batchConvertToGif = async () => {
+    const items = Array.from(selectedEmojis.value.values());
+    if (items.length === 0) return;
+
+    const confirmed = await confirm(
+      "转换为 GIF",
+      `确认将选中的 ${items.length} 个表情包转换为 GIF 格式吗？(移动端 QQ 对 WEBP 动图支持不佳，推荐转换)`,
+      "确认转换",
+      "primary"
+    );
+    if (!confirmed) return;
+
+    const filenames = Array.from(new Set(items.map(item => item.emoji)));
+    
+    try {
+      const res = await fetch("/api/emoji/batch_convert_gif", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filenames }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        showToast(
+          `成功转换 ${result.converted_count} 个，跳过 ${result.skipped_count} 个，失败 ${result.failed_count} 个。`,
+          "success",
+          "转换完成"
+        );
+      } else {
+        throw new Error("转换请求失败");
+      }
+    } catch (e) {
+      showToast(e.message, "error", "转换失败");
+    }
+
+    selectedEmojis.value.clear();
+    await fetchEmojis();
+  };
+
+  const saveBatchPersonas = async () => {
+    const items = Array.from(selectedEmojis.value.values());
+    if (items.length === 0) return;
+    const filenames = items.map((item) => item.emoji);
+
+    const personas = batchPersonaModal.personas.length === 0 ? ["*"] : batchPersonaModal.personas;
+
+    try {
+      const res = await fetch("/api/emoji/batch_edit_personas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filenames: filenames,
+          personas: personas,
+        }),
+      });
+      if (!res.ok) throw new Error("批量更新人格限制失败");
+
+      showToast("批量设置人格限制成功！", "success", "修改成功");
+      batchPersonaModal.visible = false;
+      selectedEmojis.value.clear();
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "批量设置失败");
+    }
+  };
+
+  const handleMoveTarget = async (targetCategory) => {
+    const items = Array.from(selectedEmojis.value.values());
+    if (items.length === 0) return;
+
+    const grouped = {};
+    items.forEach((item) => {
+      if (!grouped[item.category]) grouped[item.category] = [];
+      grouped[item.category].push(item.emoji);
+    });
+
+    let movedCount = 0;
+    for (const [sourceCat, files] of Object.entries(grouped)) {
+      try {
+        const res = await fetch("/api/emoji/batch_move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_category: sourceCat,
+            target_category: targetCategory,
+            image_files: files,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          movedCount += data.moved_count || 0;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    showToast(`已成功将 ${movedCount} 个表情包移动到 ${targetCategory}`, "success", "移动成功");
+    moveModal.visible = false;
+    selectedEmojis.value.clear();
+    await fetchEmojis();
+  };
+
+  const clearAllEmojiFiles = async () => {
+    const totalCount = Object.values(emojiData.value).reduce((sum, list) => sum + (list?.length || 0), 0);
+    if (totalCount === 0) {
+      showToast("库中没有任何表情包可以清空", "warning");
+      return;
+    }
+
+    const confirmed = await showDangerConfirm(
+      "清空所有表情包",
+      `确认彻底清空库中的所有 ${totalCount} 个表情包？此操作将删除所有磁盘文件，但保留分类目录配置。`
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch("/api/emoji/clear_all", { method: "POST" });
+      if (!res.ok) throw new Error("清空失败");
+      const data = await res.json();
+
+      showToast(`已清空全部表情包，共删除 ${data.deleted_count} 个文件。`, "success", "清空成功");
+      selectedEmojis.value.clear();
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "清空失败");
+    }
+  };
+
+  const submitImport = async () => {
+    const category = activeCategory.value;
+    if (!category || category === 'all') return;
+
+    const filenames = Array.from(importModal.selectedEmojis);
+    if (filenames.length === 0) return;
+
+    try {
+      const res = await fetch("/api/emoji/batch_import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, filenames }),
+      });
+      if (!res.ok) throw new Error("批量导入失败");
+
+      showToast(`成功导入 ${filenames.length} 个表情到分类 ${category}`, "success", "导入成功");
+      closeImportModal();
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "导入失败");
+    }
+  };
+
+  const onDragStart = (event, emoji, category) => {
+    let dragItems = [];
+    const key = `${category}:${emoji}`;
+    if (selectionEnabled.value && selectedEmojis.value.has(key)) {
+      dragItems = Array.from(selectedEmojis.value.values());
+    } else {
+      dragItems = [{ category, emoji }];
+    }
+
+    event.dataTransfer.setData("application/json", JSON.stringify({ items: dragItems, sourceCategory: category }));
+    event.dataTransfer.effectAllowed = "move";
+  };
+
+  const onDropEmoji = async (event, targetCategory) => {
+    try {
+      const dataStr = event.dataTransfer.getData("application/json");
+      if (!dataStr) return;
+      const { items, sourceCategory } = JSON.parse(dataStr);
+      if (sourceCategory === targetCategory) return;
+
+      const res = await fetch("/api/emoji/batch_move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_category: sourceCategory,
+          target_category: targetCategory,
+          image_files: items.map((i) => i.emoji),
+        }),
+      });
+      if (!res.ok) throw new Error("移动失败");
+      const result = await res.json();
+
+      showToast(`成功将 ${result.moved_count} 个表情包移动到分类 ${targetCategory}`, "success", "移动成功");
+      selectedEmojis.value.clear();
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "移动失败");
+    }
+  };
+
+  const triggerFileInput = (category) => {
+    const input = document.getElementById(`file-input-${category}`);
+    if (input) input.click();
+  };
+
+  const onFileSelected = (event, category) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      uploadFiles(files, category);
+    }
+    event.target.value = "";
+  };
+
+  const onUploadDrop = (event, category) => {
+    const files = event.dataTransfer.files;
+    if (files && files.length > 0) {
+      uploadFiles(files, category);
+    }
+  };
+
+  const uploadFiles = async (files, category) => {
+    if (uploadStateByCategory.value.has(category)) {
+      showToast(`当前分类 ${category} 正在上传中，请稍候。`, "warning");
+      return;
+    }
+
+    const total = files.length;
+    uploadStateByCategory.value.set(category, { progress: 0, text: `准备上传 0/${total}` });
+
+    let completed = 0;
+    let failed = 0;
+    let dups = 0;
+
+    for (let i = 0; i < total; i++) {
+      const file = files[i];
+      uploadStateByCategory.value.set(category, {
+        progress: Math.round((i / total) * 100),
+        text: `上传中: ${i + 1}/${total} (${file.name})`,
+      });
+
+      const formData = new FormData();
+      formData.append("category", category);
+      formData.append("image_file", file);
+
+      try {
+        const res = await fetch("/api/emoji/add", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (res.status === 409) {
+          dups++;
+        } else if (!res.ok) {
+          throw new Error();
+        } else {
+          completed++;
+        }
+      } catch (e) {
+        failed++;
+      }
+    }
+
+    uploadStateByCategory.value.delete(category);
+    showToast(
+      `上传完成！成功 ${completed} 个` +
+        (dups > 0 ? `，重复跳过 ${dups} 个` : "") +
+        (failed > 0 ? `，失败 ${failed} 个` : ""),
+      failed > 0 ? "warning" : "success",
+      "上传完毕"
+    );
+    await fetchEmojis();
+  };
+
+  const openContextMenu = (event, category, emoji) => {
+    const key = `${category}:${emoji}`;
+    let targetItems = [];
+    if (selectionEnabled.value && selectedEmojis.value.has(key)) {
+      targetItems = Array.from(selectedEmojis.value.values());
+    } else {
+      targetItems = [{ category, emoji }];
+    }
+
+    const pasteableItems = clipboardItems.value.filter((i) => i.category !== category);
+
+    contextMenu.x = event.clientX;
+    contextMenu.y = event.clientY;
+    contextMenu.targetCategory = category;
+    contextMenu.targetEmoji = emoji;
+    contextMenu.targetItems = targetItems;
+    contextMenu.pasteableItems = pasteableItems;
+    contextMenu.visible = true;
+  };
+
+  const closeContextMenu = () => {
+    contextMenu.visible = false;
+  };
+
+  const contextMenuDelete = async () => {
+    contextMenu.visible = false;
+    const count = contextMenu.targetItems.length;
+    if (count === 0) return;
+
+    const confirmed = await confirm(
+      "批量删除表情包",
+      `确认删除右键选中的 ${count} 个表情包吗？此操作不可恢复。`,
+      "确认删除",
+      "danger"
+    );
+    if (!confirmed) return;
+
+    const grouped = {};
+    contextMenu.targetItems.forEach((item) => {
+      if (!grouped[item.category]) grouped[item.category] = [];
+      grouped[item.category].push(item.emoji);
+    });
+
+    let successCount = 0;
+    for (const [cat, files] of Object.entries(grouped)) {
+      try {
+        const res = await fetch("/api/emoji/batch_delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ category: cat, image_files: files }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          successCount += data.deleted_count || 0;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    showToast(`成功删除了 ${successCount} 个表情包`, "success", "删除成功");
+    contextMenu.targetItems.forEach((i) => selectedEmojis.value.delete(`${i.category}:${i.emoji}`));
+    await fetchEmojis();
+  };
+
+  const contextMenuMove = () => {
+    contextMenu.visible = false;
+    moveModal.visible = true;
+  };
+
+  const contextMenuCopy = () => {
+    contextMenu.visible = false;
+    clipboardItems.value = [...contextMenu.targetItems];
+    showToast(`已成功复制 ${clipboardItems.value.length} 个表情到剪贴板，可在其他分类右键粘贴。`, "success", "复制成功");
+  };
+
+  const contextMenuConvertToGif = async () => {
+    contextMenu.visible = false;
+    const count = contextMenu.targetItems.length;
+    if (count === 0) return;
+
+    const confirmed = await confirm(
+      "转换为 GIF",
+      `确认将选中的 ${count} 个表情包转换为 GIF 格式吗？(移动端 QQ 对 WEBP 动图支持不佳，推荐转换)`,
+      "确认转换",
+      "primary"
+    );
+    if (!confirmed) return;
+
+    const filenames = Array.from(new Set(contextMenu.targetItems.map(item => item.emoji)));
+    
+    try {
+      const res = await fetch("/api/emoji/batch_convert_gif", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filenames }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        showToast(
+          `成功转换 ${result.converted_count} 个，跳过 ${result.skipped_count} 个，失败 ${result.failed_count} 个。`,
+          "success",
+          "转换完成"
+        );
+      } else {
+        throw new Error("转换请求失败");
+      }
+    } catch (e) {
+      showToast(e.message, "error", "转换失败");
+    }
+
+    contextMenu.targetItems.forEach((i) => selectedEmojis.value.delete(`${i.category}:${i.emoji}`));
+    await fetchEmojis();
+  };
+
+  const contextMenuPaste = async () => {
+    contextMenu.visible = false;
+    const targetCategory = contextMenu.targetCategory;
+    const pasteable = contextMenu.pasteableItems;
+    if (pasteable.length === 0) return;
+
+    const grouped = {};
+    pasteable.forEach((item) => {
+      if (!grouped[item.category]) grouped[item.category] = [];
+      grouped[item.category].push(item.emoji);
+    });
+
+    let copiedCount = 0;
+    for (const [sourceCat, files] of Object.entries(grouped)) {
+      try {
+        const res = await fetch("/api/emoji/batch_copy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source_category: sourceCat,
+            target_category: targetCategory,
+            image_files: files,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          copiedCount += data.copied_count || 0;
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    showToast(`成功向分类 ${targetCategory} 复制粘贴了 ${copiedCount} 个表情包`, "success", "粘贴成功");
+    clipboardItems.value = [];
+    await fetchEmojis();
+  };
+
+  const onEmojiClick = (category, emoji) => {
+    if (selectionEnabled.value) {
+      const key = `${category}:${emoji}`;
+      if (selectedEmojis.value.has(key)) {
+        selectedEmojis.value.delete(key);
+      } else {
+        selectedEmojis.value.set(key, { category, emoji });
+      }
+    } else {
+      toggleDetailDrawer(category, emoji);
+    }
+  };
+
+  return {
+    activeDetailEmoji,
+    detailMetadata,
+    selectedEmotions,
+    selectedPersonas,
+    detailDrawerLoading,
+    uploadStateByCategory,
+    contextMenu,
+    clipboardItems,
+    toggleDetailDrawer,
+    closeDetailDrawer,
+    toggleTagInDrawer,
+    togglePersonaInDrawer,
+    saveEmojiAttributes,
+    deleteEmoji,
+    batchDeleteSelected,
+    batchConvertToGif,
+    saveBatchPersonas,
+    handleMoveTarget,
+    clearAllEmojiFiles,
+    submitImport,
+    onDragStart,
+    onDropEmoji,
+    triggerFileInput,
+    onFileSelected,
+    onUploadDrop,
+    openContextMenu,
+    closeContextMenu,
+    contextMenuDelete,
+    contextMenuMove,
+    contextMenuCopy,
+    contextMenuConvertToGif,
+    contextMenuPaste,
+    onEmojiClick,
+  };
+}
