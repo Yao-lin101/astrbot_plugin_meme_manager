@@ -12,8 +12,10 @@ export function useApi(showToast, pruneSelections) {
   
   const tabSearchQuery = ref("");
   const drawerTagSearchQuery = ref("");
+  const visibleLimit = ref(60);
 
   const fetchEmojis = async () => {
+    visibleLimit.value = 60;
     try {
       const personaId = personaFilter.value;
       personaDedicatedTag.value = personaTags.value[personaId] || "";
@@ -179,7 +181,27 @@ export function useApi(showToast, pruneSelections) {
       });
     });
 
-    return groups.filter((g) => g.list.length > 0);
+    // Limit the total number of emojis across all groups to visibleLimit
+    let count = 0;
+    const limitedGroups = [];
+    for (const g of groups) {
+      if (g.list.length === 0) continue;
+      const remaining = visibleLimit.value - count;
+      if (remaining <= 0) break;
+      if (g.list.length <= remaining) {
+        limitedGroups.push(g);
+        count += g.list.length;
+      } else {
+        limitedGroups.push({
+          title: g.title,
+          list: g.list.slice(0, remaining)
+        });
+        count += remaining;
+        break;
+      }
+    }
+
+    return limitedGroups;
   });
 
   const getEmojiTags = (emoji) => {
@@ -209,5 +231,6 @@ export function useApi(showToast, pruneSelections) {
     importableEmojisList,
     activeCategoryTimeGroups,
     getEmojiTags,
+    visibleLimit,
   };
 }

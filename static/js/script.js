@@ -6,7 +6,7 @@ import { useSync } from './modules/sync.js';
 import { useCategories } from './modules/categories.js';
 import { useEmojiActions } from './modules/emojiActions.js';
 
-const { createApp, onMounted } = Vue;
+const { createApp, ref, onMounted, onUnmounted } = Vue;
 
 createApp({
   setup() {
@@ -59,12 +59,40 @@ createApp({
       drawerTagSearchQuery: api.drawerTagSearchQuery,
     });
 
+    // Local UI states
+    const syncDrawerVisible = ref(false);
+
+    const selectCategory = (category) => {
+      api.activeCategory.value = category;
+      api.visibleLimit.value = 60;
+      emojiActions.closeDetailDrawer();
+    };
+
+    // Scroll listener for client-side pagination (infinite scroll)
+    const handleScroll = () => {
+      if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
+        const total = api.activeCategory.value === 'all' 
+          ? api.allEmojisList.value.length 
+          : (api.emojiData.value[api.activeCategory.value]?.length || 0);
+          
+        if (api.visibleLimit.value < total) {
+          api.visibleLimit.value += 60;
+        }
+      }
+    };
+
     // Lifecycle hooks
     onMounted(async () => {
       await api.fetchPersonaTags();
       await api.fetchEmojis();
       await api.fetchPersonas();
       void sync.checkSyncStatus(false);
+      
+      window.addEventListener("scroll", handleScroll);
+    });
+
+    onUnmounted(() => {
+      window.removeEventListener("scroll", handleScroll);
     });
 
     return {
@@ -90,6 +118,7 @@ createApp({
       importableEmojisList: api.importableEmojisList,
       activeCategoryTimeGroups: api.activeCategoryTimeGroups,
       getEmojiTags: api.getEmojiTags,
+      visibleLimit: api.visibleLimit,
 
       // Toasts
       toasts,
@@ -129,6 +158,10 @@ createApp({
       openImportModal: modals.openImportModal,
       closeImportModal: modals.closeImportModal,
       toggleImportEmoji: modals.toggleImportEmoji,
+
+      // UI States & Navigation
+      syncDrawerVisible,
+      selectCategory,
 
       // Sync
       syncChecking: sync.syncChecking,
