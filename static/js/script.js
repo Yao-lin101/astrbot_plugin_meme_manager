@@ -97,9 +97,19 @@ createApp({
       emojiActions.closeDetailDrawer();
     };
 
+    const sortedActiveEmojisList = computed(() => {
+      const list = [...api.activeCategoryEmojisList.value];
+      list.sort((a, b) => {
+        const ta = api.emojiMtimes.value[a] || 0;
+        const tb = api.emojiMtimes.value[b] || 0;
+        return tb - ta;
+      });
+      return list;
+    });
+
     const currentEmojiIndex = computed(() => {
       if (!emojiActions.activeDetailEmoji.value) return -1;
-      return api.activeCategoryEmojisList.value.indexOf(emojiActions.activeDetailEmoji.value);
+      return sortedActiveEmojisList.value.indexOf(emojiActions.activeDetailEmoji.value);
     });
 
     const hasPreviousEmoji = computed(() => {
@@ -108,15 +118,15 @@ createApp({
 
     const hasNextEmoji = computed(() => {
       const idx = currentEmojiIndex.value;
-      return idx > -1 && idx < api.activeCategoryEmojisList.value.length - 1;
+      return idx > -1 && idx < sortedActiveEmojisList.value.length - 1;
     });
 
     const navigateToSiblingEmoji = (direction) => {
       const idx = currentEmojiIndex.value;
       if (idx === -1) return;
       const targetIdx = idx + direction;
-      if (targetIdx >= 0 && targetIdx < api.activeCategoryEmojisList.value.length) {
-        const targetEmoji = api.activeCategoryEmojisList.value[targetIdx];
+      if (targetIdx >= 0 && targetIdx < sortedActiveEmojisList.value.length) {
+        const targetEmoji = sortedActiveEmojisList.value[targetIdx];
         emojiActions.toggleDetailDrawer(activeCategory.value, targetEmoji);
       }
     };
