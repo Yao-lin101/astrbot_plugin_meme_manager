@@ -444,7 +444,7 @@
                 <label>分类标签 (点击进行选择/取消选择)</label>
                 <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
                   <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-                  <input type="text" v-model="drawerTagSearchQuery" placeholder="搜索标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
+                  <input type="text" v-model="drawerTagSearchQuery" @keyup.enter="handleCreateTagInDrawer" placeholder="搜索或输入后回车新建标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
                   <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
                 </div>
                 <div class="drawer-tags-picker">

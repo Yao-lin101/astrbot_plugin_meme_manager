@@ -12,10 +12,10 @@ export function useApi(showToast, pruneSelections) {
   
   const tabSearchQuery = ref("");
   const drawerTagSearchQuery = ref("");
-  const visibleLimit = ref(60);
+  const visibleLimit = ref(40);
 
   const fetchEmojis = async () => {
-    visibleLimit.value = 60;
+    visibleLimit.value = 40;
     try {
       const personaId = personaFilter.value;
       personaDedicatedTag.value = personaTags.value[personaId] || "";

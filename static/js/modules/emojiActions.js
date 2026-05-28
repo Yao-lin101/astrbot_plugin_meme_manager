@@ -105,6 +105,41 @@ export function useEmojiActions({
     }
   };
 
+  const handleCreateTagInDrawer = async () => {
+    const newTag = drawerTagSearchQuery.value.trim();
+    if (!newTag) return;
+
+    const allCategories = Object.keys(emojiData.value);
+    const existingCat = allCategories.find(cat => cat.toLowerCase() === newTag.toLowerCase());
+
+    if (existingCat) {
+      if (!selectedEmotions.value.includes(existingCat)) {
+        selectedEmotions.value.push(existingCat);
+      }
+      drawerTagSearchQuery.value = "";
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/category/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: newTag }),
+      });
+      if (!res.ok) throw new Error("创建标签失败");
+
+      emojiData.value[newTag] = [];
+      if (!selectedEmotions.value.includes(newTag)) {
+        selectedEmotions.value.push(newTag);
+      }
+      showToast(`已成功创建新标签「${newTag}」并添加`, "success", "创建成功");
+      drawerTagSearchQuery.value = "";
+      await fetchEmojis();
+    } catch (e) {
+      showToast(e.message, "error", "创建失败");
+    }
+  };
+
   const saveEmojiAttributes = async () => {
     if (selectedEmotions.value.length === 0) {
       showToast("请至少选择一个分类标签。", "warning", "保存提示");
@@ -668,5 +703,6 @@ export function useEmojiActions({
     contextMenuConvertToGif,
     contextMenuPaste,
     onEmojiClick,
+    handleCreateTagInDrawer,
   };
 }
