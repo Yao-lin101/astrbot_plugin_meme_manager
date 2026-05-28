@@ -12,6 +12,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Reply
 
+from ..utils import get_config_value
 from .database import get_db_conn, get_steal_attempt, save_steal_attempt
 from .helpers import get_persona_id, get_persona_prompt
 from .models import save_and_register_meme
@@ -211,7 +212,11 @@ async def steal_meme(
             f"[meme_manager] 发现缓存记录：image_hash={raw_hash}, persona_id={persona_id}, is_matched={is_matched}"
         )
         if not is_matched:
-            reason = attempt["reason"] if "reason" in attempt.keys() and attempt["reason"] else ""
+            reason = (
+                attempt["reason"]
+                if "reason" in attempt.keys() and attempt["reason"]
+                else ""
+            )
             if reason:
                 return f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {reason}"
             else:
@@ -280,24 +285,27 @@ async def steal_meme(
             b64_data = base64.b64encode(content).decode("utf-8")
             image_data_uri = f"data:{mime_type};base64,{b64_data}"
 
-            existing_tags = sender.category_manager.get_categories()
+            guidelines = getattr(sender, "multimodal_tag_prompt", None)
+            if not guidelines:
+                guidelines = (
+                    "请对这张表情包图片进行深度的视觉与语义分析，并从以下几个社交使用维度中提炼出最契合该图的 2-5 个中文分类标签：\n\n"
+                    "1. 意图与社交功能维度（使用者想用它达到什么社交目的？）：\n"
+                    "   - 如：破冰、开场、敷衍、话题终结（呵呵/递茶）、赞同、反对、索求（抱抱/摸头/红包）等行为补偿。\n"
+                    "2. 情绪与心理映射维度（传达的原生或复合情绪是什么？）：\n"
+                    "   - 如：开心、委屈、得意、尴尬、强颜欢笑、开摆、自嘲、暴躁、发疯、吃惊、无语。\n"
+                    "3. 符号与画面主体维度（画面的主角和主要动作是什么？）：\n"
+                    "   - 如：猫猫、柴犬、熊猫头、二次元少女、电脑、睡觉、指点、吃瓜。\n"
+                    "4. 社交关系、风格与态度维度（表达了怎样的对话语气或关系态度？）：\n"
+                    "   - 如：职场发疯、向下示弱、阴阳怪气、沙雕、高糊、二次元、玩梗、土味、治愈。\n\n"
+                    "【标签规则】：\n"
+                    "- 标签应当使用简短、高频的中文词汇（如：贴贴、无语、猫猫、开摆、敷衍、职场）。\n"
+                    "- 请结合图片内容和上述维度，选择最具有代表性的 2-5 个标签，不需要每个维度都覆盖。"
+                )
+
             prompt = (
-                "请对这张图片进行视觉分析，并生成 1-2 个最契合此图的表情包分类标签。\n"
-                "【已有标签列表】：\n"
-            )
-            for cat in sorted(existing_tags):
-                prompt += f"- {cat}\n"
-            prompt += (
-                "\n【标签生成规则（极其重要）】：\n"
-                "1. 标签设计维度：表情包标签应围绕以下两类来定义：\n"
-                "   - 情绪/情感：如 喜、怒、哀、乐、傲娇、委屈、得意、困惑、无语 等。\n"
-                "   - 行为/场景/事物：如 吃喝、睡觉、抢红包、奶茶、吃瓜、打游戏 等。\n"
-                "2. 优先匹配已有标签：你必须首选并复用【已有标签列表】中语义最接近的标签。\n"
-                "3. 绝对禁止生成同义/近义新标签（防止标签库膨胀与碎片化）：\n"
-                "   - 在生成新标签之前，请仔细比对它与已有标签的语义。如果已有标签能表达相同或极为相似的意思，必须强制复用已有标签。例如：若已有 'happy'，禁止生成 '开心'、'快乐' 或 '高兴'；若已有 '红包'，禁止生成 '抢红包' 或 '发红包'。\n"
-                "4. 支持与首选中文标签：我们全面支持中文标签。对于一些富有特色、不易用英文单词贴切表达的概念（如 奶茶、红包、吃瓜、贴贴、摸头 等）或标准中文情感词汇，请优先生成中文标签；其他通用英文标签亦可复用或生成（如 happy, sad, work, sleep）。\n"
-                "5. 只有在已有标签列表中完全没有任何语义极度沾边的标签时，才允许生成新的简短中文或英文标签。\n"
-                '6. 请仅以 JSON 数组格式返回，例如：["happy", "奶茶"]\n'
+                f"{guidelines}\n\n"
+                "【输出格式要求（极其重要）】：\n"
+                '- 请仅以 JSON 数组格式返回，例如：["敷衍", "猫猫", "职场发疯"]\n'
                 "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 数组。"
             )
 
@@ -326,7 +334,7 @@ async def steal_meme(
                     if isinstance(data, list):
                         parsed_categories = [str(x) for x in data]
                     else:
-                        for cat in existing_tags:
+                        for cat in valid_categories:
                             if cat in raw_text:
                                 parsed_categories.append(cat)
 
@@ -560,7 +568,7 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
     # C. 统计并递增该图片哈希的全局看见次数，若小于设定的阈值，则仅记录次数不触发偷图
     from .database import increment_image_seen_count
 
-    min_seen = sender.config.get("auto_steal_min_seen", 2)
+    min_seen = get_config_value(sender.config, "auto_steal_min_seen", 2)
     seen_count = increment_image_seen_count(raw_hash)
     if seen_count < min_seen:
         logger.info(
@@ -569,7 +577,9 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
         return
 
     # 5. 调用原本的 steal_meme 工具流程进行盗取
-    logger.info(f"[meme_manager] 自动偷表情：开始对图片 {raw_hash} 进行暗中收录判定 (已看见 {seen_count} 次)...")
+    logger.info(
+        f"[meme_manager] 自动偷表情：开始对图片 {raw_hash} 进行暗中收录判定 (已看见 {seen_count} 次)..."
+    )
     try:
         result = await steal_meme(
             sender=sender,

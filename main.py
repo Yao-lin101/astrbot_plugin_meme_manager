@@ -16,6 +16,7 @@ from .backend.webui_manager import WebuiManager
 from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
+from .utils import get_config_value
 
 
 @register(
@@ -103,6 +104,11 @@ class MemeSender(Star):
         self.persona_prompts_backup = {}
         self._reload_personas()
 
+        # 初始化标签向量
+        from .backend.emotion_handler import sync_tag_embeddings
+
+        asyncio.create_task(sync_tag_embeddings(self))
+
     @property
     def category_mapping(self) -> dict[str, str]:
         """向后兼容属性：返回所有分类，值为空字符串（模拟字典结构）"""
@@ -120,60 +126,26 @@ class MemeSender(Star):
             if name not in self.persona_prompts_backup:
                 self.persona_prompts_backup[name] = persona.get("prompt") or ""
 
-        if self.emotion_llm_enabled:
-            for persona in personas:
-                name = persona.get("name") or ""
-                persona["prompt"] = self.persona_prompts_backup.get(name, "")
-            return
-
-        from .backend.database import get_db_conn
+        format_instruction = (
+            "\n\n【输出格式要求（极其重要）】:\n"
+            "你必须在回复的【最末尾】且【单独一行】输出一个固定格式的表情标记块：<emotions>标签1, 标签2, ...</emotions>（例如 <emotions>得意, 摸头, 猫猫</emotions>，用英文逗号 `,` 分隔）。不要分散在正文多处。若当前回复不需要表情包，则不要输出此标签块。"
+        )
 
         for persona in personas:
             name = persona.get("name") or ""
             original_prompt = self.persona_prompts_backup.get(name, "")
-            persona_id = persona.get("id") or name or ""
-
-            conn = get_db_conn()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
-                (f"%,{persona_id},%",),
+            persona["prompt"] = (
+                original_prompt + "\n\n" + self.meme_prompt + format_instruction
             )
-            rows = cursor.fetchall()
-            conn.close()
-
-            from .backend.helpers import load_persona_tags
-
-            p_tags = load_persona_tags()
-            dedicated_tag = p_tags.get(persona_id)
-
-            allowed_categories = set()
-            for row in rows:
-                if row["emotions"]:
-                    for emo in row["emotions"].split(","):
-                        emo = emo.strip()
-                        if emo and emo != dedicated_tag:
-                            allowed_categories.add(emo)
-
-            if not allowed_categories:
-                persona["prompt"] = original_prompt
-                continue
-
-            allowed_categories_string = ", ".join(sorted(allowed_categories))
-            sys_prompt_add = (
-                self.prompt_head
-                + allowed_categories_string
-                + self.prompt_tail_1
-                + str(self.max_emotions_per_message)
-                + self.prompt_tail_2
-            )
-            persona["prompt"] = original_prompt + sys_prompt_add
 
     async def reload_emotions(self):
         """动态重新加载表情配置"""
         try:
             self.category_manager.sync_with_filesystem()
             self._reload_personas()
+            from .backend.emotion_handler import sync_tag_embeddings
+
+            asyncio.create_task(sync_tag_embeddings(self))
             try:
                 self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
             except Exception:
@@ -314,6 +286,13 @@ class MemeSender(Star):
         async for res in CommandsHandler.compress_existing_memes(self, event):
             yield res
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("重构向量缓存")
+    async def rebuild_tag_embeddings(self, event: AstrMessageEvent):
+        """清空缓存的标签向量并重新计算"""
+        async for res in CommandsHandler.rebuild_tag_embeddings(self, event):
+            yield res
+
     @filter.event_message_type(EventMessageType.ALL)
     async def handle_upload_image(self, event: AstrMessageEvent):
         """处理用户上传 of 图片"""
@@ -408,76 +387,80 @@ class MemeSender(Star):
 
     @property
     def fault_tolerant_symbols(self) -> list[str]:
-        return self.config.get("fault_tolerant_symbols", ["⬡"])
+        return get_config_value(self.config, "fault_tolerant_symbols", ["⬡"])
 
     @property
     def auto_steal_enabled(self) -> bool:
-        return self.config.get("auto_steal_enabled", False)
+        return get_config_value(self.config, "auto_steal_enabled", False)
 
     @property
     def auto_steal_probability(self) -> int:
-        return self.config.get("auto_steal_probability", 30)
+        return get_config_value(self.config, "auto_steal_probability", 30)
 
     @property
-    def prompt_head(self) -> str:
-        return self.config.get("prompt", {}).get("prompt_head", "")
+    def meme_prompt(self) -> str:
+        default_prompt = (
+            "【表情包发送行为指引】：你在每次回复中都应该自然地根据当前的聊天内容和情绪选择表情标签。"
+            "\n规则："
+            "\n1. 标签越丰富、越明确，越能精准匹配到图库中的表情。建议根据当前的聊天内容和情绪提炼并输出多个简短标签（用英文逗号 `,` 分隔），可从以下几个社交维度去发想："
+            "\n   - 意图与功能（如：敷衍、赞同、摸头、贴贴、递茶、抱抱）"
+            "\n   - 情绪与心理（如：得意、害羞、尴尬、开摆、委屈、暴躁、吃惊）"
+            "\n   - 画面主体与行为（如：猫猫、睡觉、吃瓜、熊猫头）"
+            "\n   - 风格与态度（如：阴阳怪气、沙雕、二次元、职场发疯、治愈）"
+            "\n   （若当前回复不需要表情包，则不输出表情标签）"
+            "\n\n【关于搜索与发图工具的限制】："
+            "\n除非用户十分明确要求你使用网络搜索，否则对于普通的聊天回复和表情包发送需求，严禁使用任何外部搜索工具（如 web_search、tavily 等）去网络搜索图片，也严禁调用任何第三方发图或消息发送工具。你只需输出表情标签，系统会自动在后台拦截并从本地匹配发送表情包。"
+        )
+        return get_config_value(self.config, "meme_prompt", default_prompt)
 
     @property
-    def prompt_tail_1(self) -> str:
-        return self.config.get("prompt", {}).get("prompt_tail_1", "")
-
-    @property
-    def prompt_tail_2(self) -> str:
-        return self.config.get("prompt", {}).get("prompt_tail_2", "")
+    def multimodal_tag_prompt(self) -> str:
+        default_tag_prompt = (
+            "请对这张表情包图片进行深度的视觉与语义分析，并从以下几个社交使用维度中提炼出最契合该图的 2-5 个中文分类标签：\n\n"
+            "1. 意图与社交功能维度（使用者想用它达到什么社交目的？）：\n"
+            "   - 如：破冰、开场、敷衍、话题终结（呵呵/递茶）、赞同、反对、索求（抱抱/摸头/红包）等行为补偿。\n"
+            "2. 情绪与心理映射维度（传达的原生或复合情绪是什么？）：\n"
+            "   - 如：开心、委屈、得意、尴尬、强颜欢笑、开摆、自嘲、暴躁、发疯、吃惊、无语。\n"
+            "3. 符号与画面主体维度（画面的主角和主要动作是什么？）：\n"
+            "   - 如：猫猫、柴犬、熊猫头、二次元少女、电脑、睡觉、指点、吃瓜。\n"
+            "4. 社交关系、风格与态度维度（表达了怎样的对话语气或关系态度？）：\n"
+            "   - 如：职场发疯、向下示弱、阴阳怪气、沙雕、高糊、二次元、玩梗、土味、治愈。\n\n"
+            "【标签规则】：\n"
+            "- 标签应当使用简短、高频的中文词汇（如：贴贴、无语、猫猫、开摆、敷衍、职场）。\n"
+            "- 请结合图片内容和上述维度，选择最具有代表性的 2-5 个标签，不需要每个维度都覆盖。"
+        )
+        return get_config_value(
+            self.config, "multimodal_tag_prompt", default_tag_prompt
+        )
 
     @property
     def max_emotions_per_message(self) -> int:
-        return self.config.get("max_emotions_per_message", 2)
+        return get_config_value(self.config, "max_emotions_per_message", 2)
 
     @property
     def emotions_probability(self) -> int:
-        return self.config.get("emotions_probability", 50)
-
-    @property
-    def strict_max_emotions_per_message(self) -> bool:
-        return self.config.get("strict_max_emotions_per_message", True)
-
-    @property
-    def emotion_llm_enabled(self) -> bool:
-        return self.config.get("emotion_llm_enabled", False)
-
-    @property
-    def emotion_llm_provider_id(self) -> str:
-        return self.config.get("emotion_llm_provider_id", "")
+        return get_config_value(self.config, "emotions_probability", 50)
 
     @property
     def multimodal_llm_enabled(self) -> bool:
-        return self.config.get("multimodal_llm_enabled", False)
+        return get_config_value(self.config, "multimodal_llm_enabled", False)
 
     @property
     def multimodal_llm_provider_id(self) -> str:
-        return self.config.get("multimodal_llm_provider_id", "")
+        return get_config_value(self.config, "multimodal_llm_provider_id", "")
 
     @property
     def enable_mixed_message(self) -> bool:
-        return self.config.get("enable_mixed_message", True)
+        return get_config_value(self.config, "enable_mixed_message", True)
 
     @property
     def mixed_message_probability(self) -> int:
-        return self.config.get("mixed_message_probability", 80)
-
-    @property
-    def remove_invalid_alternative_markup(self) -> bool:
-        return self.config.get("remove_invalid_alternative_markup", False)
+        return get_config_value(self.config, "mixed_message_probability", 80)
 
     @property
     def convert_static_to_gif(self) -> bool:
-        return self.config.get("convert_static_to_gif", False)
+        return get_config_value(self.config, "convert_static_to_gif", False)
 
     @property
     def streaming_compatibility(self) -> bool:
-        return self.config.get("streaming_compatibility", False)
-
-    @property
-    def content_cleanup_rule(self) -> str:
-        return self.config.get("content_cleanup_rule", "&&[a-zA-Z]*&&")
+        return get_config_value(self.config, "streaming_compatibility", False)

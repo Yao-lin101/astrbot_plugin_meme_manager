@@ -334,3 +334,52 @@ def compress_image(
     except Exception as e:
         logger.error(f"压缩/转换图片失败: {e}", exc_info=True)
         return image_bytes, filename
+
+
+def get_config_value(config: dict, key: str, default: Any = None) -> Any:
+    """从配置字典中安全获取配置值，支持新旧版（嵌套/扁平）的配置格式。"""
+    if not isinstance(config, dict):
+        return default
+
+    # 1. 尝试直接获取（兼容扁平格式或顶层键）
+    if key in config:
+        return config[key]
+
+    # 2. 映射新版的嵌套组
+    mapping = {
+        # interaction_config
+        "max_emotions_per_message": "interaction_config",
+        "emotions_probability": "interaction_config",
+        "enable_mixed_message": "interaction_config",
+        "mixed_message_probability": "interaction_config",
+        "convert_static_to_gif": "interaction_config",
+        "streaming_compatibility": "interaction_config",
+        # auto_steal_config
+        "auto_steal_enabled": "auto_steal_config",
+        "auto_steal_probability": "auto_steal_config",
+        "auto_steal_min_seen": "auto_steal_config",
+        # multimodal_config
+        "multimodal_llm_enabled": "multimodal_config",
+        "multimodal_llm_provider_id": "multimodal_config",
+        "multimodal_tag_prompt": "multimodal_config",
+        # compression_config
+        "enable_compression": "compression_config",
+        "compression_max_size_kb": "compression_config",
+        "compression_max_width": "compression_config",
+        "compression_quality": "compression_config",
+        "compress_gif": "compression_config",
+        "compression_format": "compression_config",
+        # embedding_config
+        "embedding_provider_id": "embedding_config",
+        "embedding_similarity_threshold": "embedding_config",
+        "embedding_tag_weight": "embedding_config",
+        "embedding_text_weight": "embedding_config",
+    }
+
+    if key in mapping:
+        parent = mapping[key]
+        parent_val = config.get(parent)
+        if isinstance(parent_val, dict) and key in parent_val:
+            return parent_val[key]
+
+    return default
