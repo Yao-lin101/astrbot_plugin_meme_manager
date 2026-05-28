@@ -162,11 +162,11 @@
                 <i class="fas fa-plus icon"></i>添加分类
               </button>
 
-              <span id="selection-summary" :class="{ 'active-selection': selectionEnabled && selectedEmojis.size > 0 }">
+              <span id="selection-summary" :class="{ 'active-selection': selectionEnabled }">
                 {% raw %}{{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个' : '批量选择' }}{% endraw %}
               </span>
-              <button id="toggle-selection-mode-btn" class="btn-secondary" :class="{ active: selectionEnabled }" @click="toggleSelectionMode">
-                <i class="fas fa-list-check icon"></i>选择
+              <button v-if="selectionEnabled" id="toggle-selection-mode-btn" class="btn-secondary" @click="toggleSelectionMode">
+                <i class="fas fa-xmark icon"></i>取消选择
               </button>
               <button id="batch-persona-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="openBatchPersonaModal">
                 <i class="fas fa-user-gear icon"></i>设置人格
@@ -182,25 +182,32 @@
         </div>
 
         <!-- 顶部 Tab 分类过滤器 -->
-        <div id="emoji-tabs" class="emoji-tabs-container">
-          <!-- "All" Tab -->
-          <button class="emoji-tab-btn" 
-                  :class="{ active: activeCategory === 'all' }" 
-                  @click="selectCategory('all')">
-            <span class="tab-name">全部 (All)</span>
-            <span class="tab-badge">{% raw %}{{ allEmojisList.length }}{% endraw %}</span>
-          </button>
+        <div class="emoji-tabs-wrapper" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <div class="tabs-search-container" style="max-width: 300px; position: relative; display: flex; align-items: center;">
+            <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
+            <input type="text" v-model="tabSearchQuery" placeholder="搜索分类标签..." class="form-control" style="padding-left: 30px; height: 34px; font-size: 12px; border-radius: 17px;" />
+            <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
+          </div>
+          <div id="emoji-tabs" class="emoji-tabs-container">
+            <!-- "All" Tab -->
+            <button class="emoji-tab-btn" 
+                    :class="{ active: activeCategory === 'all' }" 
+                    @click="selectCategory('all')">
+              <span class="tab-name">全部 (All)</span>
+              <span class="tab-badge">{% raw %}{{ allEmojisList.length }}{% endraw %}</span>
+            </button>
 
-          <button v-for="(emojis, category) in emojiData" 
-                  :key="category" 
-                  class="emoji-tab-btn" 
-                  :class="{ active: activeCategory === category }" 
-                  @click="selectCategory(category)"
-                  @dragover.prevent
-                  @drop="onDropEmoji($event, category)">
-            <span class="tab-name">{% raw %}{{ category }}{% endraw %}</span>
-            <span class="tab-badge">{% raw %}{{ emojis ? emojis.length : 0 }}{% endraw %}</span>
-          </button>
+            <button v-for="category in filteredCategories" 
+                    :key="category" 
+                    class="emoji-tab-btn" 
+                    :class="{ active: activeCategory === category }" 
+                    @click="selectCategory(category)"
+                    @dragover.prevent
+                    @drop="onDropEmoji($event, category)">
+              <span class="tab-name">{% raw %}{{ category }}{% endraw %}</span>
+              <span class="tab-badge">{% raw %}{{ emojiData[category] ? emojiData[category].length : 0 }}{% endraw %}</span>
+            </button>
+          </div>
         </div>
 
         <!-- 当前分类表情网格 -->
@@ -211,7 +218,7 @@
                 <div class="category-title-main">
                   <div class="category-name">{% raw %}{{ activeCategory === 'all' ? '全部 (All)' : activeCategory }}{% endraw %}</div>
                   <span class="category-selection-summary">
-                    {% raw %}{{ selectionEnabled ? '已选 ' + getCategorySelectedCount(activeCategory) + ' / ' + (activeCategory === 'all' ? allEmojisList.length : (emojiData[activeCategory]?.length || 0)) : '未开启批量选择' }}{% endraw %}
+                    {% raw %}{{ selectionEnabled ? '已选 ' + getCategorySelectedCount(activeCategory) + ' / ' + (activeCategory === 'all' ? allEmojisList.length : (emojiData[activeCategory]?.length || 0)) : '勾选表情包即可进行批量操作' }}{% endraw %}
                   </span>
                 </div>
                 <div class="category-actions" v-if="activeCategory !== 'all'">
@@ -284,7 +291,7 @@
                     <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
                       <div class="emoji-item" 
                            :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
-                           :style="{ backgroundImage: 'url(/memes/' + encodeURIComponent(activeCategory) + '/' + encodeURIComponent(emoji) + ')' }"
+                           :style="{ backgroundImage: 'url(/memes/file/' + encodeURIComponent(emoji) + ')' }"
                            :draggable="activeCategory !== 'all'" 
                            @dragstart="onDragStart($event, emoji, activeCategory)"
                            @click="onEmojiClick(activeCategory, emoji)"
@@ -435,8 +442,13 @@
               <!-- 标签多选 -->
               <div class="drawer-section">
                 <label>分类标签 (点击进行选择/取消选择)</label>
+                <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
+                  <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
+                  <input type="text" v-model="drawerTagSearchQuery" placeholder="搜索标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
+                  <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
+                </div>
                 <div class="drawer-tags-picker">
-                  <span v-for="cat in Object.keys(emojiData)" 
+                  <span v-for="cat in filteredDrawerTags" 
                         :key="cat" 
                         class="picker-tag-pill" 
                         :class="{ active: selectedEmotions.includes(cat) }" 
@@ -489,7 +501,7 @@
                    style="margin: 0;">
                 <div class="emoji-item" 
                      :class="{ selected: importModal.selectedEmojis.has(emoji), 'selection-mode': true }"
-                     :style="{ backgroundImage: 'url(/memes/all/' + encodeURIComponent(emoji) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
+                     :style="{ backgroundImage: 'url(/memes/file/' + encodeURIComponent(emoji) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
                      @click="toggleImportEmoji(emoji)">
                   <button type="button" class="selection-indicator" aria-label="选择表情包"></button>
                 </div>

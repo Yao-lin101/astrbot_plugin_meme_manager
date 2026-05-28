@@ -76,15 +76,26 @@ async def index():
 
 @app.route("/memes/<category>/<filename>")
 async def serve_emoji(category, filename):
-    category_path = os.path.join(MEMES_DIR, category)
-    # Check absolute location
+    # Check absolute location directly under MEMES_DIR
     target_path = os.path.join(MEMES_DIR, filename)
     if os.path.exists(target_path):
         return await send_from_directory(MEMES_DIR, filename)
-    elif os.path.exists(os.path.join(category_path, filename)):
-        return await send_from_directory(category_path, filename)
-    else:
-        return "File not found: " + os.path.join(category_path, filename), 404
+
+    # Check category path
+    if category != "file" and category != "all":
+        category_path = os.path.join(MEMES_DIR, category)
+        if os.path.exists(os.path.join(category_path, filename)):
+            return await send_from_directory(category_path, filename)
+
+    # Search all subdirectories inside MEMES_DIR
+    for item in os.listdir(MEMES_DIR):
+        item_path = os.path.join(MEMES_DIR, item)
+        if os.path.isdir(item_path):
+            file_path = os.path.join(item_path, filename)
+            if os.path.exists(file_path):
+                return await send_from_directory(item_path, filename)
+
+    return "File not found: " + filename, 404
 
 
 # 提供同步的入口
