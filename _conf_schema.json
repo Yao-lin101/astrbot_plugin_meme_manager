@@ -292,5 +292,36 @@
       "avif"
     ],
     "hint": "选择压缩后的图片保存格式。建议选择 webp 以兼顾体积和聊天客户端兼容性；original 保持原格式；avif 拥有最大压缩率（动图仍为 gif）"
+  },
+  "embedding_enabled": {
+    "description": "启用向量检索表情标签",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，大模型可自由使用表情词，无需在系统提示词中列出庞大的标签列表，通过向量相似度从表情库中召回最匹配的情绪标签（如 &&生气&& 匹配到 angry）。"
+  },
+  "embedding_provider_id": {
+    "description": "Embedding 模型 Provider ID",
+    "type": "string",
+    "default": "",
+    "hint": "请选择当前已启用的 Embedding 提供商。留空则默认使用系统第一个可用的 Embedding 节点。",
+    "_special": "select_provider"
+  },
+  "embedding_similarity_threshold": {
+    "description": "向量相似度最低阈值 (0-1)",
+    "type": "float",
+    "default": 0.6,
+    "hint": "Cosine 相似度大于此阈值时才允许召回。若相似度较低，则忽略该表情。"
+  },
+  "embedding_tag_weight": {
+    "description": "LLM 显式输出表情词匹配权重",
+    "type": "float",
+    "default": 0.7,
+    "hint": "LLM 显式输出情感词标记（如 &&高兴&&）的相似度加权比例。"
+  },
+  "embedding_text_weight": {
+    "description": "LLM 回复文本内容匹配权重",
+    "type": "float",
+    "default": 0.3,
+    "hint": "LLM 回复文本内容语义的相似度加权比例。双通道混合检索总分 = 显式标签相似度 * 标签权重 + 回复文本相似度 * 文本权重。"
   }
 }

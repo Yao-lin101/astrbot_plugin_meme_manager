@@ -56,6 +56,12 @@ def init_db():
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_seen_records_hash ON meme_seen_records (image_hash)"
     )
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS tag_embeddings (
+        tag TEXT UNIQUE,
+        embedding TEXT
+    )
+    """)
     conn.commit()
 
     # 检查 meme_steal_attempts 表中的 reason 字段是否存在
@@ -293,3 +299,47 @@ def increment_image_seen_count(image_hash: str) -> int:
     conn.commit()
     conn.close()
     return new_count
+
+
+def get_all_tag_embeddings() -> dict[str, list[float]]:
+    """获取所有已缓存的标签向量"""
+    import json
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT tag, embedding FROM tag_embeddings")
+        rows = cursor.fetchall()
+    except sqlite3.OperationalError:
+        rows = []
+    conn.close()
+
+    result = {}
+    for row in rows:
+        try:
+            result[row["tag"]] = json.loads(row["embedding"])
+        except Exception:
+            continue
+    return result
+
+
+def save_tag_embedding(tag: str, embedding: list[float]) -> None:
+    """保存或更新标签向量"""
+    import json
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO tag_embeddings (tag, embedding) VALUES (?, ?)",
+        (tag, json.dumps(embedding)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def delete_tag_embedding(tag: str) -> None:
+    """删除指定标签的向量缓存"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tag_embeddings WHERE tag = ?", (tag,))
+    conn.commit()
+    conn.close()
+

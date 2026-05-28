@@ -103,6 +103,11 @@ class MemeSender(Star):
         self.persona_prompts_backup = {}
         self._reload_personas()
 
+        # 初始化标签向量
+        if self.config.get("embedding_enabled", False):
+            from .backend.emotion_handler import sync_tag_embeddings
+            asyncio.create_task(sync_tag_embeddings(self))
+
     @property
     def category_mapping(self) -> dict[str, str]:
         """向后兼容属性：返回所有分类，值为空字符串（模拟字典结构）"""
@@ -119,6 +124,17 @@ class MemeSender(Star):
             name = persona.get("name") or ""
             if name not in self.persona_prompts_backup:
                 self.persona_prompts_backup[name] = persona.get("prompt") or ""
+
+        if self.config.get("embedding_enabled", False):
+            for persona in personas:
+                name = persona.get("name") or ""
+                original_prompt = self.persona_prompts_backup.get(name, "")
+                sys_prompt_add = (
+                    "\n\n你在对话中如果想发出某种表情包或配合某种动作，请在合适的位置自由输出描述它的标签词，表情需用&&包裹，格式如 &&情感词&&（例如 &&高兴&& 或 &&猫&&）。"
+                    "请尽量贴合对话内容进行自由表达。"
+                )
+                persona["prompt"] = original_prompt + sys_prompt_add
+            return
 
         if self.emotion_llm_enabled:
             for persona in personas:
@@ -174,6 +190,9 @@ class MemeSender(Star):
         try:
             self.category_manager.sync_with_filesystem()
             self._reload_personas()
+            if self.config.get("embedding_enabled", False):
+                from .backend.emotion_handler import sync_tag_embeddings
+                asyncio.create_task(sync_tag_embeddings(self))
             try:
                 self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
             except Exception:
