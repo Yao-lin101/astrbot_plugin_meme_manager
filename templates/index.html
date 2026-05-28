@@ -182,20 +182,22 @@
         </div>
 
         <!-- 顶部 Tab 分类过滤器 -->
-        <div class="emoji-tabs-wrapper" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
-          <div class="tabs-search-container" style="max-width: 300px; position: relative; display: flex; align-items: center;">
-            <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-            <input type="text" v-model="tabSearchQuery" placeholder="搜索分类标签..." class="form-control" style="padding-left: 30px; height: 34px; font-size: 12px; border-radius: 17px;" />
-            <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
-          </div>
-          <div id="emoji-tabs" class="emoji-tabs-container">
+        <div class="emoji-tabs-wrapper" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
+          <div class="tabs-search-row" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="tabs-search-container" style="width: 260px; position: relative; display: flex; align-items: center;">
+              <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
+              <input type="text" v-model="tabSearchQuery" placeholder="搜索分类标签..." class="form-control" style="padding-left: 30px; height: 34px; font-size: 12px; border-radius: 17px;" />
+              <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
+            </div>
             <!-- Reset Button -->
             <button class="emoji-tab-btn reset-tabs-btn" 
                     v-if="!activeCategories.includes('all') && activeCategories.length > 0"
-                    @click="selectCategory('all')">
-              <i class="fas fa-rotate-left"></i>重置筛选
+                    @click="selectCategory('all')"
+                    style="margin: 0; padding: 8px 14px; border-radius: 17px; height: 34px; display: inline-flex; align-items: center; box-shadow: var(--shadow-sm); cursor: pointer;">
+              <i class="fas fa-rotate-left" style="margin-right: 4px;"></i>重置筛选
             </button>
-
+          </div>
+          <div id="emoji-tabs" class="emoji-tabs-container">
             <button v-for="category in filteredCategories" 
                     :key="category" 
                     class="emoji-tab-btn" 

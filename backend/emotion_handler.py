@@ -273,6 +273,16 @@ async def _handle_resp_vector(
 
         tag_embeddings = get_all_tag_embeddings()
 
+        # Check if there are any valid emotions missing from the embedding database
+        import asyncio
+
+        missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
+        if missing_tags:
+            logger.info(
+                f"[meme_manager] 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
+            )
+            asyncio.create_task(sync_tag_embeddings(sender))
+
         raw_tags_vectors = []
         for raw_tag in tags_to_embed:
             try:
