@@ -64,7 +64,7 @@ createApp({
 
     const selectCategory = (category) => {
       api.activeCategory.value = category;
-      api.visibleLimit.value = 60;
+      api.visibleLimit.value = 40;
       emojiActions.closeDetailDrawer();
     };
 
@@ -76,7 +76,7 @@ createApp({
           : (api.emojiData.value[api.activeCategory.value]?.length || 0);
           
         if (api.visibleLimit.value < total) {
-          api.visibleLimit.value += 60;
+          api.visibleLimit.value += 20;
         }
       }
     };
@@ -217,6 +217,7 @@ createApp({
       contextMenuConvertToGif: emojiActions.contextMenuConvertToGif,
       contextMenuPaste: emojiActions.contextMenuPaste,
       onEmojiClick: emojiActions.onEmojiClick,
+      handleCreateTagInDrawer: emojiActions.handleCreateTagInDrawer,
     };
   },
 }).mount("#app");
