@@ -331,6 +331,13 @@ class MemeSender(Star):
         async for res in CommandsHandler.compress_existing_memes(self, event):
             yield res
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @meme_manager.command("重构向量缓存")
+    async def rebuild_tag_embeddings(self, event: AstrMessageEvent):
+        """清空缓存的标签向量并重新计算"""
+        async for res in CommandsHandler.rebuild_tag_embeddings(self, event):
+            yield res
+
     @filter.event_message_type(EventMessageType.ALL)
     async def handle_upload_image(self, event: AstrMessageEvent):
         """处理用户上传 of 图片"""

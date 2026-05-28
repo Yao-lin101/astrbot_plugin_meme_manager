@@ -346,3 +346,12 @@ def delete_tag_embedding(tag: str) -> None:
     cursor.execute("DELETE FROM tag_embeddings WHERE tag = ?", (tag,))
     conn.commit()
     conn.close()
+
+
+def clear_all_tag_embeddings() -> None:
+    """清空所有缓存的标签向量"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tag_embeddings")
+    conn.commit()
+    conn.close()

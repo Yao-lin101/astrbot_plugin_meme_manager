@@ -600,3 +600,17 @@ class CommandsHandler:
             f"❌ 压缩失败: {failed_count} 个表情包\n"
             f"💾 共节省空间: {saved_mb:.2f} MB"
         )
+
+    @staticmethod
+    async def rebuild_tag_embeddings(sender, event: AstrMessageEvent):
+        """清空缓存的标签向量并重新计算"""
+        import asyncio
+
+        from .database import clear_all_tag_embeddings
+        from .emotion_handler import sync_tag_embeddings
+
+        clear_all_tag_embeddings()
+        yield event.plain_result(
+            "✅ 已清空所有表情标签的向量缓存。正在后台调用配置的 Embedding 提供商重新同步计算向量，完成会有后台日志..."
+        )
+        asyncio.create_task(sync_tag_embeddings(sender))
