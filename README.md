@@ -210,18 +210,11 @@
 - `emotions_probability`: 表情触发概率 (0-100)
 - `enable_mixed_message`: 启用回复带图功能
 - `mixed_message_probability`: 回复带图概率 (0-100)
-- `strict_max_emotions_per_message`: 是否严格限制表情数量
-- `enable_loose_emotion_matching`: 是否启用宽松的表情匹配
-- `enable_alternative_markup`: 是否启用备用标记
-- `remove_invalid_alternative_markup`: 是否移除无法识别的备用标记内容
-- `enable_repeated_emotion_detection`: 是否启用重复表情检测
-- `high_confidence_emotions`: 高置信度表情列表
 - `auto_steal_enabled`: 是否启用群聊被动暗中偷表情包
 - `auto_steal_probability`: 自动偷表情包的触发概率（范围 1-100）
 - `auto_steal_min_seen`: 触发多模态偏好判定所需图片的全局最少出现次数（默认 2 次，用以有效过滤一次性截图、照片和插画）
 
-**括号内容被误删的处理：**
-如果遇到括号/方括号内容被过滤（参考 Issue #45），请关闭 `remove_invalid_alternative_markup`。
+
 
 ### ⚠️ 重要提示
 

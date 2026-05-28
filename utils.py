@@ -350,7 +350,6 @@ def get_config_value(config: dict, key: str, default: Any = None) -> Any:
         # interaction_config
         "max_emotions_per_message": "interaction_config",
         "emotions_probability": "interaction_config",
-        "enable_alternative_markup": "interaction_config",
         "enable_mixed_message": "interaction_config",
         "mixed_message_probability": "interaction_config",
         "convert_static_to_gif": "interaction_config",

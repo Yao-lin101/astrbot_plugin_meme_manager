@@ -16,7 +16,6 @@ from .database import get_db_conn
 from .helpers import (
     convert_to_gif,
     get_persona_id,
-    is_likely_emotion_markup,
 )
 
 
@@ -211,36 +210,19 @@ async def _handle_resp_vector(
     clean_text = text
     raw_tags = []
 
-    # 1. 严格提取 &&情感词&& 包裹的文本
-    hex_pattern = r"&&([^&&]+)&&"
-    matches = list(re.finditer(hex_pattern, clean_text))
-    for match in matches:
+    # 1. 提取 <emotions>...</emotions> 包裹的标签块
+    emotions_pattern = r"<emotions>(.*?)</emotions>"
+    emotions_matches = list(
+        re.finditer(emotions_pattern, clean_text, re.DOTALL | re.IGNORECASE)
+    )
+    for match in emotions_matches:
         original = match.group(0)
-        emotion = match.group(1).strip()
-        if emotion:
-            raw_tags.append(emotion)
-        clean_text = clean_text.replace(original, "", 1)
-
-    # 2. 替代标记处理 (中括号/括号)
-    if get_config_value(sender.config, "enable_alternative_markup", True):
-        bracket_pattern = r"\[([^\[\]]+)\]"
-        matches = list(re.finditer(bracket_pattern, clean_text))
-        for match in matches:
-            original = match.group(0)
-            emotion = match.group(1).strip()
-            if emotion:
-                raw_tags.append(emotion)
-            clean_text = clean_text.replace(original, "", 1)
-
-        paren_pattern = r"\(([^()]+)\)"
-        matches = list(re.finditer(paren_pattern, clean_text))
-        for match in matches:
-            original = match.group(0)
-            emotion = match.group(1).strip()
-            if emotion:
-                if is_likely_emotion_markup(original, clean_text, match.start()):
-                    raw_tags.append(emotion)
-                    clean_text = clean_text.replace(original, "", 1)
+        inner_content = match.group(1)
+        for tag in re.split(r"[,，\s]+", inner_content):
+            tag = tag.strip()
+            if tag:
+                raw_tags.append(tag)
+        clean_text = clean_text.replace(original, "")
 
     logger.info(
         f"[meme_manager] _handle_resp_vector: raw_text={text!r}, extracted raw_tags={raw_tags}, clean_text={clean_text!r}"
@@ -393,7 +375,12 @@ async def _handle_resp_vector(
 
     logger.info(f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}")
 
-    clean_text = re.sub(r"&&+", "", clean_text)
+    clean_text = re.sub(
+        r"<emotions>.*?</emotions>",
+        "",
+        clean_text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
     response.completion_text = clean_text.strip()
 
 

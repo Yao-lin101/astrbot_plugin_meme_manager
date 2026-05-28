@@ -128,17 +128,40 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
             sender.found_emotions = []
 
         if cleaned_components:
-            result.chain = cleaned_components
+            final_cleaned_components = []
+            for comp in cleaned_components:
+                if isinstance(comp, Plain):
+                    text_val = re.sub(
+                        r"<emotions>.*?</emotions>",
+                        "",
+                        comp.text,
+                        flags=re.DOTALL | re.IGNORECASE,
+                    )
+                    if text_val.strip():
+                        final_cleaned_components.append(Plain(text_val.strip()))
+                else:
+                    final_cleaned_components.append(comp)
+            result.chain = final_cleaned_components
         elif original_chain:
             if isinstance(original_chain, str):
-                final_cleaned = re.sub(r"&&+", "", original_chain)
+                final_cleaned = re.sub(
+                    r"<emotions>.*?</emotions>",
+                    "",
+                    original_chain,
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
                 if final_cleaned.strip():
                     result.chain = [Plain(final_cleaned.strip())]
             elif isinstance(original_chain, list):
                 final_components = []
                 for component in original_chain:
                     if isinstance(component, Plain):
-                        final_cleaned = re.sub(r"&&+", "", component.text)
+                        final_cleaned = re.sub(
+                            r"<emotions>.*?</emotions>",
+                            "",
+                            component.text,
+                            flags=re.DOTALL | re.IGNORECASE,
+                        )
                         if final_cleaned.strip():
                             final_components.append(Plain(final_cleaned.strip()))
                     else:
