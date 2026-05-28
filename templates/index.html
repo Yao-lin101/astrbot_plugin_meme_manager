@@ -432,85 +432,85 @@
       <!-- 表情包编辑属性模态框 -->
       <div v-if="activeDetailEmoji" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeDetailDrawer">
         <div class="emoji-detail-modal-card" :class="{ loading: detailDrawerLoading }">
-          <div v-if="detailDrawerLoading" class="loading-state" style="justify-content: center; padding: 40px;">
+          <!-- Loading Overlay -->
+          <div v-if="detailDrawerLoading" class="loading-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center; z-index: 100; border-radius: var(--radius-lg);">
             <i class="fas fa-circle-notch fa-spin fa-2x" style="color: var(--primary-color);"></i>
           </div>
-          <template v-else>
-            <div class="drawer-header">
-              <span class="drawer-title">编辑属性: {% raw %}{{ activeDetailEmoji }}{% endraw %}</span>
-              <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
+
+          <div class="drawer-header">
+            <span class="drawer-title">编辑属性: {% raw %}{{ activeDetailEmoji }}{% endraw %}</span>
+            <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
+          </div>
+          <div class="drawer-body-layout">
+            <!-- 左侧大图预览 -->
+            <div class="drawer-preview-column">
+              <img :src="'/memes/file/' + encodeURIComponent(activeDetailEmoji)" :alt="activeDetailEmoji" />
             </div>
-            <div class="drawer-body-layout">
-              <!-- 左侧大图预览 -->
-              <div class="drawer-preview-column">
-                <img :src="'/memes/file/' + encodeURIComponent(activeDetailEmoji)" :alt="activeDetailEmoji" />
-              </div>
 
-              <!-- 右侧编辑区域 -->
-              <div class="drawer-edit-column">
-                <!-- 标签多选 -->
-                <div class="drawer-section">
-                  <label>分类标签 (点击进行选择/取消选择)</label>
-                  <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
-                    <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-                    <input type="text" v-model="drawerTagSearchQuery" @keyup.enter="handleCreateTagInDrawer" placeholder="搜索或输入后回车新建标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
-                    <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
-                  </div>
-                  <div class="drawer-tags-picker">
-                    <span v-for="cat in filteredDrawerTags" 
-                          :key="cat" 
-                          class="picker-tag-pill" 
-                          :class="{ active: selectedEmotions.includes(cat) }" 
-                          @click="toggleTagInDrawer(cat)">
-                      {% raw %}{{ cat }}{% endraw %}
-                    </span>
-                  </div>
+            <!-- 右侧编辑区域 -->
+            <div class="drawer-edit-column">
+              <!-- 标签多选 -->
+              <div class="drawer-section">
+                <label>分类标签 (点击进行选择/取消选择)</label>
+                <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
+                  <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
+                  <input type="text" v-model="drawerTagSearchQuery" @keyup.enter="handleCreateTagInDrawer" placeholder="搜索或输入后回车新建标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
+                  <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
                 </div>
-
-                <!-- 人格可用性多选 -->
-                <div class="drawer-section">
-                  <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
-                  <div class="drawer-personas-list">
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                      <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" style="width: 14px; height: 14px;" />
-                      <span>全局可用 (*)</span>
-                    </label>
-                    <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                      <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" style="width: 14px; height: 14px;" />
-                      <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
-                    </label>
-                  </div>
+                <div class="drawer-tags-picker">
+                  <span v-for="cat in filteredDrawerTags" 
+                        :key="cat" 
+                        class="picker-tag-pill" 
+                        :class="{ active: selectedEmotions.includes(cat) }" 
+                        @click="toggleTagInDrawer(cat)">
+                    {% raw %}{{ cat }}{% endraw %}
+                  </span>
                 </div>
               </div>
-            </div>
-            <div class="drawer-actions" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-              <div class="navigation-group" style="display: flex; align-items: center; gap: 8px;">
-                <button class="btn-secondary icon-only-btn" 
-                        :disabled="!hasPreviousEmoji" 
-                        @click="navigateToSiblingEmoji(-1)"
-                        title="上一张"
-                        style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;">
-                  <i class="fas fa-chevron-left"></i>
-                </button>
-                <button class="btn-secondary icon-only-btn" 
-                        :disabled="!hasNextEmoji" 
-                        @click="navigateToSiblingEmoji(1)"
-                        title="下一张"
-                        style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;">
-                  <i class="fas fa-chevron-right"></i>
-                </button>
-                <button class="btn-secondary" 
-                        @click="saveEmojiAttributes(false)"
-                        style="height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; padding: 0 12px; border-radius: 18px; margin-left: 4px;">
-                  保存修改
-                </button>
-              </div>
-              <div class="action-group" style="display: flex; gap: 12px;">
-                <button class="btn-secondary" @click="closeDetailDrawer">取消</button>
-                <button class="btn-primary" @click="saveEmojiAttributes(true)">保存并关闭</button>
+
+              <!-- 人格可用性多选 -->
+              <div class="drawer-section">
+                <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
+                <div class="drawer-personas-list">
+                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
+                    <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" style="width: 14px; height: 14px;" />
+                    <span>全局可用 (*)</span>
+                  </label>
+                  <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
+                    <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" style="width: 14px; height: 14px;" />
+                    <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
+                  </label>
+                </div>
               </div>
             </div>
-          </template>
+          </div>
+          <div class="drawer-actions" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div class="navigation-group" style="display: flex; align-items: center; gap: 8px;">
+              <button class="btn-secondary icon-only-btn" 
+                      :disabled="!hasPreviousEmoji" 
+                      @click="navigateToSiblingEmoji(-1)"
+                      title="上一张"
+                      style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;">
+                <i class="fas fa-chevron-left"></i>
+              </button>
+              <button class="btn-secondary icon-only-btn" 
+                      :disabled="!hasNextEmoji" 
+                      @click="navigateToSiblingEmoji(1)"
+                      title="下一张"
+                      style="width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%;">
+                <i class="fas fa-chevron-right"></i>
+              </button>
+              <button class="btn-secondary" 
+                      @click="saveEmojiAttributes(false)"
+                      style="height: 36px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; padding: 0 12px; border-radius: 18px; margin-left: 4px;">
+                保存修改
+              </button>
+            </div>
+            <div class="action-group" style="display: flex; gap: 12px;">
+              <button class="btn-secondary" @click="closeDetailDrawer">取消</button>
+              <button class="btn-primary" @click="saveEmojiAttributes(true)">保存并关闭</button>
+            </div>
+          </div>
         </div>
       </div>
 
