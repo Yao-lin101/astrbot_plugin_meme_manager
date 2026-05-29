@@ -72,6 +72,13 @@
     "type": "int",
     "default": 5000
   },
+  "persona_blacklist": {
+    "description": "人格黑名单 (Persona ID 或名称)",
+    "type": "list",
+    "hint": "在此列表中的人格（Persona ID 或名称）将不会被自动注入表情包提示词，避免影响某些特定用途的后台分析人格。",
+    "default": []
+  },
+
   "meme_prompt": {
     "description": "表情包系统提示词",
     "type": "text",
