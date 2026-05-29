@@ -1,7 +1,9 @@
 import logging
+
 from astrbot.api.event import AstrMessageEvent
 
 logger = logging.getLogger(__name__)
+
 
 class WebuiManager:
     @staticmethod

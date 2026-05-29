@@ -62,31 +62,9 @@ createApp({
     // Local UI states
     const syncDrawerVisible = ref(false);
 
-    // Dynamic reactive base64 image loading
-    const loadedEmojis = ref({});
-    const loadingEmojis = new Set();
-    const loadEmojiImage = async (emoji) => {
-      if (!emoji || loadingEmojis.has(emoji) || loadedEmojis.value[emoji]) return;
-      loadingEmojis.add(emoji);
-      try {
-        const res = await window.AstrBotPluginPage.apiGet("emoji/file_base64", { filename: emoji });
-        if (res && res.base64) {
-          loadedEmojis.value[emoji] = `data:${res.mime};base64,${res.base64}`;
-        }
-      } catch (e) {
-        console.error(`Failed to load emoji ${emoji}:`, e);
-      } finally {
-        loadingEmojis.delete(emoji);
-      }
-    };
-
     const getImageUrl = (emoji) => {
       if (!emoji) return '';
-      if (loadedEmojis.value[emoji]) {
-        return loadedEmojis.value[emoji];
-      }
-      loadEmojiImage(emoji);
-      return 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
     };
 
     const activeCategory = computed(() => {

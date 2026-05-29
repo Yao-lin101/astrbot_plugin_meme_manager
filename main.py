@@ -98,35 +98,35 @@ class MemeSender(Star):
 
         # 注册 Web APIs
         from .backend.api import (
-            get_all_emojis,
-            get_emojis_by_category,
             add_emoji,
-            delete_emoji,
-            batch_delete_emoji,
             batch_convert_emoji_gif,
-            move_emoji,
-            batch_move_emoji,
             batch_copy_emoji,
-            clear_category,
-            clear_all_emoji,
-            get_emotions,
-            delete_category,
-            get_sync_status,
-            sync_config,
-            restore_category,
-            rename_category,
-            get_img_host_sync_status,
-            sync_to_remote,
-            sync_from_remote,
-            check_sync_process,
-            get_personas,
-            edit_emoji,
-            get_emoji_info,
+            batch_delete_emoji,
             batch_edit_personas,
-            get_persona_tags,
-            save_persona_tag,
             batch_import_emojis,
+            batch_move_emoji,
+            check_sync_process,
+            clear_all_emoji,
+            clear_category,
+            delete_category,
+            delete_emoji,
+            edit_emoji,
+            get_all_emojis,
             get_emoji_file_base64,
+            get_emoji_info,
+            get_emojis_by_category,
+            get_emotions,
+            get_img_host_sync_status,
+            get_persona_tags,
+            get_personas,
+            get_sync_status,
+            move_emoji,
+            rename_category,
+            restore_category,
+            save_persona_tag,
+            sync_config,
+            sync_from_remote,
+            sync_to_remote,
         )
 
         PLUGIN_NAME = "astrbot_plugin_meme_manager"
@@ -168,7 +168,7 @@ class MemeSender(Star):
                 f"/{PLUGIN_NAME}/{route}",
                 self.wrap_api_handler(handler),
                 methods,
-                f"Meme Manager API: {route}"
+                f"Meme Manager API: {route}",
             )
 
         # 注册表情文件服务接口
@@ -176,7 +176,7 @@ class MemeSender(Star):
             f"/{PLUGIN_NAME}/memes/<category>/<filename>",
             self.serve_emoji,
             ["GET"],
-            "Serve emoji files"
+            "Serve emoji files",
         )
 
         if hasattr(self, "_r2_bucket_name"):
@@ -195,6 +195,18 @@ class MemeSender(Star):
     def wrap_api_handler(self, handler):
         async def wrapper(*args, **kwargs):
             from quart import current_app
+
+            # Register the dynamic unauthenticated serve_emoji route on app startup/first request
+            app = current_app._get_current_object()
+            route_name = "meme_manager_serve_emoji"
+            if route_name not in app.view_functions:
+                app.add_url_rule(
+                    "/api/file/meme_manager/memes/<category>/<filename>",
+                    endpoint=route_name,
+                    view_func=self.serve_emoji,
+                    methods=["GET"],
+                )
+
             current_app.config["PLUGIN_CONFIG"] = {
                 "img_sync": self.img_sync,
                 "category_manager": self.category_manager,
@@ -206,15 +218,20 @@ class MemeSender(Star):
                         "prompt": p.get("prompt") or "",
                     }
                     for p in self.context.provider_manager.personas
-                ] if hasattr(self.context, "provider_manager") else [],
+                ]
+                if hasattr(self.context, "provider_manager")
+                else [],
                 "context": self.context,
             }
             return await handler(*args, **kwargs)
+
         return wrapper
 
     async def serve_emoji(self, category, filename):
         import os
+
         from quart import send_from_directory
+
         from .config import MEMES_DIR
 
         # Check absolute location directly under MEMES_DIR
