@@ -136,6 +136,15 @@ class CategoryManager:
             logger.error(f"删除类别失败: {e}")
             return False
 
+    def clear_all_categories(self) -> bool:
+        """清空所有标签配置"""
+        try:
+            self.categories = []
+            return save_json(self.categories, MEMES_DATA_PATH)
+        except Exception as e:
+            logger.error(f"清空所有标签配置失败: {e}")
+            return False
+
     def get_categories(self) -> list[str]:
         """获取所有分类标签"""
         return self.categories.copy()  # 返回副本
