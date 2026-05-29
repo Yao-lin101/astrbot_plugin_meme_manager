@@ -1,0 +1,10 @@
+{
+  "metadata": {
+    "display_name": "表情包管理器"
+  },
+  "pages": {
+    "meme_manager": {
+      "title": "表情包管理"
+    }
+  }
+}

@@ -104,16 +104,41 @@ async def get_emojis_by_category(category):
 async def add_emoji():
     """添加表情包到指定类别"""
     try:
-        # 检查是否有文件 - 使用 await 获取请求文件
-        files = await request.files
-        if not files or "image_file" not in files:
-            return jsonify({"message": "没有找到上传的图片文件"}), 400
+        is_json_request = request.is_json
+        if is_json_request:
+            data = await request.get_json()
+            category = data.get("category")
+            filename = data.get("filename")
+            base64_data = data.get("base64_data")
+            if not category or not filename or not base64_data:
+                return jsonify({"message": "没有找到上传的图片文件或缺少类别"}), 400
+            
+            import base64
+            import io
+            try:
+                if "," in base64_data:
+                    base64_data = base64_data.split(",", 1)[1]
+                content = base64.b64decode(base64_data)
+            except Exception as e:
+                return jsonify({"message": f"图片解码失败: {e}"}), 400
+                
+            class BytesIOFile:
+                def __init__(self, filename, content):
+                    self.filename = filename
+                    self.stream = io.BytesIO(content)
+            
+            image_file = BytesIOFile(filename, content)
+        else:
+            # 检查是否有文件 - 使用 await 获取请求文件
+            files = await request.files
+            if not files or "image_file" not in files:
+                return jsonify({"message": "没有找到上传的图片文件"}), 400
 
-        image_file = files["image_file"]
+            image_file = files["image_file"]
 
-        # 使用 await 获取表单数据
-        form = await request.form
-        category = form.get("category")
+            # 使用 await 获取表单数据
+            form = await request.form
+            category = form.get("category")
 
         if not category:
             return jsonify({"message": "没有指定类别"}), 400
@@ -145,17 +170,17 @@ async def add_emoji():
 
         except DuplicateEmojiError as inner_e:
             logger.info(f"跳过重复表情包: {inner_e}")
-            return (
-                jsonify(
-                    {
-                        "message": str(inner_e),
-                        "code": "duplicate_emoji",
-                        "category": category,
-                        "filename": inner_e.existing_filename,
-                    }
-                ),
-                409,
-            )
+            response_payload = {
+                "message": str(inner_e),
+                "code": "duplicate_emoji",
+                "category": category,
+                "filename": inner_e.existing_filename,
+            }
+            if is_json_request:
+                response_payload["is_duplicate"] = True
+                return jsonify(response_payload), 200
+            else:
+                return jsonify(response_payload), 409
         except Exception as inner_e:
             logger.error(f"处理上传文件时出错: {inner_e}", exc_info=True)
             return jsonify({"message": f"处理上传文件时出错: {str(inner_e)}"}), 500
@@ -837,3 +862,46 @@ async def batch_import_emojis():
     except Exception as e:
         logger.error(f"批量导入表情包失败: {e}", exc_info=True)
         return jsonify({"message": str(e)}), 500
+
+
+@api.route("/emoji/file_base64", methods=["GET"])
+async def get_emoji_file_base64():
+    """获取表情文件的 Base64 编码数据"""
+    import base64
+    import mimetypes
+    from ..config import MEMES_DIR
+    
+    filename = request.args.get("filename")
+    if not filename:
+        return jsonify({"message": "缺少文件名"}), 400
+        
+    filename = os.path.basename(filename)
+    
+    target_path = os.path.join(MEMES_DIR, filename)
+    if not os.path.exists(target_path):
+        found = False
+        for item in os.listdir(MEMES_DIR):
+            item_path = os.path.join(MEMES_DIR, item)
+            if os.path.isdir(item_path):
+                file_path = os.path.join(item_path, filename)
+                if os.path.exists(file_path):
+                    target_path = file_path
+                    found = True
+                    break
+        if not found:
+            return jsonify({"message": "文件不存在"}), 404
+            
+    try:
+        with open(target_path, "rb") as f:
+            content = f.read()
+        mime_type, _ = mimetypes.guess_type(target_path)
+        if not mime_type:
+            mime_type = "image/png"
+        base64_str = base64.b64encode(content).decode("utf-8")
+        return jsonify({
+            "status": "success",
+            "mime": mime_type,
+            "base64": base64_str
+        }), 200
+    except Exception as e:
+        return jsonify({"message": f"读取文件失败: {e}"}), 500

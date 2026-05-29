@@ -96,6 +96,89 @@ class MemeSender(Star):
         # 所有的配置属性现在通过下方的 @property 动态获取，以便在 WebUI 修改设置后实时生效
         pass
 
+        # 注册 Web APIs
+        from .backend.api import (
+            get_all_emojis,
+            get_emojis_by_category,
+            add_emoji,
+            delete_emoji,
+            batch_delete_emoji,
+            batch_convert_emoji_gif,
+            move_emoji,
+            batch_move_emoji,
+            batch_copy_emoji,
+            clear_category,
+            clear_all_emoji,
+            get_emotions,
+            delete_category,
+            get_sync_status,
+            sync_config,
+            restore_category,
+            rename_category,
+            get_img_host_sync_status,
+            sync_to_remote,
+            sync_from_remote,
+            check_sync_process,
+            get_personas,
+            edit_emoji,
+            get_emoji_info,
+            batch_edit_personas,
+            get_persona_tags,
+            save_persona_tag,
+            batch_import_emojis,
+            get_emoji_file_base64,
+        )
+
+        PLUGIN_NAME = "astrbot_plugin_meme_manager"
+
+        apis = [
+            ("emoji", get_all_emojis, ["GET"]),
+            ("emoji/<category>", get_emojis_by_category, ["GET"]),
+            ("emoji/add", add_emoji, ["POST"]),
+            ("emoji/delete", delete_emoji, ["POST"]),
+            ("emoji/batch_delete", batch_delete_emoji, ["POST"]),
+            ("emoji/batch_convert_gif", batch_convert_emoji_gif, ["POST"]),
+            ("emoji/move", move_emoji, ["POST"]),
+            ("emoji/batch_move", batch_move_emoji, ["POST"]),
+            ("emoji/batch_copy", batch_copy_emoji, ["POST"]),
+            ("category/clear", clear_category, ["POST"]),
+            ("emoji/clear_all", clear_all_emoji, ["POST"]),
+            ("emotions", get_emotions, ["GET"]),
+            ("category/delete", delete_category, ["POST"]),
+            ("sync/status", get_sync_status, ["GET"]),
+            ("sync/config", sync_config, ["POST"]),
+            ("category/restore", restore_category, ["POST"]),
+            ("category/rename", rename_category, ["POST"]),
+            ("img_host/sync/status", get_img_host_sync_status, ["GET"]),
+            ("img_host/sync/upload", sync_to_remote, ["POST"]),
+            ("img_host/sync/download", sync_from_remote, ["POST"]),
+            ("img_host/sync/check_process", check_sync_process, ["GET"]),
+            ("personas", get_personas, ["GET"]),
+            ("emoji/edit", edit_emoji, ["POST"]),
+            ("emoji/info/<filename>", get_emoji_info, ["GET"]),
+            ("emoji/batch_edit_personas", batch_edit_personas, ["POST"]),
+            ("persona_tags", get_persona_tags, ["GET"]),
+            ("persona_tags", save_persona_tag, ["POST"]),
+            ("emoji/batch_import", batch_import_emojis, ["POST"]),
+            ("emoji/file_base64", get_emoji_file_base64, ["GET"]),
+        ]
+
+        for route, handler, methods in apis:
+            self.context.register_web_api(
+                f"/{PLUGIN_NAME}/{route}",
+                self.wrap_api_handler(handler),
+                methods,
+                f"Meme Manager API: {route}"
+            )
+
+        # 注册表情文件服务接口
+        self.context.register_web_api(
+            f"/{PLUGIN_NAME}/memes/<category>/<filename>",
+            self.serve_emoji,
+            ["GET"],
+            "Serve emoji files"
+        )
+
         if hasattr(self, "_r2_bucket_name"):
             logger.info(f"Cloudflare R2 图床已初始化: {self._r2_bucket_name}")
             delattr(self, "_r2_bucket_name")
@@ -108,6 +191,52 @@ class MemeSender(Star):
         from .backend.emotion_handler import sync_tag_embeddings
 
         asyncio.create_task(sync_tag_embeddings(self))
+
+    def wrap_api_handler(self, handler):
+        async def wrapper(*args, **kwargs):
+            from quart import current_app
+            current_app.config["PLUGIN_CONFIG"] = {
+                "img_sync": self.img_sync,
+                "category_manager": self.category_manager,
+                "plugin_config": self.config,
+                "personas": [
+                    {
+                        "id": p.get("id") or p.get("name") or "",
+                        "name": p.get("name") or "",
+                        "prompt": p.get("prompt") or "",
+                    }
+                    for p in self.context.provider_manager.personas
+                ] if hasattr(self.context, "provider_manager") else [],
+                "context": self.context,
+            }
+            return await handler(*args, **kwargs)
+        return wrapper
+
+    async def serve_emoji(self, category, filename):
+        import os
+        from quart import send_from_directory
+        from .config import MEMES_DIR
+
+        # Check absolute location directly under MEMES_DIR
+        target_path = os.path.join(MEMES_DIR, filename)
+        if os.path.exists(target_path):
+            return await send_from_directory(MEMES_DIR, filename)
+
+        # Check category path
+        if category != "file" and category != "all":
+            category_path = os.path.join(MEMES_DIR, category)
+            if os.path.exists(os.path.join(category_path, filename)):
+                return await send_from_directory(category_path, filename)
+
+        # Search all subdirectories inside MEMES_DIR
+        for item in os.listdir(MEMES_DIR):
+            item_path = os.path.join(MEMES_DIR, item)
+            if os.path.isdir(item_path):
+                file_path = os.path.join(item_path, filename)
+                if os.path.exists(file_path):
+                    return await send_from_directory(item_path, filename)
+
+        return "File not found: " + filename, 404
 
     @property
     def category_mapping(self) -> dict[str, str]:
@@ -382,8 +511,7 @@ class MemeSender(Star):
         if self.img_sync:
             self.img_sync.stop_sync()
 
-        await WebuiManager._shutdown(self)
-        await WebuiManager._cleanup_resources(self)
+        pass
 
     @property
     def fault_tolerant_symbols(self) -> list[str]:
