@@ -106,27 +106,55 @@ class CommandsHandler:
         yield event.plain_result(f"🖼️ 当前图库标签：\n{categories_str}")
 
     @staticmethod
-    async def upload_meme(sender, event: AstrMessageEvent, tag: str = None):
+    async def upload_meme(sender, event: AstrMessageEvent, tags: str = None):
         """上传表情包并标记指定标签"""
-        if not tag:
+        if not tags:
             yield event.plain_result(
-                "📌 若要添加表情，请按照此格式操作：\n/表情管理 添加表情 [标签名称]\n（输入/表情管理 查看图库 可获取标签列表）"
+                "📌 若要添加表情，请按照此格式操作：\n/表情管理 添加表情 [标签1,标签2...]\n（输入/表情管理 查看图库 可获取标签列表）"
             )
             return
 
-        if tag not in sender.category_manager.get_categories():
+        import re
+
+        raw_tags = [t.strip() for t in re.split(r"[,，\s]+", tags) if t.strip()]
+        if not raw_tags:
             yield event.plain_result(
-                f"您输入的表情标签「{tag}」是不存在的哦。\n可以使用 /表情管理 查看图库 来查看可用的标签。"
+                "📌 若要添加表情，请按照此格式操作：\n/表情管理 添加表情 [标签1,标签2...]"
+            )
+            return
+
+        valid_categories = set(sender.category_manager.get_categories())
+        resolved_tags = []
+        invalid_tags = []
+
+        for t in raw_tags:
+            if t in valid_categories:
+                resolved_tags.append(t)
+            else:
+                clean_t = t.strip()
+                if 0 < len(clean_t) <= 20:
+                    resolved_tags.append(clean_t)
+                else:
+                    invalid_tags.append(t)
+
+        if not resolved_tags:
+            yield event.plain_result(
+                f"❌ 指定的标签名称不合法（标签长度需限制在 20 字符内）。无效的标签：{', '.join(invalid_tags)}"
             )
             return
 
         user_key = f"{event.session_id}_{event.get_sender_id()}"
         sender.upload_states[user_key] = {
-            "category": tag,
+            "categories": resolved_tags,
             "expire_time": time.time() + 30,
         }
+
+        tags_display = "、".join(resolved_tags)
+        invalid_tip = (
+            f"（已忽略无效标签: {', '.join(invalid_tags)}）" if invalid_tags else ""
+        )
         yield event.plain_result(
-            f"请在30秒内发送要添加到【{tag}】标签的图片（可发送多张图片）。"
+            f"请在30秒内发送要添加到【{tags_display}】标签的图片（可发送多张图片）。{invalid_tip}"
         )
 
     @staticmethod
@@ -148,15 +176,55 @@ class CommandsHandler:
         category_count = sum(1 for count in category_counts.values() if count > 0)
         summary = CommandsHandler._format_category_counts(category_counts)
         yield event.plain_result(
-            f"⚠️ 即将清空全部表情包，共 {total_count} 个文件，涉及 {category_count} 个标签。\n"
-            "该操作会保留所有标签名称和描述配置。\n"
+            f"⚠️ 【安全警告：第一次确认】\n"
+            f"即将清空全部表情包和标签，共 {total_count} 个文件，涉及 {category_count} 个标签。\n"
+            "该操作不可逆，将同时删除所有标签配置和向量缓存。\n"
             f"{summary}\n"
-            "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
+            "请在 30 秒内回复“确认”继续，或回复“取消”放弃。"
         )
         if not await CommandsHandler._wait_for_command_confirmation(sender, event):
             return
 
+        yield event.plain_result(
+            "🔴 【安全警告：第二次确认】\n"
+            "请进行最终确认！该操作会彻底删除本地所有表情文件并清空数据库中所有表情标签配置和向量缓存。\n"
+            "确定要彻底清空吗？\n"
+            "请在 30 秒内回复“确认清空全部表情与标签”以最终执行，或回复“取消”放弃。"
+        )
+
+        @session_waiter(timeout=30, record_history_chains=False)
+        async def second_confirmation_waiter(
+            controller: SessionController, confirm_event: AstrMessageEvent
+        ) -> None:
+            reply = (confirm_event.message_str or "").strip()
+            if reply == "确认清空全部表情与标签":
+                controller.stop()
+                return
+            if reply in {"取消", "退出"}:
+                await confirm_event.send(confirm_event.plain_result("已取消本次操作。"))
+                controller.stop(ConfirmationCancelled())
+                return
+            await confirm_event.send(
+                confirm_event.plain_result(
+                    "⚠️ 输入不正确！请回复“确认清空全部表情与标签”以最终确认执行，或回复“取消”放弃。"
+                )
+            )
+            controller.keep(timeout=30, reset_timeout=True)
+
+        try:
+            await second_confirmation_waiter(event, SenderScopedSessionFilter())
+        except TimeoutError:
+            await event.send(event.plain_result("⌛ 等待确认超时，操作已取消。"))
+            return
+        except ConfirmationCancelled:
+            return
+
         clear_all_emojis()
+        sender.category_manager.clear_all_categories()
+        from .database import clear_all_tag_embeddings
+
+        clear_all_tag_embeddings()
+        sender._reload_personas()
 
         # 重新统计真正删除了多少
         conn = get_db_conn()
@@ -167,7 +235,7 @@ class CommandsHandler:
 
         deleted_total = total_count - rem_count
         yield event.plain_result(
-            f"✅ 已清空全部表情包，共删除 {deleted_total} 个文件，标签配置已保留。"
+            f"✅ 已成功清空全部表情包和标签，共删除 {deleted_total} 个文件，标签配置与向量缓存已清空。"
         )
 
     @staticmethod

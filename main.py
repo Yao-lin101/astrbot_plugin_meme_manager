@@ -327,15 +327,15 @@ class MemeSender(Star):
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("添加表情")
-    async def upload_meme(self, event: AstrMessageEvent, tag: str | None = None):
+    async def upload_meme(self, event: AstrMessageEvent, tags: str | None = None):
         """上传表情包并标记指定标签"""
-        async for res in CommandsHandler.upload_meme(self, event, tag):
+        async for res in CommandsHandler.upload_meme(self, event, tags):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("清空全部")
     async def clear_all_emojis_command(self, event: AstrMessageEvent):
-        """清空所有标签下的表情包，但保留标签配置。"""
+        """清空所有表情包与所有标签配置，以及标签向量缓存。"""
         async for res in CommandsHandler.clear_all_emojis_command(self, event):
             yield res
 

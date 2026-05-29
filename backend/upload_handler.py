@@ -28,7 +28,8 @@ async def handle_upload_image(sender, event: AstrMessageEvent):
         yield event.plain_result("请发送图片文件来进行上传哦。")
         return
 
-    category = upload_state["category"]
+    categories = upload_state.get("categories") or [upload_state.get("category")]
+    categories = [c for c in categories if c]
 
     try:
         saved_files = []
@@ -75,7 +76,7 @@ async def handle_upload_image(sender, event: AstrMessageEvent):
                 res = save_and_register_meme(
                     image_bytes=content,
                     filename=filename,
-                    category=category,
+                    category=categories,
                     personas="*",
                     config=sender.config,
                 )
@@ -89,9 +90,10 @@ async def handle_upload_image(sender, event: AstrMessageEvent):
         if user_key in sender.upload_states:
             del sender.upload_states[user_key]
 
+        tags_display = "、".join(categories)
         result_msg = [
             Plain(
-                f"✅ 已经成功收录了 {len(saved_files)} 张新表情到「{category}」图库！"
+                f"✅ 已经成功收录了 {len(saved_files)} 张新表情到【{tags_display}】标签下！"
             )
         ]
 
