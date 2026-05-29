@@ -4,9 +4,111 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AstrBot 表情包管理系统</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+
+    <script>
+      // Mock window.fetch to communicate through the AstrBotPluginPage message bridge
+      window.fetch = async function(url, options = {}) {
+        const B = window.AstrBotPluginPage;
+        if (!B) {
+          return Promise.reject(new Error("Bridge not available"));
+        }
+        await B.ready();
+        
+        let endpoint = url;
+        if (typeof endpoint === 'string') {
+          if (endpoint.startsWith('/api/')) {
+            endpoint = endpoint.substring(5);
+          } else if (endpoint.startsWith('api/')) {
+            endpoint = endpoint.substring(4);
+          }
+        }
+        
+        const method = (options.method || 'GET').toUpperCase();
+        try {
+          let resData;
+          if (method === 'GET') {
+            let params = {};
+            const urlParts = endpoint.split('?');
+            const pathPart = urlParts[0];
+            if (urlParts.length > 1) {
+              const searchParams = new URLSearchParams(urlParts[1]);
+              for (const [key, value] of searchParams.entries()) {
+                params[key] = value;
+              }
+            }
+            resData = await B.apiGet(pathPart, params);
+          } else if (method === 'POST') {
+            const body = options.body;
+            if (body instanceof FormData) {
+              const category = body.get('category');
+              const file = body.get('image_file');
+              if (file) {
+                const base64Data = await new Promise((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onload = () => resolve(reader.result);
+                  reader.onerror = reject;
+                  reader.readAsDataURL(file);
+                });
+                resData = await B.apiPost("emoji/add", {
+                  category: category,
+                  filename: file.name,
+                  base64_data: base64Data
+                });
+              } else {
+                throw new Error("No file in FormData");
+              }
+            } else {
+              let jsonBody = {};
+              if (typeof body === 'string') {
+                try {
+                  jsonBody = JSON.parse(body);
+                } catch (e) {
+                  jsonBody = body;
+                }
+              } else {
+                jsonBody = body || {};
+              }
+              resData = await B.apiPost(endpoint, jsonBody);
+            }
+          }
+          
+          if (resData && resData.is_duplicate) {
+            return {
+              ok: false,
+              status: 409,
+              json: async () => resData,
+              text: async () => JSON.stringify(resData)
+            };
+          }
+          
+          return {
+            ok: true,
+            status: 200,
+            json: async () => resData,
+            text: async () => typeof resData === 'string' ? resData : JSON.stringify(resData)
+          };
+        } catch (error) {
+          console.error(`Mock fetch failed for ${url}:`, error);
+          let status = 500;
+          if (error.message && error.message.includes("status code 409")) {
+            status = 409;
+          } else if (error.message && error.message.includes("status code 400")) {
+            status = 400;
+          } else if (error.message && error.message.includes("status code 404")) {
+            status = 404;
+          }
+          return {
+            ok: false,
+            status: status,
+            json: async () => ({ message: error.message || "Request failed" }),
+            text: async () => error.message || "Request failed"
+          };
+        }
+      };
+    </script>
+    <link rel="stylesheet" href="css/styles.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <script src="{{ url_for('static', filename='js/libs/vue.global.js') }}"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.js"></script>
     <style>
       [v-cloak] {
         display: none !important;
@@ -15,18 +117,6 @@
   </head>
   <body>
     <div id="app" class="layout-container" v-cloak @click="closeContextMenu">
-      <!-- 头部导航栏 -->
-      <header class="header">
-        <div class="header-logo">
-          <i class="fas fa-face-smile-wink logo-icon"></i>
-          <h1>表情管理系统</h1>
-        </div>
-        <div class="header-actions">
-          <button class="btn-secondary toggle-sync-btn" :class="{ active: syncDrawerVisible }" @click="syncDrawerVisible = !syncDrawerVisible">
-            <i class="fas fa-arrows-spin icon"></i>同步与设置
-          </button>
-        </div>
-      </header>
 
       <!-- 主要工作区 (通栏大气的仪表盘布局) -->
       <main class="main-content">
@@ -57,7 +147,7 @@
                       <h4>未注册的本地分类:</h4>
                       <div class="diff-tags">
                         <span v-for="cat in syncStatus.missingInConfig" :key="cat" class="diff-tag">
-                          {% raw %}{{ cat }}{% endraw %}
+                          {{ cat }}
                         </span>
                       </div>
                     </div>
@@ -65,7 +155,7 @@
                       <h4>已删除的类别（配置残留）：</h4>
                       <div class="deleted-list">
                         <div v-for="cat in syncStatus.deletedCategories" :key="cat" class="deleted-item">
-                          <span class="deleted-name">{% raw %}{{ cat }}{% endraw %}</span>
+                          <span class="deleted-name">{{ cat }}</span>
                           <div class="deleted-actions">
                             <button class="btn-sm" @click="restoreCategory(cat)">恢复文件夹</button>
                             <button class="btn-sm btn-danger" @click="removeFromConfig(cat)">删除配置</button>
@@ -98,22 +188,22 @@
                 <div class="img-host-details">
                   <div class="detail-row">
                     <span class="label">图床服务商</span>
-                    <span class="value">{% raw %}{{ imgHostStatus.provider }}{% endraw %}</span>
+                    <span class="value">{{ imgHostStatus.provider }}</span>
                   </div>
                   <div class="detail-row">
                     <span class="label">云端文件</span>
                     <span class="value font-num">
-                      {% raw %}{{ imgHostStatus.remoteImageCount }}{% endraw %} 张 ({% raw %}{{ imgHostStatus.remoteStorageSize }}{% endraw %})
+                      {{ imgHostStatus.remoteImageCount }} 张 ({{ imgHostStatus.remoteStorageSize }})
                     </span>
                   </div>
                   <div class="detail-row highlight" v-if="imgHostStatus.uploadCount > 0 || imgHostStatus.downloadCount > 0">
                     <span class="label">待同步数量</span>
                     <span class="value sync-badges">
                       <span v-if="imgHostStatus.uploadCount > 0" class="badge upload-badge">
-                        <i class="fas fa-arrow-up"></i> {% raw %}{{ imgHostStatus.uploadCount }}{% endraw %} 待上传
+                        <i class="fas fa-arrow-up"></i> {{ imgHostStatus.uploadCount }} 待上传
                       </span>
                       <span v-if="imgHostStatus.downloadCount > 0" class="badge download-badge">
-                        <i class="fas fa-arrow-down"></i> {% raw %}{{ imgHostStatus.downloadCount }}{% endraw %} 待下载
+                        <i class="fas fa-arrow-down"></i> {{ imgHostStatus.downloadCount }} 待下载
                       </span>
                     </span>
                   </div>
@@ -144,7 +234,7 @@
                 <select id="persona-filter" v-model="personaFilter" @change="fetchEmojis">
                   <option value="">全部可用</option>
                   <option v-for="p in systemPersonas" :key="p.id" :value="p.id">
-                    {% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})
+                    {{ p.name }} ({{ p.id }})
                   </option>
                 </select>
               </div>
@@ -157,13 +247,17 @@
               </div>
             </div>
             <div class="selection-toolbar-actions">
-              <!-- 添加分类按钮 (常驻) -->
+              <button class="btn-secondary toggle-sync-btn" :class="{ active: syncDrawerVisible }" @click="syncDrawerVisible = !syncDrawerVisible">
+                <i class="fas fa-arrows-spin icon"></i>同步与设置
+              </button>
+
+              <!-- 添加标签按钮 (常驻) -->
               <button id="add-category-btn-top" class="btn-secondary" @click="addCategoryForm.visible = true">
-                <i class="fas fa-plus icon"></i>添加分类
+                <i class="fas fa-plus icon"></i>添加标签
               </button>
 
               <span id="selection-summary" :class="{ 'active-selection': selectionEnabled }">
-                {% raw %}{{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个' : '批量选择' }}{% endraw %}
+                {{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个' : '批量选择' }}
               </span>
               <button v-if="selectionEnabled" id="toggle-selection-mode-btn" class="btn-secondary" @click="toggleSelectionMode">
                 <i class="fas fa-xmark icon"></i>取消选择
@@ -181,45 +275,18 @@
           </div>
         </div>
 
-        <!-- 顶部 Tab 分类过滤器 -->
-        <div class="emoji-tabs-wrapper" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
-          <div class="tabs-search-row" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <div class="tabs-search-container" style="width: 260px; position: relative; display: flex; align-items: center;">
-              <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-              <input type="text" v-model="tabSearchQuery" placeholder="搜索分类标签..." class="form-control" style="padding-left: 30px; height: 34px; font-size: 12px; border-radius: 17px;" />
-              <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
-            </div>
-            <!-- Reset Button -->
-            <button class="emoji-tab-btn reset-tabs-btn" 
-                    v-if="!activeCategories.includes('all') && activeCategories.length > 0"
-                    @click="selectCategory('all')"
-                    style="margin: 0; padding: 8px 14px; border-radius: 17px; height: 34px; display: inline-flex; align-items: center; box-shadow: var(--shadow-sm); cursor: pointer;">
-              <i class="fas fa-rotate-left" style="margin-right: 4px;"></i>重置筛选
-            </button>
-          </div>
-          <div id="emoji-tabs" class="emoji-tabs-container">
-            <button v-for="category in filteredCategories" 
-                    :key="category" 
-                    class="emoji-tab-btn" 
-                    :class="{ active: activeCategories.includes(category) }" 
-                    @click="selectCategory(category)"
-                    @dragover.prevent
-                    @drop="onDropEmoji($event, category)">
-              <span class="tab-name">{% raw %}{{ category }}{% endraw %}</span>
-              <span class="tab-badge">{% raw %}{{ emojiData[category] ? emojiData[category].length : 0 }}{% endraw %}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 当前分类表情网格 -->
-        <div id="emoji-categories">
+        <!-- 左右分布工作区 -->
+        <div class="workspace-layout">
+          <!-- 左侧：主要内容 (分类表情网格) -->
+          <div class="main-workspace">
+            <div id="emoji-categories">
           <div v-if="activeCategory" class="category active" :id="'category-' + activeCategory">
             <div class="category-title">
               <div class="category-header">
                 <div class="category-title-main">
-                  <div class="category-name">{% raw %}{{ activeCategoriesDisplayName }}{% endraw %}</div>
+                  <div class="category-name">{{ activeCategoriesDisplayName }}</div>
                   <span class="category-selection-summary">
-                    {% raw %}{{ selectionEnabled ? '已选 ' + getVisibleSelectedCount(activeCategoryEmojisList, activeCategory) + ' / ' + activeCategoryEmojisList.length : '勾选表情包即可进行批量操作' }}{% endraw %}
+                    {{ selectionEnabled ? '已选 ' + getVisibleSelectedCount(activeCategoryEmojisList, activeCategory) + ' / ' + activeCategoryEmojisList.length : '勾选表情包即可进行批量操作' }}
                   </span>
                 </div>
                 <div class="category-actions" v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'">
@@ -228,7 +295,7 @@
                   <button class="btn-secondary" 
                           :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
                           @click="toggleCategorySelection(activeCategory, null)">
-                    {% raw %}{{ isAllSelectedInCategory(activeCategory, null) ? '取消选择' : '全选' }}{% endraw %}
+                    {{ isAllSelectedInCategory(activeCategory, null) ? '取消选择' : '全选' }}
                   </button>
                   <button class="btn-danger-outline icon-only-btn" :title="'删除分类 ' + activeCategory" @click="deleteCategory(activeCategory)">
                     <i class="fas fa-trash"></i>
@@ -238,12 +305,12 @@
                   <button class="btn-secondary" 
                           :disabled="activeCategoryEmojisList.length === 0"
                           @click="toggleCategorySelection(activeCategory, activeCategoryEmojisList)">
-                    {% raw %}{{ isAllSelectedInCategory(activeCategory, activeCategoryEmojisList) ? '取消选择' : '全选' }}{% endraw %}
+                    {{ isAllSelectedInCategory(activeCategory, activeCategoryEmojisList) ? '取消选择' : '全选' }}
                   </button>
                 </div>
               </div>
               <p class="description" v-if="activeCategories.includes('all')">展示当前过滤人格下的所有表情包</p>
-              <p class="description" v-else-if="activeCategories.length > 1">展示同时包含 「{% raw %}{{ activeCategoriesDisplayName }}{% endraw %}」 标签的表情包交集</p>
+              <p class="description" v-else-if="activeCategories.length > 1">展示同时包含 「{{ activeCategoriesDisplayName }}」 标签的表情包交集</p>
             </div>
 
             <!-- 表情包 Grid 网格 -->
@@ -258,11 +325,11 @@
                 <i :class="uploadStateByCategory.has(activeCategory) ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-arrow-up'"></i>
               </div>
               <div class="emoji-upload-title">
-                {% raw %}{{ uploadStateByCategory.has(activeCategory) ? '正在上传...' : '上传表情包到当前分类' }}{% endraw %}
+                {{ uploadStateByCategory.has(activeCategory) ? '正在上传...' : '上传表情包到当前分类' }}
               </div>
               <div class="emoji-upload-hint">
                 <span v-if="uploadStateByCategory.has(activeCategory)">
-                  {% raw %}{{ uploadStateByCategory.get(activeCategory).text }}{% endraw %}
+                  {{ uploadStateByCategory.get(activeCategory).text }}
                 </span>
                 <span v-else>点击或拖拽图片到此处，支持批量上传</span>
               </div>
@@ -275,16 +342,16 @@
             <!-- 空状态展示 -->
             <div v-if="activeCategoryTimeGroups.length === 0" style="padding: 60px; text-align: center; color: var(--text-secondary);">
               <i class="far fa-face-smile" style="font-size: 32px; margin-bottom: 12px; color: var(--border-color);"></i>
-              <p>没有符合当前组合标签的表情包</p>
+              <p>没有符合当前组合标签 of 表情包</p>
             </div>
 
             <!-- 表情包分级网格 -->
             <div v-else class="emoji-time-groups">
               <div v-for="group in activeCategoryTimeGroups" :key="group.title" class="time-group-section" style="margin-bottom: 24px;">
                 <h3 class="time-group-header" style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                  <i class="far fa-clock"></i> {% raw %}{{ group.title }}{% endraw %}
+                  <i class="far fa-clock"></i> {{ group.title }}
                   <span class="group-count" style="font-size: 10px; padding: 2px 6px; background: rgba(0,0,0,0.05); border-radius: 10px; color: var(--text-secondary);">
-                    {% raw %}{{ group.list.length }}{% endraw %}
+                    {{ group.list.length }}
                   </span>
                 </h3>
                 
@@ -293,7 +360,7 @@
                     <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
                       <div class="emoji-item" 
                            :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
-                           :style="{ backgroundImage: 'url(/memes/file/' + encodeURIComponent(emoji) + ')' }"
+                           :style="{ backgroundImage: 'url(' + getImageUrl(emoji) + ')' }"
                            :draggable="activeCategories.length === 1 && activeCategories[0] !== 'all'" 
                            @dragstart="onDragStart($event, emoji, activeCategory)"
                            @click="onEmojiClick(activeCategory, emoji)"
@@ -309,7 +376,7 @@
                       <!-- 表情包卡片底部多标签 -->
                       <div class="emoji-tags">
                         <span v-for="t in getEmojiTags(emoji)" :key="t" class="tag-pill">
-                          {% raw %}{{ t }}{% endraw %}
+                          {{ t }}
                         </span>
                       </div>
                     </div>
@@ -319,18 +386,53 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- 右侧：固定垂直标签列表 -->
+      <aside class="tags-sidebar">
+            <div class="tags-sidebar-header">
+              <i class="fas fa-tags"></i>
+              <h3>标签分类</h3>
+            </div>
+            
+            <div class="tags-search-wrapper">
+              <i class="fas fa-search search-icon"></i>
+              <input type="text" v-model="tabSearchQuery" placeholder="搜索标签..." class="form-control sidebar-search" />
+              <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" class="clear-btn">&times;</button>
+            </div>
+
+            <button class="reset-tabs-btn-vertical" 
+                    v-if="!activeCategories.includes('all') && activeCategories.length > 0"
+                    @click="selectCategory('all')">
+              <i class="fas fa-rotate-left"></i> 重置筛选
+            </button>
+
+            <div class="emoji-tabs-vertical">
+              <button v-for="category in filteredCategories" 
+                      :key="category" 
+                      class="emoji-tab-btn-vertical" 
+                      :class="{ active: activeCategories.includes(category) }" 
+                      @click="selectCategory(category)"
+                      @dragover.prevent
+                      @drop="onDropEmoji($event, category)">
+                <span class="tab-name">{{ category }}</span>
+                <span class="tab-badge-vertical">{{ emojiData[category] ? emojiData[category].length : 0 }}</span>
+              </button>
+            </div>
+          </aside>
+        </div>
 
       </main>
 
       <!-- 确认操作模态框 -->
       <div v-if="confirmDialog.visible" class="confirm-modal" role="dialog" aria-modal="true">
         <div class="confirm-modal-card">
-          <h2>{% raw %}{{ confirmDialog.title }}{% endraw %}</h2>
-          <p>{% raw %}{{ confirmDialog.description }}{% endraw %}</p>
+          <h2>{{ confirmDialog.title }}</h2>
+          <p>{{ confirmDialog.description }}</p>
           <div class="confirm-modal-actions">
             <button class="btn-secondary" @click="handleConfirm(false)">取消</button>
             <button :class="confirmDialog.confirmClass === 'danger' ? 'btn-danger' : 'btn-primary'" @click="handleConfirm(true)">
-              {% raw %}{{ confirmDialog.confirmLabel }}{% endraw %}
+              {{ confirmDialog.confirmLabel }}
             </button>
           </div>
         </div>
@@ -339,8 +441,8 @@
       <!-- 敏感操作确认模态框 -->
       <div v-if="dangerConfirmDialog.visible" class="danger-modal" role="dialog" aria-modal="true">
         <div class="danger-modal-card">
-          <h2>{% raw %}{{ dangerConfirmDialog.title }}{% endraw %}</h2>
-          <p>{% raw %}{{ dangerConfirmDialog.description }}{% endraw %}</p>
+          <h2>{{ dangerConfirmDialog.title }}</h2>
+          <p>{{ dangerConfirmDialog.description }}</p>
 
           <div v-if="dangerConfirmDialog.stage === 'ack'" class="danger-modal-check">
             <label>
@@ -349,7 +451,7 @@
             </label>
           </div>
           <div v-else-if="dangerConfirmDialog.stage === 'countdown'" class="danger-modal-stage-text">
-            请在 {% raw %}{{ dangerConfirmDialog.countdown }}{% endraw %} 秒后确认操作
+            请在 {{ dangerConfirmDialog.countdown }} 秒后确认操作
           </div>
           <div v-else-if="dangerConfirmDialog.stage === 'input'" class="danger-modal-check">
             <p>请输入 <strong>CONFIRM</strong> 以确认此项敏感操作：</p>
@@ -359,7 +461,7 @@
           <div class="danger-modal-actions">
             <button class="btn-secondary" @click="cancelDangerConfirm">取消</button>
             <button class="btn-danger" :disabled="dangerConfirmDialog.stage !== 'input'" @click="handleDangerConfirm">
-              {% raw %}{{ dangerConfirmDialog.actionLabel }}{% endraw %}
+              {{ dangerConfirmDialog.actionLabel }}
             </button>
           </div>
         </div>
@@ -370,7 +472,7 @@
         <div class="move-target-modal-card">
           <p class="move-target-modal-eyebrow">批量设置</p>
           <h2>允许的人格限制</h2>
-          <p>修改已选中的 {% raw %}{{ selectedEmojis.size }}{% endraw %} 个表情的人格可用性限制（留空或勾选全部表示全局可用）。</p>
+          <p>修改已选中的 {{ selectedEmojis.size }} 个表情的人格可用性限制（留空或勾选全部表示全局可用）。</p>
           
           <div class="drawer-personas-list" style="margin: 20px 0; text-align: left; max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
             <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
@@ -379,7 +481,7 @@
             </label>
             <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
               <input type="checkbox" :value="p.id" :checked="batchPersonaModal.personas.includes(p.id) && !batchPersonaModal.personas.includes('*')" @change="togglePersonaInBatch(p.id)" style="width: 14px; height: 14px;" />
-              <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
+              <span>{{ p.name }} ({{ p.id }})</span>
             </label>
           </div>
           
@@ -397,7 +499,7 @@
         <div class="category-edit-modal-card">
           <p class="category-edit-modal-eyebrow">标签管理</p>
           <h2>重命名标签</h2>
-          <p>重命名标签 「{% raw %}{{ renameCategoryModal.originalCategory }}{% endraw %}」 及其关联 of 表情包。</p>
+          <p>重命名标签 「{{ renameCategoryModal.originalCategory }}」 及其关联 of 表情包。</p>
           <div class="category-edit-form-panel">
             <label>新标签名称</label>
             <input type="text" v-model="renameCategoryModal.category" class="form-control" placeholder="请输入新标签名称" />
@@ -415,15 +517,15 @@
       <div v-if="addCategoryForm.visible" class="category-edit-modal" role="dialog" aria-modal="true">
         <div class="category-edit-modal-card">
           <p class="category-edit-modal-eyebrow">标签管理</p>
-          <h2>添加新分类</h2>
+          <h2>添加新标签</h2>
           <div class="category-edit-form-panel">
-            <label>分类名称</label>
-            <input type="text" v-model="addCategoryForm.name" placeholder="分类名称" class="form-control" />
+            <label>标签名称</label>
+            <input type="text" v-model="addCategoryForm.name" placeholder="标签名称" class="form-control" />
           </div>
           <div class="category-edit-modal-actions">
             <button class="btn-secondary" @click="addCategoryForm.visible = false">取消</button>
             <button class="btn-primary" @click="saveNewCategory">
-              保存分类
+              保存标签
             </button>
           </div>
         </div>
@@ -438,13 +540,13 @@
           </div>
 
           <div class="drawer-header">
-            <span class="drawer-title">编辑属性: {% raw %}{{ activeDetailEmoji }}{% endraw %}</span>
+            <span class="drawer-title">编辑属性: {{ activeDetailEmoji }}</span>
             <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
           </div>
           <div class="drawer-body-layout">
             <!-- 左侧大图预览 -->
             <div class="drawer-preview-column">
-              <img :src="'/memes/file/' + encodeURIComponent(activeDetailEmoji)" :alt="activeDetailEmoji" />
+              <img :src = "getImageUrl(activeDetailEmoji)" :alt="activeDetailEmoji" />
             </div>
 
             <!-- 右侧编辑区域 -->
@@ -463,7 +565,7 @@
                         class="picker-tag-pill" 
                         :class="{ active: selectedEmotions.includes(cat) }" 
                         @click="toggleTagInDrawer(cat)">
-                    {% raw %}{{ cat }}{% endraw %}
+                    {{ cat }}
                   </span>
                 </div>
               </div>
@@ -478,7 +580,7 @@
                   </label>
                   <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
                     <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" style="width: 14px; height: 14px;" />
-                    <span>{% raw %}{{ p.name }}{% endraw %} ({% raw %}{{ p.id }}{% endraw %})</span>
+                    <span>{{ p.name }} ({{ p.id }})</span>
                   </label>
                 </div>
               </div>
@@ -515,11 +617,11 @@
       <div v-if="importModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeImportModal">
         <div class="emoji-detail-modal-card" style="max-width: 800px; width: 90%;">
           <div class="drawer-header">
-            <span class="drawer-title">导入已存表情到分类「{% raw %}{{ activeCategory }}{% endraw %}」</span>
+            <span class="drawer-title">导入已存表情到标签「{{ activeCategory }}」</span>
             <button class="drawer-close-btn" @click="closeImportModal">&times;</button>
           </div>
           <div class="drawer-content" style="max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
-            <p style="margin-bottom: 15px; color: var(--text-secondary);">请选择要追加到当前分类的表情包（已选中 {% raw %}{{ importModal.selectedEmojis.size }}{% endraw %} 个）：</p>
+            <p style="margin-bottom: 15px; color: var(--text-secondary);">请选择要追加到当前分类的表情包（已选中 {{ importModal.selectedEmojis.size }} 个）：</p>
             <div v-if="importableEmojisList.length === 0" style="padding: 40px; text-align: center; color: var(--text-secondary);">
               没有可导入的其他表情包。
             </div>
@@ -531,7 +633,7 @@
                    style="margin: 0;">
                 <div class="emoji-item" 
                      :class="{ selected: importModal.selectedEmojis.has(emoji), 'selection-mode': true }"
-                     :style="{ backgroundImage: 'url(/memes/file/' + encodeURIComponent(emoji) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
+                     :style="{ backgroundImage: 'url(' + getImageUrl(emoji) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
                      @click="toggleImportEmoji(emoji)">
                   <button type="button" class="selection-indicator" aria-label="选择表情包"></button>
                 </div>
@@ -552,7 +654,7 @@
            @click.stop>
         <div class="batch-context-menu-header">
           <p>
-            批量管理 ({% raw %}{{ contextMenu.targetItems.length }}{% endraw %} 个文件)
+            批量管理 ({{ contextMenu.targetItems.length }} 个文件)
           </p>
         </div>
         <div class="batch-context-menu-actions">
@@ -569,7 +671,7 @@
             <i class="fas fa-file-image icon"></i>转换为 GIF
           </button>
           <button :disabled="contextMenu.pasteableItems.length === 0" @click="contextMenuPaste">
-            <i class="fas fa-paste icon"></i>粘贴文件 ({% raw %}{{ contextMenu.pasteableItems.length }}{% endraw %})
+            <i class="fas fa-paste icon"></i>粘贴文件 ({{ contextMenu.pasteableItems.length }})
           </button>
         </div>
       </div>
@@ -578,13 +680,14 @@
       <div class="toast-container">
         <div v-for="toast in toasts" :key="toast.id" class="toast show" :class="toast.type">
           <div class="toast-content">
-            <div class="toast-title">{% raw %}{{ toast.title || '系统提示' }}{% endraw %}</div>
-            <div class="toast-body">{% raw %}{{ toast.message }}{% endraw %}</div>
+            <div class="toast-title">{{ toast.title || '系统提示' }}</div>
+            <div class="toast-body">{{ toast.message }}</div>
           </div>
           <button type="button" class="toast-close" @click="removeToast(toast.id)">&times;</button>
         </div>
       </div>
     </div>
-    <script type="module" src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="/api/plugin/page/bridge-sdk.js"></script>
+    <script src="js/bundle.js"></script>
   </body>
 </html>

@@ -142,7 +142,7 @@ export function useEmojiActions({
 
   const saveEmojiAttributes = async (closeAfterSave = true) => {
     if (selectedEmotions.value.length === 0) {
-      showToast("请至少选择一个分类标签。", "warning", "保存提示");
+      showToast("请至少选择一个标签。", "warning", "保存提示");
       return;
     }
 
@@ -175,8 +175,8 @@ export function useEmojiActions({
     const isAll = category === "all";
     const title = isAll ? "物理删除表情包" : "删除标签 / 文件";
     const promptText = isAll
-      ? "确认物理删除该表情包吗？此操作将永久从磁盘和所有分类下删除该表情文件！"
-      : `确认从分类「${category}」下移除表情包？若该表情包不属于其他任何分类，它将被物理删除。`;
+      ? "确认物理删除该表情包吗？此操作将永久从磁盘和所有标签下删除该表情文件！"
+      : `确认从标签「${category}」下移除表情包？若该表情包不属于其他任何标签，它将被物理删除。`;
 
     const confirmed = await confirm(
       title,
@@ -208,7 +208,7 @@ export function useEmojiActions({
 
     const confirmed = await confirm(
       "批量删除表情包",
-      `确认删除已选中的 ${items.length} 个表情包？这会移除其分类标签，若该表情包不属于其他任何分类，它将被物理删除。`,
+      `确认删除已选中的 ${items.length} 个表情包？这会移除其标签，若该表情包不属于其他任何标签，它将被物理删除。`,
       "确认批量删除",
       "danger"
     );
@@ -358,7 +358,7 @@ export function useEmojiActions({
 
     const confirmed = await showDangerConfirm(
       "清空所有表情包",
-      `确认彻底清空库中的所有 ${totalCount} 个表情包？此操作将删除所有磁盘文件，但保留分类目录配置。`
+      `确认彻底清空库中的所有 ${totalCount} 个表情包？此操作将删除所有磁盘文件，但保留标签目录配置。`
     );
     if (!confirmed) return;
 
@@ -390,7 +390,7 @@ export function useEmojiActions({
       });
       if (!res.ok) throw new Error("批量导入失败");
 
-      showToast(`成功导入 ${filenames.length} 个表情到分类 ${category}`, "success", "导入成功");
+      showToast(`成功导入 ${filenames.length} 个表情到标签 ${category}`, "success", "导入成功");
       closeImportModal();
       await fetchEmojis();
     } catch (e) {
@@ -430,7 +430,7 @@ export function useEmojiActions({
       if (!res.ok) throw new Error("移动失败");
       const result = await res.json();
 
-      showToast(`成功将 ${result.moved_count} 个表情包移动到分类 ${targetCategory}`, "success", "移动成功");
+      showToast(`成功将 ${result.moved_count} 个表情包移动到标签 ${targetCategory}`, "success", "移动成功");
       selectedEmojis.value.clear();
       await fetchEmojis();
     } catch (e) {
@@ -460,7 +460,7 @@ export function useEmojiActions({
 
   const uploadFiles = async (files, category) => {
     if (uploadStateByCategory.value.has(category)) {
-      showToast(`当前分类 ${category} 正在上传中，请稍候。`, "warning");
+      showToast(`当前标签 ${category} 正在上传中，请稍候。`, "warning");
       return;
     }
 
@@ -584,7 +584,7 @@ export function useEmojiActions({
   const contextMenuCopy = () => {
     contextMenu.visible = false;
     clipboardItems.value = [...contextMenu.targetItems];
-    showToast(`已成功复制 ${clipboardItems.value.length} 个表情到剪贴板，可在其他分类右键粘贴。`, "success", "复制成功");
+    showToast(`已成功复制 ${clipboardItems.value.length} 个表情到剪贴板，可在其他标签右键粘贴。`, "success", "复制成功");
   };
 
   const contextMenuConvertToGif = async () => {
@@ -659,7 +659,7 @@ export function useEmojiActions({
       }
     }
 
-    showToast(`成功向分类 ${targetCategory} 复制粘贴了 ${copiedCount} 个表情包`, "success", "粘贴成功");
+    showToast(`成功向标签 ${targetCategory} 复制粘贴了 ${copiedCount} 个表情包`, "success", "粘贴成功");
     clipboardItems.value = [];
     await fetchEmojis();
   };

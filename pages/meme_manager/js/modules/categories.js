@@ -56,7 +56,7 @@ export function useCategories(
     const name = addCategoryForm.name.trim();
 
     if (!name) {
-      showToast("请输入分类名称再保存", "warning");
+      showToast("请输入标签名称再保存", "warning");
       return;
     }
 
@@ -66,9 +66,9 @@ export function useCategories(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category: name }),
       });
-      if (!res.ok) throw new Error("添加分类失败");
+      if (!res.ok) throw new Error("添加标签失败");
 
-      showToast(`新分类「${name}」添加成功。`, "success", "保存成功");
+      showToast(`新标签「${name}」添加成功。`, "success", "保存成功");
       addCategoryForm.name = "";
       addCategoryForm.visible = false;
       await fetchEmojis();
@@ -81,13 +81,13 @@ export function useCategories(
   const clearCategory = async (category) => {
     const count = emojiData.value[category]?.length || 0;
     if (count === 0) {
-      showToast("该类别当前为空，无需清空", "info");
+      showToast("该标签当前为空，无需清空", "info");
       return;
     }
 
     const confirmed = await showDangerConfirm(
-      `清空分类「${category}」`,
-      `确定要删除分类「${category}」下的全部 ${count} 个表情文件吗？保留分类名称和描述。`
+      `清空标签「${category}」`,
+      `确定要删除标签「${category}」下的全部 ${count} 个表情文件吗？保留标签名称和描述。`
     );
     if (!confirmed) return;
 
@@ -100,7 +100,7 @@ export function useCategories(
       if (!res.ok) throw new Error("清空失败");
       const data = await res.json();
 
-      showToast(`已清空分类 ${category}，删除了 ${data.deleted_count} 个表情包。`, "success", "清空成功");
+      showToast(`已清空标签 ${category}，删除了 ${data.deleted_count} 个表情包。`, "success", "清空成功");
       await fetchEmojis();
     } catch (e) {
       showToast(e.message, "error", "清空失败");
@@ -109,8 +109,8 @@ export function useCategories(
 
   const deleteCategory = async (category) => {
     const confirmed = await confirm(
-      `删除分类「${category}」`,
-      `确认删除分类「${category}」吗？此操作将清除该分类的所有表情包分类标签，若表情包不属于其他任何分类，对应的磁盘文件将被物理删除。`,
+      `删除标签「${category}」`,
+      `确认删除标签「${category}」吗？此操作将清除该标签的所有表情包标签，若表情包不属于其他任何标签，对应的磁盘文件将被物理删除。`,
       "确认删除",
       "danger"
     );
@@ -124,7 +124,7 @@ export function useCategories(
       });
       if (!res.ok) throw new Error("删除失败");
 
-      showToast(`已成功删除分类 ${category}`, "success", "删除成功");
+      showToast(`已成功删除标签 ${category}`, "success", "删除成功");
       await fetchEmojis();
       await checkSyncStatus(false);
     } catch (e) {

@@ -12,7 +12,6 @@ from astrbot.api.star import Context, Star, register
 from .backend.category_manager import CategoryManager
 from .backend.commands_handler import CommandsHandler
 from .backend.event_handlers import EventHandlers
-from .backend.webui_manager import WebuiManager
 from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
@@ -96,6 +95,89 @@ class MemeSender(Star):
         # 所有的配置属性现在通过下方的 @property 动态获取，以便在 WebUI 修改设置后实时生效
         pass
 
+        # 注册 Web APIs
+        from .backend.api import (
+            add_emoji,
+            batch_convert_emoji_gif,
+            batch_copy_emoji,
+            batch_delete_emoji,
+            batch_edit_personas,
+            batch_import_emojis,
+            batch_move_emoji,
+            check_sync_process,
+            clear_all_emoji,
+            clear_category,
+            delete_category,
+            delete_emoji,
+            edit_emoji,
+            get_all_emojis,
+            get_emoji_file_base64,
+            get_emoji_info,
+            get_emojis_by_category,
+            get_emotions,
+            get_img_host_sync_status,
+            get_persona_tags,
+            get_personas,
+            get_sync_status,
+            move_emoji,
+            rename_category,
+            restore_category,
+            save_persona_tag,
+            sync_config,
+            sync_from_remote,
+            sync_to_remote,
+        )
+
+        PLUGIN_NAME = "astrbot_plugin_meme_manager"
+
+        apis = [
+            ("emoji", get_all_emojis, ["GET"]),
+            ("emoji/<category>", get_emojis_by_category, ["GET"]),
+            ("emoji/add", add_emoji, ["POST"]),
+            ("emoji/delete", delete_emoji, ["POST"]),
+            ("emoji/batch_delete", batch_delete_emoji, ["POST"]),
+            ("emoji/batch_convert_gif", batch_convert_emoji_gif, ["POST"]),
+            ("emoji/move", move_emoji, ["POST"]),
+            ("emoji/batch_move", batch_move_emoji, ["POST"]),
+            ("emoji/batch_copy", batch_copy_emoji, ["POST"]),
+            ("category/clear", clear_category, ["POST"]),
+            ("emoji/clear_all", clear_all_emoji, ["POST"]),
+            ("emotions", get_emotions, ["GET"]),
+            ("category/delete", delete_category, ["POST"]),
+            ("sync/status", get_sync_status, ["GET"]),
+            ("sync/config", sync_config, ["POST"]),
+            ("category/restore", restore_category, ["POST"]),
+            ("category/rename", rename_category, ["POST"]),
+            ("img_host/sync/status", get_img_host_sync_status, ["GET"]),
+            ("img_host/sync/upload", sync_to_remote, ["POST"]),
+            ("img_host/sync/download", sync_from_remote, ["POST"]),
+            ("img_host/sync/check_process", check_sync_process, ["GET"]),
+            ("personas", get_personas, ["GET"]),
+            ("emoji/edit", edit_emoji, ["POST"]),
+            ("emoji/info/<filename>", get_emoji_info, ["GET"]),
+            ("emoji/batch_edit_personas", batch_edit_personas, ["POST"]),
+            ("persona_tags", get_persona_tags, ["GET"]),
+            ("persona_tags", save_persona_tag, ["POST"]),
+            ("emoji/batch_import", batch_import_emojis, ["POST"]),
+            ("emoji/file_base64", get_emoji_file_base64, ["GET"]),
+        ]
+
+        for route, handler, methods in apis:
+            self.context.register_web_api(
+                f"/{PLUGIN_NAME}/{route}",
+                self.wrap_api_handler(handler),
+                methods,
+                f"Meme Manager API: {route}",
+            )
+
+        # 注册表情文件服务接口
+        self.context.register_web_api(
+            f"/{PLUGIN_NAME}/memes/<category>/<filename>",
+            self.serve_emoji,
+            ["GET"],
+            "Serve emoji files",
+        )
+
         if hasattr(self, "_r2_bucket_name"):
             logger.info(f"Cloudflare R2 图床已初始化: {self._r2_bucket_name}")
             delattr(self, "_r2_bucket_name")
@@ -108,6 +190,69 @@ class MemeSender(Star):
         from .backend.emotion_handler import sync_tag_embeddings
 
         asyncio.create_task(sync_tag_embeddings(self))
+
+    def wrap_api_handler(self, handler):
+        async def wrapper(*args, **kwargs):
+            from quart import current_app
+
+            # Register the dynamic unauthenticated serve_emoji route on app startup/first request
+            app = current_app._get_current_object()
+            route_name = "meme_manager_serve_emoji"
+            if route_name not in app.view_functions:
+                app.add_url_rule(
+                    "/api/file/meme_manager/memes/<category>/<filename>",
+                    endpoint=route_name,
+                    view_func=self.serve_emoji,
+                    methods=["GET"],
+                )
+
+            current_app.config["PLUGIN_CONFIG"] = {
+                "img_sync": self.img_sync,
+                "category_manager": self.category_manager,
+                "plugin_config": self.config,
+                "personas": [
+                    {
+                        "id": p.get("id") or p.get("name") or "",
+                        "name": p.get("name") or "",
+                        "prompt": p.get("prompt") or "",
+                    }
+                    for p in self.context.provider_manager.personas
+                ]
+                if hasattr(self.context, "provider_manager")
+                else [],
+                "context": self.context,
+            }
+            return await handler(*args, **kwargs)
+
+        return wrapper
+
+    async def serve_emoji(self, category, filename):
+        import os
+
+        from quart import send_from_directory
+
+        from .config import MEMES_DIR
+
+        # Check absolute location directly under MEMES_DIR
+        target_path = os.path.join(MEMES_DIR, filename)
+        if os.path.exists(target_path):
+            return await send_from_directory(MEMES_DIR, filename)
+
+        # Check category path
+        if category != "file" and category != "all":
+            category_path = os.path.join(MEMES_DIR, category)
+            if os.path.exists(os.path.join(category_path, filename)):
+                return await send_from_directory(category_path, filename)
+
+        # Search all subdirectories inside MEMES_DIR
+        for item in os.listdir(MEMES_DIR):
+            item_path = os.path.join(MEMES_DIR, item)
+            if os.path.isdir(item_path):
+                file_path = os.path.join(item_path, filename)
+                if os.path.exists(file_path):
+                    return await send_from_directory(item_path, filename)
+
+        return "File not found: " + filename, 404
 
     @property
     def category_mapping(self) -> dict[str, str]:
@@ -173,68 +318,32 @@ class MemeSender(Star):
     def meme_manager(self):
         pass
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("开启管理后台")
-    async def start_webui(self, event: AstrMessageEvent):
-        """启动表情包管理服务器"""
-        async for res in WebuiManager.start_webui(self, event):
-            yield res
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("关闭管理后台")
-    async def stop_server(self, event: AstrMessageEvent):
-        """关闭表情包管理服务器的指令"""
-        async for res in WebuiManager.stop_server(self, event):
-            yield res
-
     @meme_manager.command("查看图库")
     async def list_emotions(self, event: AstrMessageEvent):
-        """查看所有可用表情包类别"""
+        """查看所有可用表情包标签"""
         await self.check_and_reload_if_changed()
         async for res in CommandsHandler.list_emotions(self, event):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("添加表情")
-    async def upload_meme(self, event: AstrMessageEvent, category: str | None = None):
-        """上传表情包到指定类别"""
-        async for res in CommandsHandler.upload_meme(self, event, category):
-            yield res
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("恢复默认表情包")
-    async def restore_default_memes_command(
-        self, event: AstrMessageEvent, category: str | None = None
-    ):
-        """恢复内置默认表情包，可指定类别或恢复全部。"""
-        async for res in CommandsHandler.restore_default_memes_command(
-            self, event, category
-        ):
-            yield res
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("清空指定类型")
-    async def clear_category_command(
-        self, event: AstrMessageEvent, category: str | None = None
-    ):
-        """清空指定类型下的所有表情包，但保留类型本身。"""
-        async for res in CommandsHandler.clear_category_command(self, event, category):
+    async def upload_meme(self, event: AstrMessageEvent, tags: str | None = None):
+        """上传表情包并标记指定标签"""
+        async for res in CommandsHandler.upload_meme(self, event, tags):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("清空全部")
     async def clear_all_emojis_command(self, event: AstrMessageEvent):
-        """清空所有类型下的表情包，但保留类型和描述配置。"""
+        """清空所有表情包与所有标签配置，以及标签向量缓存。"""
         async for res in CommandsHandler.clear_all_emojis_command(self, event):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("删除类型本身")
-    async def delete_category_command(
-        self, event: AstrMessageEvent, category: str | None = None
-    ):
-        """删除指定类型本身，同时移除其描述配置和本地文件夹。"""
-        async for res in CommandsHandler.delete_category_command(self, event, category):
+    @meme_manager.command("删除标签")
+    async def delete_tag_command(self, event: AstrMessageEvent, tag: str | None = None):
+        """删除指定标签，移除标签配置及其下表情包的此标签归属（无标签表情将被彻底删除）"""
+        async for res in CommandsHandler.delete_tag_command(self, event, tag):
             yield res
 
     @meme_manager.command("同步状态")
@@ -382,8 +491,7 @@ class MemeSender(Star):
         if self.img_sync:
             self.img_sync.stop_sync()
 
-        await WebuiManager._shutdown(self)
-        await WebuiManager._cleanup_resources(self)
+        pass
 
     @property
     def fault_tolerant_symbols(self) -> list[str]:

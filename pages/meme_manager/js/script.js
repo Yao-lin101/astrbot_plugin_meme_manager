@@ -62,6 +62,11 @@ createApp({
     // Local UI states
     const syncDrawerVisible = ref(false);
 
+    const getImageUrl = (emoji) => {
+      if (!emoji) return '';
+      return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
+    };
+
     const activeCategory = computed(() => {
       if (api.activeCategories.value.includes('all')) return 'all';
       if (api.activeCategories.value.length === 0) return 'all';
@@ -143,6 +148,9 @@ createApp({
 
     // Lifecycle hooks
     onMounted(async () => {
+      if (window.AstrBotPluginPage) {
+        await window.AstrBotPluginPage.ready();
+      }
       await api.fetchPersonaTags();
       await api.fetchEmojis();
       await api.fetchPersonas();
@@ -286,6 +294,7 @@ createApp({
       contextMenuPaste: emojiActions.contextMenuPaste,
       onEmojiClick: emojiActions.onEmojiClick,
       handleCreateTagInDrawer: emojiActions.handleCreateTagInDrawer,
+      getImageUrl,
     };
   },
 }).mount("#app");
