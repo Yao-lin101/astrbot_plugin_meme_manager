@@ -39,7 +39,7 @@ class CommandsHandler:
     def _get_manageable_categories(sender) -> set[str]:
         """Return the union of configured and local categories."""
         return (
-            set(sender.category_manager.get_descriptions())
+            set(sender.category_manager.get_categories())
             | sender.category_manager.get_local_categories()
         )
 
