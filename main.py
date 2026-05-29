@@ -278,6 +278,13 @@ class MemeSender(Star):
 
         for persona in personas:
             name = persona.get("name") or ""
+            persona_id = persona.get("id") or ""
+            blacklist = self.config.get("persona_blacklist", [])
+            if name in blacklist or persona_id in blacklist:
+                if name in self.persona_prompts_backup:
+                    persona["prompt"] = self.persona_prompts_backup[name]
+                continue
+
             original_prompt = self.persona_prompts_backup.get(name, "")
             persona["prompt"] = (
                 original_prompt + "\n\n" + self.meme_prompt + format_instruction
