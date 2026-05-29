@@ -101,9 +101,29 @@ class CommandsHandler:
     @staticmethod
     async def list_emotions(sender, event: AstrMessageEvent):
         """查看所有可用表情包标签"""
-        categories = sorted(sender.category_manager.get_categories())
-        categories_str = "\n".join([f"- {tag}" for tag in categories])
-        yield event.plain_result(f"🖼️ 当前图库标签：\n{categories_str}")
+        try:
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT emotions FROM memes")
+            rows = cursor.fetchall()
+            conn.close()
+
+            local_stats = {}
+            for row in rows:
+                if row["emotions"]:
+                    for emo in row["emotions"].split(","):
+                        emo = emo.strip()
+                        if emo:
+                            local_stats[emo] = local_stats.get(emo, 0) + 1
+
+            categories = sorted(sender.category_manager.get_categories())
+            categories_str = ",".join(
+                f"[{tag}:{local_stats.get(tag, 0)}]" for tag in categories
+            )
+            yield event.plain_result(f"🖼️ 当前图库标签：{categories_str}")
+        except Exception as e:
+            logger.error(f"查看图库失败: {e}")
+            yield event.plain_result(f"❌ 查看图库失败: {e}")
 
     @staticmethod
     async def upload_meme(sender, event: AstrMessageEvent, tags: str = None):
@@ -294,26 +314,21 @@ class CommandsHandler:
             conn.close()
 
             local_stats = {}
-            local_total = 0
             for row in rows:
                 if row["emotions"]:
                     for emo in row["emotions"].split(","):
                         emo = emo.strip()
                         if emo:
                             local_stats[emo] = local_stats.get(emo, 0) + 1
-                            local_total += 1
+            local_total = len(rows)
 
+            tags_str = ",".join(
+                f"[{cat}:{count}]" for cat, count in sorted(local_stats.items())
+            )
             result = [
-                "🔄 表情包同步状态报告",
-                "━━━━━━━━━━━━━━",
-                f"📁 本地总计: {local_total} 个文件",
+                f"🔄 表情包同步状态报告 | 📁 本地总计: {local_total} 个文件",
+                f"📂 标签详情: {tags_str}" if tags_str else "",
             ]
-
-            if local_stats:
-                result.append("")
-                result.append("📂 本地文件分类详情:")
-                for cat, count in sorted(local_stats.items()):
-                    result.append(f"  ➜ {cat}: {count} 个")
 
             result.extend(
                 [
@@ -357,8 +372,6 @@ class CommandsHandler:
     async def show_library_stats(sender, event: AstrMessageEvent):
         """显示图库详细统计信息"""
         try:
-            result = ["📊 表情包图库统计报告", "", "📁 本地图库统计:"]
-
             conn = get_db_conn()
             cursor = conn.cursor()
             cursor.execute("SELECT emotions FROM memes")
@@ -366,22 +379,24 @@ class CommandsHandler:
             conn.close()
 
             local_stats = {}
-            local_total = 0
             for row in rows:
                 if row["emotions"]:
                     for emo in row["emotions"].split(","):
                         emo = emo.strip()
                         if emo:
                             local_stats[emo] = local_stats.get(emo, 0) + 1
-                            local_total += 1
+            local_total = len(rows)
 
-            result.append(f"总表情包数量: {local_total} 个")
-            if local_stats:
-                result.append("分类详情:")
-                for cat, count in sorted(local_stats.items()):
-                    result.append(f" - {cat}: {count} 个")
+            tags_str = ",".join(
+                f"[{cat}:{count}]" for cat, count in sorted(local_stats.items())
+            )
+            result = (
+                f"📊 图库统计 | 总表情包: {local_total} 个 | {tags_str}"
+                if tags_str
+                else f"📊 图库统计 | 总表情包: {local_total} 个"
+            )
 
-            yield event.plain_result("\n".join(result))
+            yield event.plain_result(result)
         except Exception as e:
             logger.error(f"展示统计信息失败: {e}")
             yield event.plain_result(f"展示统计信息失败: {e}")
