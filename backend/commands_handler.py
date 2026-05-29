@@ -12,13 +12,10 @@ from astrbot.core.utils.session_waiter import (
 from ..config import MEMES_DIR
 from ..utils import (
     compress_image,
-    get_default_meme_categories,
-    restore_default_memes,
 )
 from .database import get_db_conn, migrate_filesystem_to_db
 from .models import (
     clear_all_emojis,
-    clear_category_emojis,
     get_emoji_by_category,
 )
 
@@ -98,153 +95,43 @@ class CommandsHandler:
             f"- {category}: {count} 个" for category, count in non_empty_items[:limit]
         ]
         if len(non_empty_items) > limit:
-            lines.append(f"- 其余 {len(non_empty_items) - limit} 个类型已省略")
+            lines.append(f"- 其余 {len(non_empty_items) - limit} 个标签已省略")
         return "\n".join(lines)
 
     @staticmethod
     async def list_emotions(sender, event: AstrMessageEvent):
-        """查看所有可用表情包类别"""
+        """查看所有可用表情包标签"""
         categories = sorted(sender.category_manager.get_categories())
         categories_str = "\n".join([f"- {tag}" for tag in categories])
         yield event.plain_result(f"🖼️ 当前图库标签：\n{categories_str}")
 
     @staticmethod
-    async def upload_meme(sender, event: AstrMessageEvent, category: str = None):
-        """上传表情包到指定类别"""
-        if not category:
+    async def upload_meme(sender, event: AstrMessageEvent, tag: str = None):
+        """上传表情包并标记指定标签"""
+        if not tag:
             yield event.plain_result(
-                "📌 若要添加表情，请按照此格式操作：\n/表情管理 添加表情 [类别名称]\n（输入/查看图库 可获取类别列表）"
+                "📌 若要添加表情，请按照此格式操作：\n/表情管理 添加表情 [标签名称]\n（输入/表情管理 查看图库 可获取标签列表）"
             )
             return
 
-        if category not in sender.category_manager.get_descriptions():
+        if tag not in sender.category_manager.get_categories():
             yield event.plain_result(
-                f"您输入的表情包类别「{category}」是无效的哦。\n可以使用/查看表情包来查看可用的类别。"
+                f"您输入的表情标签「{tag}」是不存在的哦。\n可以使用 /表情管理 查看图库 来查看可用的标签。"
             )
             return
 
         user_key = f"{event.session_id}_{event.get_sender_id()}"
         sender.upload_states[user_key] = {
-            "category": category,
+            "category": tag,
             "expire_time": time.time() + 30,
         }
         yield event.plain_result(
-            f"请在30秒内发送要添加到【{category}】类别的图片（可发送多张图片）。"
-        )
-
-    @staticmethod
-    async def restore_default_memes_command(
-        sender, event: AstrMessageEvent, category: str = None
-    ):
-        """恢复内置默认表情包，可指定类别或恢复全部。"""
-        available_default_categories = get_default_meme_categories()
-        if not available_default_categories:
-            yield event.plain_result("❌ 未找到插件内置默认表情包资源。")
-            return
-
-        normalized_category = category.strip() if category else None
-        if (
-            normalized_category
-            and normalized_category not in available_default_categories
-        ):
-            category_list = "\n".join(
-                f"- {name}" for name in available_default_categories
-            )
-            yield event.plain_result(
-                f"⚠️ 默认表情包中不存在类别「{normalized_category}」。\n"
-                f"当前可恢复的默认类别如下：\n{category_list}"
-            )
-            return
-
-        restore_result = restore_default_memes(normalized_category)
-        if not restore_result["source_exists"]:
-            yield event.plain_result("❌ 未找到插件内置默认表情包资源。")
-            return
-
-        # 触发数据库迁移，把刚复制的子文件夹表情归档到扁平结构与数据库中
-        migrate_filesystem_to_db()
-
-        copied_files = restore_result["copied_files"]
-        duplicate_files = restore_result["duplicate_files"]
-        renamed_files = restore_result["renamed_files"]
-        restored_categories = sorted(
-            set(copied_files) | set(duplicate_files) | set(renamed_files)
-        )
-
-        if restored_categories:
-            for cat in restored_categories:
-                sender.category_manager.add_category(cat)
-
-        copied_count = sum(len(files) for files in copied_files.values())
-        duplicate_count = sum(len(files) for files in duplicate_files.values())
-        renamed_count = sum(len(files) for files in renamed_files.values())
-
-        if copied_count == 0 and duplicate_count > 0:
-            yield event.plain_result(
-                "ℹ️ 默认表情包已存在，本次未新增文件。"
-                if not normalized_category
-                else f"ℹ️ 类别「{normalized_category}」的默认表情包已存在，本次未新增文件。"
-            )
-            return
-
-        if copied_count == 0:
-            yield event.plain_result("ℹ️ 本次没有恢复任何默认表情包文件。")
-            return
-
-        if normalized_category:
-            yield event.plain_result(
-                f"✅ 已恢复类别「{normalized_category}」的默认表情包，共新增 {copied_count} 个文件"
-                f"{f'，其中 {renamed_count} 个因重名自动补序号' if renamed_count > 0 else ''}"
-                f"{f'，跳过 {duplicate_count} 个重复文件' if duplicate_count > 0 else ''}。"
-            )
-            return
-
-        yield event.plain_result(
-            f"✅ 已恢复全部默认表情包，共新增 {copied_count} 个文件，涉及 {len(copied_files)} 个类别"
-            f"{f'，其中 {renamed_count} 个因重名自动补序号' if renamed_count > 0 else ''}"
-            f"{f'，跳过 {duplicate_count} 个重复文件' if duplicate_count > 0 else ''}。"
-        )
-
-    @staticmethod
-    async def clear_category_command(
-        sender, event: AstrMessageEvent, category: str = None
-    ):
-        """清空指定类型下的所有表情包，但保留类型本身。"""
-        if not category:
-            yield event.plain_result(
-                "📌 若要清空指定类型，请按照此格式操作：\n/表情管理 清空指定类型 [类别名称]"
-            )
-            return
-
-        category = category.strip()
-        available_categories = CommandsHandler._get_manageable_categories(sender)
-        if category not in available_categories:
-            yield event.plain_result(
-                f"⚠️ 未找到类型「{category}」。\n可先使用 /表情管理 查看图库 查看当前类型。"
-            )
-            return
-
-        emoji_count = len(get_emoji_by_category(category))
-        if emoji_count == 0:
-            yield event.plain_result(f"📭 类型「{category}」当前没有可清空的表情包。")
-            return
-
-        yield event.plain_result(
-            f"⚠️ 即将清空类型「{category}」下的 {emoji_count} 个表情包，但会保留类型本身。\n"
-            "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
-        )
-        if not await CommandsHandler._wait_for_command_confirmation(sender, event):
-            return
-
-        result = clear_category_emojis(category)
-        deleted_count = len(result["deleted_files"])
-        yield event.plain_result(
-            f"✅ 已清空类型「{category}」，共删除 {deleted_count} 个表情包。"
+            f"请在30秒内发送要添加到【{tag}】标签的图片（可发送多张图片）。"
         )
 
     @staticmethod
     async def clear_all_emojis_command(sender, event: AstrMessageEvent):
-        """清空所有类型下的表情包，但保留类型和描述配置。"""
+        """清空所有标签下的表情包，但保留标签配置。"""
         available_categories = sorted(
             CommandsHandler._get_manageable_categories(sender)
         )
@@ -261,8 +148,8 @@ class CommandsHandler:
         category_count = sum(1 for count in category_counts.values() if count > 0)
         summary = CommandsHandler._format_category_counts(category_counts)
         yield event.plain_result(
-            f"⚠️ 即将清空全部表情包，共 {total_count} 个文件，涉及 {category_count} 个类型。\n"
-            "该操作会保留所有类型名称和描述配置。\n"
+            f"⚠️ 即将清空全部表情包，共 {total_count} 个文件，涉及 {category_count} 个标签。\n"
+            "该操作会保留所有标签名称和描述配置。\n"
             f"{summary}\n"
             "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
         )
@@ -280,46 +167,44 @@ class CommandsHandler:
 
         deleted_total = total_count - rem_count
         yield event.plain_result(
-            f"✅ 已清空全部表情包，共删除 {deleted_total} 个文件，类型配置已保留。"
+            f"✅ 已清空全部表情包，共删除 {deleted_total} 个文件，标签配置已保留。"
         )
 
     @staticmethod
-    async def delete_category_command(
-        sender, event: AstrMessageEvent, category: str = None
-    ):
-        """删除指定类型本身，同时移除其描述配置和本地文件夹。"""
-        if not category:
+    async def delete_tag_command(sender, event: AstrMessageEvent, tag: str = None):
+        """删除指定标签，移除标签配置及其下表情包的此标签归属（无标签表情将被彻底删除）"""
+        if not tag:
             yield event.plain_result(
-                "📌 若要删除类型本身，请按照此格式操作：\n/表情管理 删除类型本身 [类别名称]"
+                "📌 若要删除标签，请按照此格式操作：\n/表情管理 删除标签 [标签名称]"
             )
             return
 
-        category = category.strip()
+        tag = tag.strip()
         available_categories = CommandsHandler._get_manageable_categories(sender)
-        if category not in available_categories:
+        if tag not in available_categories:
             yield event.plain_result(
-                f"⚠️ 未找到类型「{category}」。\n可先使用 /表情管理 查看图库 查看当前类型。"
+                f"⚠️ 未找到标签「{tag}」。\n可先使用 /表情管理 查看图库 查看当前标签。"
             )
             return
 
-        emoji_count = len(get_emoji_by_category(category))
+        emoji_count = len(get_emoji_by_category(tag))
         yield event.plain_result(
-            f"⚠️ 即将删除类型「{category}」本身，并移除其描述配置"
-            f"{f'，同时删除其中的 {emoji_count} 个表情包' if emoji_count > 0 else ''}。\n"
+            f"⚠️ 即将删除标签「{tag}」并从配置中移除，同时移去该标签下全部表情包的「{tag}」标签属性"
+            f"{f'（其中有 {emoji_count} 个表情包如果不再属于其他任何标签，将会被物理删除）' if emoji_count > 0 else ''}。\n"
             "该操作不可恢复。\n"
             "请在 30 秒内回复“确认”继续执行，或回复“取消”终止本次操作。"
         )
         if not await CommandsHandler._wait_for_command_confirmation(sender, event):
             return
 
-        if not sender.category_manager.delete_category(category):
-            yield event.plain_result(f"❌ 删除类型「{category}」失败，请稍后重试。")
+        if not sender.category_manager.delete_category(tag):
+            yield event.plain_result(f"❌ 删除标签「{tag}」失败，请稍后重试。")
             return
 
         sender._reload_personas()
         yield event.plain_result(
-            f"✅ 已删除类型「{category}」"
-            f"{f'，并移除 {emoji_count} 个表情包。' if emoji_count > 0 else '。'}"
+            f"✅ 已成功删除标签「{tag}」"
+            f"{f'，并处理了 {emoji_count} 个相关表情包的归属。' if emoji_count > 0 else '。'}"
         )
 
     @staticmethod

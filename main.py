@@ -12,7 +12,6 @@ from astrbot.api.star import Context, Star, register
 from .backend.category_manager import CategoryManager
 from .backend.commands_handler import CommandsHandler
 from .backend.event_handlers import EventHandlers
-from .backend.webui_manager import WebuiManager
 from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
@@ -319,68 +318,32 @@ class MemeSender(Star):
     def meme_manager(self):
         pass
 
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("开启管理后台")
-    async def start_webui(self, event: AstrMessageEvent):
-        """启动表情包管理服务器"""
-        async for res in WebuiManager.start_webui(self, event):
-            yield res
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("关闭管理后台")
-    async def stop_server(self, event: AstrMessageEvent):
-        """关闭表情包管理服务器的指令"""
-        async for res in WebuiManager.stop_server(self, event):
-            yield res
-
     @meme_manager.command("查看图库")
     async def list_emotions(self, event: AstrMessageEvent):
-        """查看所有可用表情包类别"""
+        """查看所有可用表情包标签"""
         await self.check_and_reload_if_changed()
         async for res in CommandsHandler.list_emotions(self, event):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("添加表情")
-    async def upload_meme(self, event: AstrMessageEvent, category: str | None = None):
-        """上传表情包到指定类别"""
-        async for res in CommandsHandler.upload_meme(self, event, category):
-            yield res
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("恢复默认表情包")
-    async def restore_default_memes_command(
-        self, event: AstrMessageEvent, category: str | None = None
-    ):
-        """恢复内置默认表情包，可指定类别或恢复全部。"""
-        async for res in CommandsHandler.restore_default_memes_command(
-            self, event, category
-        ):
-            yield res
-
-    @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("清空指定类型")
-    async def clear_category_command(
-        self, event: AstrMessageEvent, category: str | None = None
-    ):
-        """清空指定类型下的所有表情包，但保留类型本身。"""
-        async for res in CommandsHandler.clear_category_command(self, event, category):
+    async def upload_meme(self, event: AstrMessageEvent, tag: str | None = None):
+        """上传表情包并标记指定标签"""
+        async for res in CommandsHandler.upload_meme(self, event, tag):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
     @meme_manager.command("清空全部")
     async def clear_all_emojis_command(self, event: AstrMessageEvent):
-        """清空所有类型下的表情包，但保留类型和描述配置。"""
+        """清空所有标签下的表情包，但保留标签配置。"""
         async for res in CommandsHandler.clear_all_emojis_command(self, event):
             yield res
 
     @filter.permission_type(filter.PermissionType.ADMIN)
-    @meme_manager.command("删除类型本身")
-    async def delete_category_command(
-        self, event: AstrMessageEvent, category: str | None = None
-    ):
-        """删除指定类型本身，同时移除其描述配置和本地文件夹。"""
-        async for res in CommandsHandler.delete_category_command(self, event, category):
+    @meme_manager.command("删除标签")
+    async def delete_tag_command(self, event: AstrMessageEvent, tag: str | None = None):
+        """删除指定标签，移除标签配置及其下表情包的此标签归属（无标签表情将被彻底删除）"""
+        async for res in CommandsHandler.delete_tag_command(self, event, tag):
             yield res
 
     @meme_manager.command("同步状态")
