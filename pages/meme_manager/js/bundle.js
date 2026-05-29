@@ -1,5 +1,5 @@
-var MemeManagerApp = (() => {
-  // pages/meme_manager/js/modules/toasts.js
+(() => {
+  // js/modules/toasts.js
   var { ref } = window.Vue;
   function useToasts() {
     const toasts = ref([]);
@@ -21,7 +21,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/modules/modals.js
+  // js/modules/modals.js
   var { ref: ref2, reactive, nextTick } = window.Vue;
   function useModals(showToast) {
     const confirmDialog = reactive({
@@ -192,7 +192,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/modules/api.js
+  // js/modules/api.js
   var { ref: ref3, computed } = window.Vue;
   function useApi(showToast, pruneSelections) {
     const emojiData = ref3({});
@@ -421,7 +421,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/modules/selection.js
+  // js/modules/selection.js
   var { ref: ref4, computed: computed2 } = window.Vue;
   function useSelection(emojiData, allEmojisList) {
     const selectedEmojis = ref4(/* @__PURE__ */ new Map());
@@ -494,7 +494,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/modules/sync.js
+  // js/modules/sync.js
   var { ref: ref5 } = window.Vue;
   function useSync(showToast, fetchEmojis) {
     const syncChecking = ref5(false);
@@ -561,8 +561,8 @@ var MemeManagerApp = (() => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ category, description: "\u8BF7\u6DFB\u52A0\u63CF\u8FF0" })
         });
-        if (!res.ok) throw new Error("\u6062\u590D\u5206\u7C7B\u6587\u4EF6\u5939\u5931\u8D25");
-        showToast(`\u5206\u7C7B\u300C${category}\u300D\u5BF9\u5E94\u6587\u4EF6\u5939\u5DF2\u6210\u529F\u91CD\u5EFA\u3002`, "success", "\u6062\u590D\u6210\u529F");
+        if (!res.ok) throw new Error("\u6062\u590D\u6807\u7B7E\u6587\u4EF6\u5939\u5931\u8D25");
+        showToast(`\u6807\u7B7E\u300C${category}\u300D\u5BF9\u5E94\u6587\u4EF6\u5939\u5DF2\u6210\u529F\u91CD\u5EFA\u3002`, "success", "\u6062\u590D\u6210\u529F");
         await fetchEmojis();
         await checkSyncStatus(false);
       } catch (e) {
@@ -577,7 +577,7 @@ var MemeManagerApp = (() => {
           body: JSON.stringify({ category })
         });
         if (!res.ok) throw new Error("\u79FB\u9664\u914D\u7F6E\u5931\u8D25");
-        showToast(`\u5DF2\u4ECE\u914D\u7F6E\u4E2D\u79FB\u9664\u7C7B\u522B \u300C${category}\u300D`, "success", "\u79FB\u9664\u6210\u529F");
+        showToast(`\u5DF2\u4ECE\u914D\u7F6E\u4E2D\u79FB\u9664\u6807\u7B7E \u300C${category}\u300D`, "success", "\u79FB\u9664\u6210\u529F");
         await fetchEmojis();
         await checkSyncStatus(false);
       } catch (e) {
@@ -659,7 +659,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/modules/categories.js
+  // js/modules/categories.js
   var { ref: ref6 } = window.Vue;
   function useCategories(showToast, fetchEmojis, checkSyncStatus, renameCategoryModal, addCategoryForm, emojiData, activeCategories, confirm, showDangerConfirm) {
     const openRenameCategory = (category) => {
@@ -703,7 +703,7 @@ var MemeManagerApp = (() => {
     const saveNewCategory = async () => {
       const name = addCategoryForm.name.trim();
       if (!name) {
-        showToast("\u8BF7\u8F93\u5165\u5206\u7C7B\u540D\u79F0\u518D\u4FDD\u5B58", "warning");
+        showToast("\u8BF7\u8F93\u5165\u6807\u7B7E\u540D\u79F0\u518D\u4FDD\u5B58", "warning");
         return;
       }
       try {
@@ -712,8 +712,8 @@ var MemeManagerApp = (() => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ category: name })
         });
-        if (!res.ok) throw new Error("\u6DFB\u52A0\u5206\u7C7B\u5931\u8D25");
-        showToast(`\u65B0\u5206\u7C7B\u300C${name}\u300D\u6DFB\u52A0\u6210\u529F\u3002`, "success", "\u4FDD\u5B58\u6210\u529F");
+        if (!res.ok) throw new Error("\u6DFB\u52A0\u6807\u7B7E\u5931\u8D25");
+        showToast(`\u65B0\u6807\u7B7E\u300C${name}\u300D\u6DFB\u52A0\u6210\u529F\u3002`, "success", "\u4FDD\u5B58\u6210\u529F");
         addCategoryForm.name = "";
         addCategoryForm.visible = false;
         await fetchEmojis();
@@ -725,12 +725,12 @@ var MemeManagerApp = (() => {
     const clearCategory = async (category) => {
       const count = emojiData.value[category]?.length || 0;
       if (count === 0) {
-        showToast("\u8BE5\u7C7B\u522B\u5F53\u524D\u4E3A\u7A7A\uFF0C\u65E0\u9700\u6E05\u7A7A", "info");
+        showToast("\u8BE5\u6807\u7B7E\u5F53\u524D\u4E3A\u7A7A\uFF0C\u65E0\u9700\u6E05\u7A7A", "info");
         return;
       }
       const confirmed = await showDangerConfirm(
-        `\u6E05\u7A7A\u5206\u7C7B\u300C${category}\u300D`,
-        `\u786E\u5B9A\u8981\u5220\u9664\u5206\u7C7B\u300C${category}\u300D\u4E0B\u7684\u5168\u90E8 ${count} \u4E2A\u8868\u60C5\u6587\u4EF6\u5417\uFF1F\u4FDD\u7559\u5206\u7C7B\u540D\u79F0\u548C\u63CF\u8FF0\u3002`
+        `\u6E05\u7A7A\u6807\u7B7E\u300C${category}\u300D`,
+        `\u786E\u5B9A\u8981\u5220\u9664\u6807\u7B7E\u300C${category}\u300D\u4E0B\u7684\u5168\u90E8 ${count} \u4E2A\u8868\u60C5\u6587\u4EF6\u5417\uFF1F\u4FDD\u7559\u6807\u7B7E\u540D\u79F0\u548C\u63CF\u8FF0\u3002`
       );
       if (!confirmed) return;
       try {
@@ -741,7 +741,7 @@ var MemeManagerApp = (() => {
         });
         if (!res.ok) throw new Error("\u6E05\u7A7A\u5931\u8D25");
         const data = await res.json();
-        showToast(`\u5DF2\u6E05\u7A7A\u5206\u7C7B ${category}\uFF0C\u5220\u9664\u4E86 ${data.deleted_count} \u4E2A\u8868\u60C5\u5305\u3002`, "success", "\u6E05\u7A7A\u6210\u529F");
+        showToast(`\u5DF2\u6E05\u7A7A\u6807\u7B7E ${category}\uFF0C\u5220\u9664\u4E86 ${data.deleted_count} \u4E2A\u8868\u60C5\u5305\u3002`, "success", "\u6E05\u7A7A\u6210\u529F");
         await fetchEmojis();
       } catch (e) {
         showToast(e.message, "error", "\u6E05\u7A7A\u5931\u8D25");
@@ -749,8 +749,8 @@ var MemeManagerApp = (() => {
     };
     const deleteCategory = async (category) => {
       const confirmed = await confirm(
-        `\u5220\u9664\u5206\u7C7B\u300C${category}\u300D`,
-        `\u786E\u8BA4\u5220\u9664\u5206\u7C7B\u300C${category}\u300D\u5417\uFF1F\u6B64\u64CD\u4F5C\u5C06\u6E05\u9664\u8BE5\u5206\u7C7B\u7684\u6240\u6709\u8868\u60C5\u5305\u5206\u7C7B\u6807\u7B7E\uFF0C\u82E5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u5206\u7C7B\uFF0C\u5BF9\u5E94\u7684\u78C1\u76D8\u6587\u4EF6\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`,
+        `\u5220\u9664\u6807\u7B7E\u300C${category}\u300D`,
+        `\u786E\u8BA4\u5220\u9664\u6807\u7B7E\u300C${category}\u300D\u5417\uFF1F\u6B64\u64CD\u4F5C\u5C06\u6E05\u9664\u8BE5\u6807\u7B7E\u7684\u6240\u6709\u8868\u60C5\u5305\u6807\u7B7E\uFF0C\u82E5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u6807\u7B7E\uFF0C\u5BF9\u5E94\u7684\u78C1\u76D8\u6587\u4EF6\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`,
         "\u786E\u8BA4\u5220\u9664",
         "danger"
       );
@@ -762,7 +762,7 @@ var MemeManagerApp = (() => {
           body: JSON.stringify({ category })
         });
         if (!res.ok) throw new Error("\u5220\u9664\u5931\u8D25");
-        showToast(`\u5DF2\u6210\u529F\u5220\u9664\u5206\u7C7B ${category}`, "success", "\u5220\u9664\u6210\u529F");
+        showToast(`\u5DF2\u6210\u529F\u5220\u9664\u6807\u7B7E ${category}`, "success", "\u5220\u9664\u6210\u529F");
         await fetchEmojis();
         await checkSyncStatus(false);
       } catch (e) {
@@ -778,7 +778,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/modules/emojiActions.js
+  // js/modules/emojiActions.js
   var { ref: ref7, reactive: reactive2, nextTick: nextTick2 } = window.Vue;
   function useEmojiActions({
     showToast,
@@ -902,7 +902,7 @@ var MemeManagerApp = (() => {
     };
     const saveEmojiAttributes = async (closeAfterSave = true) => {
       if (selectedEmotions.value.length === 0) {
-        showToast("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u5206\u7C7B\u6807\u7B7E\u3002", "warning", "\u4FDD\u5B58\u63D0\u793A");
+        showToast("\u8BF7\u81F3\u5C11\u9009\u62E9\u4E00\u4E2A\u6807\u7B7E\u3002", "warning", "\u4FDD\u5B58\u63D0\u793A");
         return;
       }
       const personas = selectedPersonas.value.length === 0 ? ["*"] : selectedPersonas.value;
@@ -930,7 +930,7 @@ var MemeManagerApp = (() => {
     const deleteEmoji = async (category, emoji) => {
       const isAll = category === "all";
       const title = isAll ? "\u7269\u7406\u5220\u9664\u8868\u60C5\u5305" : "\u5220\u9664\u6807\u7B7E / \u6587\u4EF6";
-      const promptText = isAll ? "\u786E\u8BA4\u7269\u7406\u5220\u9664\u8BE5\u8868\u60C5\u5305\u5417\uFF1F\u6B64\u64CD\u4F5C\u5C06\u6C38\u4E45\u4ECE\u78C1\u76D8\u548C\u6240\u6709\u5206\u7C7B\u4E0B\u5220\u9664\u8BE5\u8868\u60C5\u6587\u4EF6\uFF01" : `\u786E\u8BA4\u4ECE\u5206\u7C7B\u300C${category}\u300D\u4E0B\u79FB\u9664\u8868\u60C5\u5305\uFF1F\u82E5\u8BE5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u5206\u7C7B\uFF0C\u5B83\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`;
+      const promptText = isAll ? "\u786E\u8BA4\u7269\u7406\u5220\u9664\u8BE5\u8868\u60C5\u5305\u5417\uFF1F\u6B64\u64CD\u4F5C\u5C06\u6C38\u4E45\u4ECE\u78C1\u76D8\u548C\u6240\u6709\u6807\u7B7E\u4E0B\u5220\u9664\u8BE5\u8868\u60C5\u6587\u4EF6\uFF01" : `\u786E\u8BA4\u4ECE\u6807\u7B7E\u300C${category}\u300D\u4E0B\u79FB\u9664\u8868\u60C5\u5305\uFF1F\u82E5\u8BE5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u6807\u7B7E\uFF0C\u5B83\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`;
       const confirmed = await confirm(
         title,
         promptText,
@@ -957,7 +957,7 @@ var MemeManagerApp = (() => {
       if (items.length === 0) return;
       const confirmed = await confirm(
         "\u6279\u91CF\u5220\u9664\u8868\u60C5\u5305",
-        `\u786E\u8BA4\u5220\u9664\u5DF2\u9009\u4E2D\u7684 ${items.length} \u4E2A\u8868\u60C5\u5305\uFF1F\u8FD9\u4F1A\u79FB\u9664\u5176\u5206\u7C7B\u6807\u7B7E\uFF0C\u82E5\u8BE5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u5206\u7C7B\uFF0C\u5B83\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`,
+        `\u786E\u8BA4\u5220\u9664\u5DF2\u9009\u4E2D\u7684 ${items.length} \u4E2A\u8868\u60C5\u5305\uFF1F\u8FD9\u4F1A\u79FB\u9664\u5176\u6807\u7B7E\uFF0C\u82E5\u8BE5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u6807\u7B7E\uFF0C\u5B83\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`,
         "\u786E\u8BA4\u6279\u91CF\u5220\u9664",
         "danger"
       );
@@ -1089,7 +1089,7 @@ var MemeManagerApp = (() => {
       }
       const confirmed = await showDangerConfirm(
         "\u6E05\u7A7A\u6240\u6709\u8868\u60C5\u5305",
-        `\u786E\u8BA4\u5F7B\u5E95\u6E05\u7A7A\u5E93\u4E2D\u7684\u6240\u6709 ${totalCount} \u4E2A\u8868\u60C5\u5305\uFF1F\u6B64\u64CD\u4F5C\u5C06\u5220\u9664\u6240\u6709\u78C1\u76D8\u6587\u4EF6\uFF0C\u4F46\u4FDD\u7559\u5206\u7C7B\u76EE\u5F55\u914D\u7F6E\u3002`
+        `\u786E\u8BA4\u5F7B\u5E95\u6E05\u7A7A\u5E93\u4E2D\u7684\u6240\u6709 ${totalCount} \u4E2A\u8868\u60C5\u5305\uFF1F\u6B64\u64CD\u4F5C\u5C06\u5220\u9664\u6240\u6709\u78C1\u76D8\u6587\u4EF6\uFF0C\u4F46\u4FDD\u7559\u6807\u7B7E\u76EE\u5F55\u914D\u7F6E\u3002`
       );
       if (!confirmed) return;
       try {
@@ -1115,7 +1115,7 @@ var MemeManagerApp = (() => {
           body: JSON.stringify({ category, filenames })
         });
         if (!res.ok) throw new Error("\u6279\u91CF\u5BFC\u5165\u5931\u8D25");
-        showToast(`\u6210\u529F\u5BFC\u5165 ${filenames.length} \u4E2A\u8868\u60C5\u5230\u5206\u7C7B ${category}`, "success", "\u5BFC\u5165\u6210\u529F");
+        showToast(`\u6210\u529F\u5BFC\u5165 ${filenames.length} \u4E2A\u8868\u60C5\u5230\u6807\u7B7E ${category}`, "success", "\u5BFC\u5165\u6210\u529F");
         closeImportModal();
         await fetchEmojis();
       } catch (e) {
@@ -1150,7 +1150,7 @@ var MemeManagerApp = (() => {
         });
         if (!res.ok) throw new Error("\u79FB\u52A8\u5931\u8D25");
         const result = await res.json();
-        showToast(`\u6210\u529F\u5C06 ${result.moved_count} \u4E2A\u8868\u60C5\u5305\u79FB\u52A8\u5230\u5206\u7C7B ${targetCategory}`, "success", "\u79FB\u52A8\u6210\u529F");
+        showToast(`\u6210\u529F\u5C06 ${result.moved_count} \u4E2A\u8868\u60C5\u5305\u79FB\u52A8\u5230\u6807\u7B7E ${targetCategory}`, "success", "\u79FB\u52A8\u6210\u529F");
         selectedEmojis.value.clear();
         await fetchEmojis();
       } catch (e) {
@@ -1176,7 +1176,7 @@ var MemeManagerApp = (() => {
     };
     const uploadFiles = async (files, category) => {
       if (uploadStateByCategory.value.has(category)) {
-        showToast(`\u5F53\u524D\u5206\u7C7B ${category} \u6B63\u5728\u4E0A\u4F20\u4E2D\uFF0C\u8BF7\u7A0D\u5019\u3002`, "warning");
+        showToast(`\u5F53\u524D\u6807\u7B7E ${category} \u6B63\u5728\u4E0A\u4F20\u4E2D\uFF0C\u8BF7\u7A0D\u5019\u3002`, "warning");
         return;
       }
       const total = files.length;
@@ -1280,7 +1280,7 @@ var MemeManagerApp = (() => {
     const contextMenuCopy = () => {
       contextMenu.visible = false;
       clipboardItems.value = [...contextMenu.targetItems];
-      showToast(`\u5DF2\u6210\u529F\u590D\u5236 ${clipboardItems.value.length} \u4E2A\u8868\u60C5\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u5728\u5176\u4ED6\u5206\u7C7B\u53F3\u952E\u7C98\u8D34\u3002`, "success", "\u590D\u5236\u6210\u529F");
+      showToast(`\u5DF2\u6210\u529F\u590D\u5236 ${clipboardItems.value.length} \u4E2A\u8868\u60C5\u5230\u526A\u8D34\u677F\uFF0C\u53EF\u5728\u5176\u4ED6\u6807\u7B7E\u53F3\u952E\u7C98\u8D34\u3002`, "success", "\u590D\u5236\u6210\u529F");
     };
     const contextMenuConvertToGif = async () => {
       contextMenu.visible = false;
@@ -1346,7 +1346,7 @@ var MemeManagerApp = (() => {
           console.error(e);
         }
       }
-      showToast(`\u6210\u529F\u5411\u5206\u7C7B ${targetCategory} \u590D\u5236\u7C98\u8D34\u4E86 ${copiedCount} \u4E2A\u8868\u60C5\u5305`, "success", "\u7C98\u8D34\u6210\u529F");
+      showToast(`\u6210\u529F\u5411\u6807\u7B7E ${targetCategory} \u590D\u5236\u7C98\u8D34\u4E86 ${copiedCount} \u4E2A\u8868\u60C5\u5305`, "success", "\u7C98\u8D34\u6210\u529F");
       clipboardItems.value = [];
       await fetchEmojis();
     };
@@ -1400,7 +1400,7 @@ var MemeManagerApp = (() => {
     };
   }
 
-  // pages/meme_manager/js/script.js
+  // js/script.js
   var { createApp, ref: ref8, computed: computed3, onMounted, onUnmounted } = Vue;
   createApp({
     setup() {

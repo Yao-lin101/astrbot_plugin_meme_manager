@@ -117,18 +117,6 @@
   </head>
   <body>
     <div id="app" class="layout-container" v-cloak @click="closeContextMenu">
-      <!-- 头部导航栏 -->
-      <header class="header">
-        <div class="header-logo">
-          <i class="fas fa-face-smile-wink logo-icon"></i>
-          <h1>表情管理系统</h1>
-        </div>
-        <div class="header-actions">
-          <button class="btn-secondary toggle-sync-btn" :class="{ active: syncDrawerVisible }" @click="syncDrawerVisible = !syncDrawerVisible">
-            <i class="fas fa-arrows-spin icon"></i>同步与设置
-          </button>
-        </div>
-      </header>
 
       <!-- 主要工作区 (通栏大气的仪表盘布局) -->
       <main class="main-content">
@@ -259,9 +247,13 @@
               </div>
             </div>
             <div class="selection-toolbar-actions">
-              <!-- 添加分类按钮 (常驻) -->
+              <button class="btn-secondary toggle-sync-btn" :class="{ active: syncDrawerVisible }" @click="syncDrawerVisible = !syncDrawerVisible">
+                <i class="fas fa-arrows-spin icon"></i>同步与设置
+              </button>
+
+              <!-- 添加标签按钮 (常驻) -->
               <button id="add-category-btn-top" class="btn-secondary" @click="addCategoryForm.visible = true">
-                <i class="fas fa-plus icon"></i>添加分类
+                <i class="fas fa-plus icon"></i>添加标签
               </button>
 
               <span id="selection-summary" :class="{ 'active-selection': selectionEnabled }">
@@ -283,38 +275,11 @@
           </div>
         </div>
 
-        <!-- 顶部 Tab 分类过滤器 -->
-        <div class="emoji-tabs-wrapper" style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px;">
-          <div class="tabs-search-row" style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <div class="tabs-search-container" style="width: 260px; position: relative; display: flex; align-items: center;">
-              <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-              <input type="text" v-model="tabSearchQuery" placeholder="搜索分类标签..." class="form-control" style="padding-left: 30px; height: 34px; font-size: 12px; border-radius: 17px;" />
-              <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
-            </div>
-            <!-- Reset Button -->
-            <button class="emoji-tab-btn reset-tabs-btn" 
-                    v-if="!activeCategories.includes('all') && activeCategories.length > 0"
-                    @click="selectCategory('all')"
-                    style="margin: 0; padding: 8px 14px; border-radius: 17px; height: 34px; display: inline-flex; align-items: center; box-shadow: var(--shadow-sm); cursor: pointer;">
-              <i class="fas fa-rotate-left" style="margin-right: 4px;"></i>重置筛选
-            </button>
-          </div>
-          <div id="emoji-tabs" class="emoji-tabs-container">
-            <button v-for="category in filteredCategories" 
-                    :key="category" 
-                    class="emoji-tab-btn" 
-                    :class="{ active: activeCategories.includes(category) }" 
-                    @click="selectCategory(category)"
-                    @dragover.prevent
-                    @drop="onDropEmoji($event, category)">
-              <span class="tab-name">{{ category }}</span>
-              <span class="tab-badge">{{ emojiData[category] ? emojiData[category].length : 0 }}</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- 当前分类表情网格 -->
-        <div id="emoji-categories">
+        <!-- 左右分布工作区 -->
+        <div class="workspace-layout">
+          <!-- 左侧：主要内容 (分类表情网格) -->
+          <div class="main-workspace">
+            <div id="emoji-categories">
           <div v-if="activeCategory" class="category active" :id="'category-' + activeCategory">
             <div class="category-title">
               <div class="category-header">
@@ -420,6 +385,39 @@
               </div>
             </div>
           </div>
+
+          <!-- 右侧：固定垂直标签列表 -->
+          <aside class="tags-sidebar">
+            <div class="tags-sidebar-header">
+              <i class="fas fa-tags"></i>
+              <h3>标签分类</h3>
+            </div>
+            
+            <div class="tags-search-wrapper">
+              <i class="fas fa-search search-icon"></i>
+              <input type="text" v-model="tabSearchQuery" placeholder="搜索标签..." class="form-control sidebar-search" />
+              <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" class="clear-btn">&times;</button>
+            </div>
+
+            <button class="reset-tabs-btn-vertical" 
+                    v-if="!activeCategories.includes('all') && activeCategories.length > 0"
+                    @click="selectCategory('all')">
+              <i class="fas fa-rotate-left"></i> 重置筛选
+            </button>
+
+            <div class="emoji-tabs-vertical">
+              <button v-for="category in filteredCategories" 
+                      :key="category" 
+                      class="emoji-tab-btn-vertical" 
+                      :class="{ active: activeCategories.includes(category) }" 
+                      @click="selectCategory(category)"
+                      @dragover.prevent
+                      @drop="onDropEmoji($event, category)">
+                <span class="tab-name">{{ category }}</span>
+                <span class="tab-badge-vertical">{{ emojiData[category] ? emojiData[category].length : 0 }}</span>
+              </button>
+            </div>
+          </aside>
         </div>
 
       </main>
@@ -517,15 +515,15 @@
       <div v-if="addCategoryForm.visible" class="category-edit-modal" role="dialog" aria-modal="true">
         <div class="category-edit-modal-card">
           <p class="category-edit-modal-eyebrow">标签管理</p>
-          <h2>添加新分类</h2>
+          <h2>添加新标签</h2>
           <div class="category-edit-form-panel">
-            <label>分类名称</label>
-            <input type="text" v-model="addCategoryForm.name" placeholder="分类名称" class="form-control" />
+            <label>标签名称</label>
+            <input type="text" v-model="addCategoryForm.name" placeholder="标签名称" class="form-control" />
           </div>
           <div class="category-edit-modal-actions">
             <button class="btn-secondary" @click="addCategoryForm.visible = false">取消</button>
             <button class="btn-primary" @click="saveNewCategory">
-              保存分类
+              保存标签
             </button>
           </div>
         </div>
@@ -617,7 +615,7 @@
       <div v-if="importModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeImportModal">
         <div class="emoji-detail-modal-card" style="max-width: 800px; width: 90%;">
           <div class="drawer-header">
-            <span class="drawer-title">导入已存表情到分类「{{ activeCategory }}」</span>
+            <span class="drawer-title">导入已存表情到标签「{{ activeCategory }}」</span>
             <button class="drawer-close-btn" @click="closeImportModal">&times;</button>
           </div>
           <div class="drawer-content" style="max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">

@@ -74,8 +74,8 @@ export function useSync(showToast, fetchEmojis) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ category, description: "请添加描述" }),
       });
-      if (!res.ok) throw new Error("恢复分类文件夹失败");
-      showToast(`分类「${category}」对应文件夹已成功重建。`, "success", "恢复成功");
+      if (!res.ok) throw new Error("恢复标签文件夹失败");
+      showToast(`标签「${category}」对应文件夹已成功重建。`, "success", "恢复成功");
       await fetchEmojis();
       await checkSyncStatus(false);
     } catch (e) {
@@ -91,7 +91,7 @@ export function useSync(showToast, fetchEmojis) {
         body: JSON.stringify({ category }),
       });
       if (!res.ok) throw new Error("移除配置失败");
-      showToast(`已从配置中移除类别 「${category}」`, "success", "移除成功");
+      showToast(`已从配置中移除标签 「${category}」`, "success", "移除成功");
       await fetchEmojis();
       await checkSyncStatus(false);
     } catch (e) {
