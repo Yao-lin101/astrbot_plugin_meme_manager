@@ -57,10 +57,12 @@ createApp({
       importModal: modals.importModal,
       closeImportModal: modals.closeImportModal,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
+      selectedEmotions: api.selectedEmotions,
     });
 
     // Local UI states
     const syncDrawerVisible = ref(false);
+    const isDrawerInputFocused = ref(false);
 
     const getImageUrl = (emoji) => {
       if (!emoji) return '';
@@ -262,7 +264,7 @@ createApp({
       // Emoji Actions
       activeDetailEmoji: emojiActions.activeDetailEmoji,
       detailMetadata: emojiActions.detailMetadata,
-      selectedEmotions: emojiActions.selectedEmotions,
+      selectedEmotions: api.selectedEmotions,
       selectedPersonas: emojiActions.selectedPersonas,
       detailDrawerLoading: emojiActions.detailDrawerLoading,
       uploadStateByCategory: emojiActions.uploadStateByCategory,
@@ -294,6 +296,8 @@ createApp({
       contextMenuPaste: emojiActions.contextMenuPaste,
       onEmojiClick: emojiActions.onEmojiClick,
       handleCreateTagInDrawer: emojiActions.handleCreateTagInDrawer,
+      handleBackspace: emojiActions.handleBackspace,
+      isDrawerInputFocused,
       getImageUrl,
     };
   },

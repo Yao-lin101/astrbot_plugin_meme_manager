@@ -554,10 +554,42 @@
               <!-- 标签多选 -->
               <div class="drawer-section">
                 <label>分类标签 (点击进行选择/取消选择)</label>
-                <div class="search-wrapper" style="margin-bottom: 8px; position: relative; display: flex; align-items: center;">
-                  <i class="fas fa-search" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px; pointer-events: none;"></i>
-                  <input type="text" v-model="drawerTagSearchQuery" @keyup.enter="handleCreateTagInDrawer" placeholder="搜索或输入后回车新建标签..." class="form-control" style="padding-left: 30px; height: 32px; font-size: 12px;" />
-                  <button v-if="drawerTagSearchQuery" @click="drawerTagSearchQuery = ''" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0;">&times;</button>
+                <div class="search-wrapper" 
+                     @click="$refs.drawerTagInput.focus()"
+                     :style="{ 
+                       marginBottom: '8px', 
+                       padding: '4px 8px', 
+                       border: '1px solid ' + (isDrawerInputFocused ? 'var(--primary-color)' : 'var(--border-color)'), 
+                       borderRadius: 'var(--radius-sm)', 
+                       background: '#ffffff', 
+                       display: 'flex', 
+                       flexWrap: 'wrap', 
+                       alignItems: 'center', 
+                       gap: '6px', 
+                       minHeight: '34px', 
+                       cursor: 'text',
+                       boxShadow: isDrawerInputFocused ? '0 0 0 2px rgba(59, 130, 246, 0.1)' : 'none',
+                       transition: 'border-color 0.2s, box-shadow 0.2s'
+                     }">
+                  <span v-for="cat in selectedEmotions" 
+                        :key="cat" 
+                        class="active-tag-pill" 
+                        style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: #2563eb; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500;">
+                    {{ cat }}
+                    <span @click.stop="toggleTagInDrawer(cat)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #2563eb; line-height: 1; padding: 0 2px; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#2563eb'">&times;</span>
+                  </span>
+                  <input type="text" 
+                         ref="drawerTagInput"
+                         v-model="drawerTagSearchQuery" 
+                         @focus="isDrawerInputFocused = true"
+                         @blur="isDrawerInputFocused = false"
+                         @keydown.backspace="handleBackspace"
+                         @keyup.enter="handleCreateTagInDrawer" 
+                         placeholder="搜索或输入后回车新建标签..." 
+                         style="flex: 1; min-width: 120px; border: none; outline: none; background: transparent; height: 26px; font-size: 12px; padding: 0; color: var(--text-primary);" />
+                  <button v-if="drawerTagSearchQuery" 
+                          @click.stop="drawerTagSearchQuery = ''" 
+                          style="background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0 4px; display: flex; align-items: center; margin-left: auto;">&times;</button>
                 </div>
                 <div class="drawer-tags-picker">
                   <span v-for="cat in filteredDrawerTags" 

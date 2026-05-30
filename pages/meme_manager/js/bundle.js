@@ -1,5 +1,5 @@
 (() => {
-  // js/modules/toasts.js
+  // modules/toasts.js
   var { ref } = window.Vue;
   function useToasts() {
     const toasts = ref([]);
@@ -21,7 +21,7 @@
     };
   }
 
-  // js/modules/modals.js
+  // modules/modals.js
   var { ref: ref2, reactive, nextTick } = window.Vue;
   function useModals(showToast) {
     const confirmDialog = reactive({
@@ -192,7 +192,7 @@
     };
   }
 
-  // js/modules/api.js
+  // modules/api.js
   var { ref: ref3, computed } = window.Vue;
   function useApi(showToast, pruneSelections) {
     const emojiData = ref3({});
@@ -205,6 +205,7 @@
     const activeCategories = ref3(["all"]);
     const tabSearchQuery = ref3("");
     const drawerTagSearchQuery = ref3("");
+    const selectedEmotions = ref3([]);
     const visibleLimit = ref3(40);
     const fetchEmojis = async () => {
       visibleLimit.value = 40;
@@ -293,8 +294,9 @@
     const filteredDrawerTags = computed(() => {
       const query = drawerTagSearchQuery.value.trim().toLowerCase();
       const tags = Object.keys(emojiData.value);
-      if (!query) return tags;
-      return tags.filter((tag) => tag.toLowerCase().includes(query));
+      const unselectedTags = tags.filter((tag) => !selectedEmotions.value.includes(tag));
+      if (!query) return unselectedTags;
+      return unselectedTags.filter((tag) => tag.toLowerCase().includes(query));
     });
     const emojiTagsMap = computed(() => {
       const map = /* @__PURE__ */ new Map();
@@ -417,11 +419,12 @@
       importableEmojisList,
       activeCategoryTimeGroups,
       getEmojiTags,
-      visibleLimit
+      visibleLimit,
+      selectedEmotions
     };
   }
 
-  // js/modules/selection.js
+  // modules/selection.js
   var { ref: ref4, computed: computed2 } = window.Vue;
   function useSelection(emojiData, allEmojisList) {
     const selectedEmojis = ref4(/* @__PURE__ */ new Map());
@@ -494,7 +497,7 @@
     };
   }
 
-  // js/modules/sync.js
+  // modules/sync.js
   var { ref: ref5 } = window.Vue;
   function useSync(showToast, fetchEmojis) {
     const syncChecking = ref5(false);
@@ -659,7 +662,7 @@
     };
   }
 
-  // js/modules/categories.js
+  // modules/categories.js
   var { ref: ref6 } = window.Vue;
   function useCategories(showToast, fetchEmojis, checkSyncStatus, renameCategoryModal, addCategoryForm, emojiData, activeCategories, confirm, showDangerConfirm) {
     const openRenameCategory = (category) => {
@@ -778,7 +781,7 @@
     };
   }
 
-  // js/modules/emojiActions.js
+  // modules/emojiActions.js
   var { ref: ref7, reactive: reactive2, nextTick: nextTick2 } = window.Vue;
   function useEmojiActions({
     showToast,
@@ -796,11 +799,11 @@
     batchPersonaModal,
     importModal,
     closeImportModal,
-    drawerTagSearchQuery
+    drawerTagSearchQuery,
+    selectedEmotions
   }) {
     const activeDetailEmoji = ref7(null);
     const detailMetadata = ref7(null);
-    const selectedEmotions = ref7([]);
     const selectedPersonas = ref7([]);
     const detailDrawerLoading = ref7(false);
     const uploadStateByCategory = ref7(/* @__PURE__ */ new Map());
@@ -898,6 +901,11 @@
         await fetchEmojis();
       } catch (e) {
         showToast(e.message, "error", "\u521B\u5EFA\u5931\u8D25");
+      }
+    };
+    const handleBackspace = () => {
+      if (drawerTagSearchQuery.value === "" && selectedEmotions.value.length > 0) {
+        selectedEmotions.value.pop();
       }
     };
     const saveEmojiAttributes = async (closeAfterSave = true) => {
@@ -1396,11 +1404,12 @@
       contextMenuConvertToGif,
       contextMenuPaste,
       onEmojiClick,
-      handleCreateTagInDrawer
+      handleCreateTagInDrawer,
+      handleBackspace
     };
   }
 
-  // js/script.js
+  // script.js
   var { createApp, ref: ref8, computed: computed3, onMounted, onUnmounted } = Vue;
   createApp({
     setup() {
@@ -1439,9 +1448,11 @@
         batchPersonaModal: modals.batchPersonaModal,
         importModal: modals.importModal,
         closeImportModal: modals.closeImportModal,
-        drawerTagSearchQuery: api.drawerTagSearchQuery
+        drawerTagSearchQuery: api.drawerTagSearchQuery,
+        selectedEmotions: api.selectedEmotions
       });
       const syncDrawerVisible = ref8(false);
+      const isDrawerInputFocused = ref8(false);
       const getImageUrl = (emoji) => {
         if (!emoji) return "";
         return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
@@ -1618,7 +1629,7 @@
         // Emoji Actions
         activeDetailEmoji: emojiActions.activeDetailEmoji,
         detailMetadata: emojiActions.detailMetadata,
-        selectedEmotions: emojiActions.selectedEmotions,
+        selectedEmotions: api.selectedEmotions,
         selectedPersonas: emojiActions.selectedPersonas,
         detailDrawerLoading: emojiActions.detailDrawerLoading,
         uploadStateByCategory: emojiActions.uploadStateByCategory,
@@ -1650,6 +1661,8 @@
         contextMenuPaste: emojiActions.contextMenuPaste,
         onEmojiClick: emojiActions.onEmojiClick,
         handleCreateTagInDrawer: emojiActions.handleCreateTagInDrawer,
+        handleBackspace: emojiActions.handleBackspace,
+        isDrawerInputFocused,
         getImageUrl
       };
     }

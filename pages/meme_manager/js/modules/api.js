@@ -12,6 +12,7 @@ export function useApi(showToast, pruneSelections) {
   
   const tabSearchQuery = ref("");
   const drawerTagSearchQuery = ref("");
+  const selectedEmotions = ref([]);
   const visibleLimit = ref(40);
 
   const fetchEmojis = async () => {
@@ -113,8 +114,9 @@ export function useApi(showToast, pruneSelections) {
   const filteredDrawerTags = computed(() => {
     const query = drawerTagSearchQuery.value.trim().toLowerCase();
     const tags = Object.keys(emojiData.value);
-    if (!query) return tags;
-    return tags.filter(tag => tag.toLowerCase().includes(query));
+    const unselectedTags = tags.filter(tag => !selectedEmotions.value.includes(tag));
+    if (!query) return unselectedTags;
+    return unselectedTags.filter(tag => tag.toLowerCase().includes(query));
   });
 
   const emojiTagsMap = computed(() => {
@@ -255,5 +257,6 @@ export function useApi(showToast, pruneSelections) {
     activeCategoryTimeGroups,
     getEmojiTags,
     visibleLimit,
+    selectedEmotions,
   };
 }

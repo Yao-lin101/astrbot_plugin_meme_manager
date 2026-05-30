@@ -17,10 +17,10 @@ export function useEmojiActions({
   importModal,
   closeImportModal,
   drawerTagSearchQuery,
+  selectedEmotions,
 }) {
   const activeDetailEmoji = ref(null);
   const detailMetadata = ref(null);
-  const selectedEmotions = ref([]);
   const selectedPersonas = ref([]);
   const detailDrawerLoading = ref(false);
 
@@ -137,6 +137,12 @@ export function useEmojiActions({
       await fetchEmojis();
     } catch (e) {
       showToast(e.message, "error", "创建失败");
+    }
+  };
+
+  const handleBackspace = () => {
+    if (drawerTagSearchQuery.value === "" && selectedEmotions.value.length > 0) {
+      selectedEmotions.value.pop();
     }
   };
 
@@ -712,5 +718,6 @@ export function useEmojiActions({
     contextMenuPaste,
     onEmojiClick,
     handleCreateTagInDrawer,
+    handleBackspace,
   };
 }
