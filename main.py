@@ -234,6 +234,7 @@ class MemeSender(Star):
                 )
 
             current_app.config["PLUGIN_CONFIG"] = {
+                "sender": self,
                 "img_sync": self.img_sync,
                 "category_manager": self.category_manager,
                 "plugin_config": self.config,
