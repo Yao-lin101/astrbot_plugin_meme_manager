@@ -140,7 +140,8 @@ export function useEmojiActions({
     }
   };
 
-  const handleBackspace = () => {
+  const handleBackspace = (event) => {
+    if (event && event.isComposing) return;
     if (drawerTagSearchQuery.value === "" && selectedEmotions.value.length > 0) {
       selectedEmotions.value.pop();
     }

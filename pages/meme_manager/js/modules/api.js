@@ -107,8 +107,9 @@ export function useApi(showToast, pruneSelections) {
   const filteredCategories = computed(() => {
     const query = tabSearchQuery.value.trim().toLowerCase();
     const categories = Object.keys(emojiData.value);
-    if (!query) return categories;
-    return categories.filter(category => category.toLowerCase().includes(query));
+    const unselectedCats = categories.filter(cat => !activeCategories.value.includes(cat));
+    if (!query) return unselectedCats;
+    return unselectedCats.filter(category => category.toLowerCase().includes(query));
   });
 
   const filteredDrawerTags = computed(() => {

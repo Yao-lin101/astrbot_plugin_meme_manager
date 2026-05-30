@@ -288,8 +288,9 @@
     const filteredCategories = computed(() => {
       const query = tabSearchQuery.value.trim().toLowerCase();
       const categories = Object.keys(emojiData.value);
-      if (!query) return categories;
-      return categories.filter((category) => category.toLowerCase().includes(query));
+      const unselectedCats = categories.filter((cat) => !activeCategories.value.includes(cat));
+      if (!query) return unselectedCats;
+      return unselectedCats.filter((category) => category.toLowerCase().includes(query));
     });
     const filteredDrawerTags = computed(() => {
       const query = drawerTagSearchQuery.value.trim().toLowerCase();
@@ -903,7 +904,8 @@
         showToast(e.message, "error", "\u521B\u5EFA\u5931\u8D25");
       }
     };
-    const handleBackspace = () => {
+    const handleBackspace = (event) => {
+      if (event && event.isComposing) return;
       if (drawerTagSearchQuery.value === "" && selectedEmotions.value.length > 0) {
         selectedEmotions.value.pop();
       }
