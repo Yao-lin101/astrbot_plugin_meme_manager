@@ -37,6 +37,17 @@ def _get_provider_label(img_sync) -> str:
     return "未知图床"
 
 
+def trigger_tag_vectorization() -> None:
+    """Trigger background tag embedding synchronization if the plugin sender is configured."""
+    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+    sender = plugin_config.get("sender")
+    if sender:
+        import asyncio
+
+        from .emotion_handler import sync_tag_embeddings
+        asyncio.create_task(sync_tag_embeddings(sender))
+
+
 @api.route("/emoji", methods=["GET"])
 async def get_all_emojis():
     """获取所有表情包（按类别分组），支持按人格过滤"""
@@ -535,6 +546,7 @@ async def restore_category():
 
         # 添加分类
         if category_manager.add_category(category):
+            trigger_tag_vectorization()
             return jsonify({"message": "Category created successfully"}), 200
         else:
             return jsonify({"message": "Failed to create category"}), 500
@@ -560,6 +572,7 @@ async def rename_category():
             return jsonify({"message": "Category manager not found"}), 404
 
         if category_manager.rename_category(old_name, new_name):
+            trigger_tag_vectorization()
             return jsonify({"message": "Category renamed successfully"}), 200
         else:
             return jsonify({"message": "Failed to rename category"}), 500
@@ -704,6 +717,7 @@ async def edit_emoji():
         if category_manager:
             category_manager.sync_with_filesystem()
 
+        trigger_tag_vectorization()
         return jsonify({"message": "Emoji metadata updated successfully"}), 200
     except Exception as e:
         logger.error(f"更新表情元数据失败: {e}", exc_info=True)
@@ -804,6 +818,7 @@ async def save_persona_tag():
             tags[persona_id] = tag.strip()
 
         save_persona_tags(tags)
+        trigger_tag_vectorization()
         return (
             jsonify({"message": "Persona tag updated successfully", "tags": tags}),
             200,
