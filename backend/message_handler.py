@@ -86,7 +86,9 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                         final_meme_file = convert_to_gif(meme_file, sender)
                         if final_meme_file != meme_file:
                             temp_files.append(final_meme_file)
-                        emotion_images.append(Image.fromFileSystem(final_meme_file))
+                        img = Image.fromFileSystem(final_meme_file)
+                        object.__setattr__(img, "sub_type", 1)
+                        emotion_images.append(img)
                     except Exception as e:
                         logger.error(f"添加表情图片失败: {e}")
 

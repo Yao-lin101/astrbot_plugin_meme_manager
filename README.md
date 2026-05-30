@@ -223,7 +223,6 @@
 
 - `image_host`: 选择图床服务 (支持 stardots 和 cloudflare_r2)
 - `image_host_config`: 图床配置信息（根据选择的图床服务填写相应配置）
-- `webui_port`: WebUI 服务端口号
 - `max_emotions_per_message`: 每条消息最大表情数量
 - `emotions_probability`: 表情触发概率 (0-100)
 - `enable_mixed_message`: 启用回复带图功能

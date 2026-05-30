@@ -462,14 +462,14 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
             final_meme_file = convert_to_gif(meme_file, sender)
 
             try:
+                img = Image.fromFileSystem(final_meme_file)
+                object.__setattr__(img, "sub_type", 1)
                 if event.get_platform_name() == "gewechat":
-                    await event.send(
-                        MessageChain([Image.fromFileSystem(final_meme_file)])
-                    )
+                    await event.send(MessageChain([img]))
                 else:
                     await sender.context.send_message(
                         event.unified_msg_origin,
-                        MessageChain([Image.fromFileSystem(final_meme_file)]),
+                        MessageChain([img]),
                     )
             except Exception as e:
                 logger.error(f"[meme_manager] 流式模式发送表情失败: {e}")

@@ -67,11 +67,6 @@
       }
     }
   },
-  "webui_port": {
-    "description": "Web UI 端口号",
-    "type": "int",
-    "default": 5000
-  },
   "persona_blacklist": {
     "description": "人格黑名单 (Persona ID 或名称)",
     "type": "list",

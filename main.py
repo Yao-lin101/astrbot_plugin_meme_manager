@@ -28,6 +28,32 @@ class MemeSender(Star):
         super().__init__(context)
         self.config = config or {}
 
+        # Monkeypatch OneBot image serializer to support sticker (subType=1) format
+        try:
+            from astrbot.core.platform.sources.aiocqhttp.aiocqhttp_message_event import (
+                AiocqhttpMessageEvent,
+            )
+
+            original_from_segment_to_dict = AiocqhttpMessageEvent._from_segment_to_dict
+
+            async def patched_from_segment_to_dict(segment) -> dict:
+                res = await original_from_segment_to_dict(segment)
+                if res.get("type") == "image":
+                    if getattr(segment, "sub_type", None) is not None:
+                        res.setdefault("data", {})["subType"] = segment.sub_type
+                    elif getattr(segment, "subType", None) is not None:
+                        res.setdefault("data", {})["subType"] = segment.subType
+                return res
+
+            AiocqhttpMessageEvent._from_segment_to_dict = patched_from_segment_to_dict
+            logger.info(
+                "Meme Manager: Successfully patched AiocqhttpMessageEvent._from_segment_to_dict for sticker support"
+            )
+        except Exception as e:
+            logger.warning(
+                f"Meme Manager: Failed to patch OneBot image serializer: {e}"
+            )
+
         # 初始化插件
         if not init_plugin():
             raise RuntimeError("插件初始化失败")
@@ -77,12 +103,6 @@ class MemeSender(Star):
                     config=r2_config, local_dir=MEMES_DIR, provider_type="cloudflare_r2"
                 )
                 self._r2_bucket_name = r2_config.get("bucket_name")
-
-        # 用于管理服务器
-        self.webui_process = None
-
-        self.server_key = None
-        self.server_port = self.config.get("webui_port", 5000)
 
         # 初始化表情状态
         self.found_emotions = []
