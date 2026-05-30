@@ -39,10 +39,17 @@ class MemeSender(Star):
             async def patched_from_segment_to_dict(segment) -> dict:
                 res = await original_from_segment_to_dict(segment)
                 if res.get("type") == "image":
-                    if getattr(segment, "sub_type", None) is not None:
-                        res.setdefault("data", {})["subType"] = segment.sub_type
-                    elif getattr(segment, "subType", None) is not None:
-                        res.setdefault("data", {})["subType"] = segment.subType
+                    sub_type = getattr(segment, "sub_type", None)
+                    if sub_type is None:
+                        sub_type = getattr(segment, "subType", None)
+                    if sub_type is None:
+                        sub_type = getattr(segment, "subtype", None)
+                    if sub_type is not None:
+                        # Compatible with go-cqhttp (subType) and NapCat/Lagrange (sub_type, subtype)
+                        data = res.setdefault("data", {})
+                        data["subType"] = sub_type
+                        data["sub_type"] = sub_type
+                        data["subtype"] = sub_type
                 return res
 
             AiocqhttpMessageEvent._from_segment_to_dict = patched_from_segment_to_dict
