@@ -320,8 +320,21 @@ class MemeSender(Star):
                 self.persona_prompts_backup[name] = persona.get("prompt") or ""
 
         format_instruction = (
-            "\n\n【输出格式要求（极其重要）】:\n"
-            "你必须在回复的【最末尾】且【单独一行】输出一个固定格式的表情标记块：<emotions>标签1, 标签2, ...</emotions>（例如 <emotions>得意, 摸头, 猫猫</emotions>，用英文逗号 `,` 分隔）。不要分散在正文多处。若当前回复不需要表情包，则不要输出此标签块。"
+            "\n\n<meme_formatting_instructions>\n"
+            "【输出格式要求（极其重要）】:\n"
+            "你必须在回复的【最末尾】且【单独一行】输出一个固定格式的表情标记块：<emotions>标签1, 标签2, ...</emotions>（例如 <emotions>得意, 摸头, 猫猫</emotions>，用英文逗号 `,` 分隔）。不要分散在正文多处。若当前回复不需要表情包，则不要输出此标签块。\n"
+            "</meme_formatting_instructions>"
+        )
+
+        tool_instruction = (
+            "\n\n<meme_tool_instructions>\n"
+            "【表情包工具发送指引（极其重要）】:\n"
+            "你拥有发送本地表情包的专属工具 `send_meme`。在对话过程中，为了活跃气氛或展现你的个性，你应该根据当前的聊天氛围、你的人格设定以及表情包使用偏好（供参考），积极、自然地使用此工具发送表情包。\n"
+            "工具调用必须遵循以下两步工作流：\n"
+            "1. 检索候选：先调用 `send_meme(query='检索词')`（不传 `index` 参数）来搜索候选表情包列表。强烈建议并鼓励你使用多个由英文逗号分隔的检索词（例如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这更有助于精准且切合语境地匹配表情包。\n"
+            "2. 选择并发送：阅读检索返回的表情包候选列表，选择其中最符合当前语境的一个，然后再次调用 `send_meme(query='检索词', index=选择的序号)`（如 index=1）正式发送表情包。\n"
+            "注意：在单次回复中，你可以多次调用本工具进行检索或发送，但严禁使用其他任何外部网络搜索或画图工具发图。\n"
+            "</meme_tool_instructions>"
         )
 
         for persona in personas:
@@ -563,7 +576,7 @@ class MemeSender(Star):
         """搜索并发送表情包。
 
         Args:
-            query(string): 检索表情包的标签，如 '猫猫'
+            query(string): 检索表情包的标签。支持并鼓励传入多个由英文逗号分隔的标签（如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这也更容易精准匹配图库中的表情包。
             index(number): 选中的表情包序号（从 1 开始）。如果首次调用或需要展示候选列表供选择，请不要进行传值；如果已获得候选列表，请传入选中的序号进行发送。
         """
         await self.check_and_reload_if_changed()
