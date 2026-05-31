@@ -1066,7 +1066,7 @@ async def resolve_duplicates():
         from pathlib import Path
 
         from ..config import MEMES_DIR
-        from .database import delete_meme_similarity_features, get_db_conn
+        from .database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -1095,7 +1095,10 @@ async def resolve_duplicates():
         # 2. Delete the deleted memes from database and filesystem
         for filename in deletes:
             cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
-            delete_meme_similarity_features(filename)
+            cursor.execute(
+                "DELETE FROM meme_similarity_features WHERE filename = ?",
+                (filename,),
+            )
 
             file_path = Path(MEMES_DIR) / filename
             if file_path.exists():

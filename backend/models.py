@@ -527,9 +527,10 @@ def clear_category_emojis(category: str) -> dict[str, object]:
             cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
 
             try:
-                from .database import delete_meme_similarity_features
-
-                delete_meme_similarity_features(filename)
+                cursor.execute(
+                    "DELETE FROM meme_similarity_features WHERE filename = ?",
+                    (filename,),
+                )
             except Exception as e:
                 logger.warning(
                     f"清除分类时删除表情 {filename} 的相似度特征缓存失败: {e}"
