@@ -42,6 +42,7 @@
             if (body instanceof FormData) {
               const category = body.get('category');
               const file = body.get('image_file');
+              const ignore_similarity = body.get('ignore_similarity');
               if (file) {
                 const base64Data = await new Promise((resolve, reject) => {
                   const reader = new FileReader();
@@ -49,11 +50,15 @@
                   reader.onerror = reject;
                   reader.readAsDataURL(file);
                 });
-                resData = await B.apiPost("emoji/add", {
+                const payload = {
                   category: category,
                   filename: file.name,
                   base64_data: base64Data
-                });
+                };
+                if (ignore_similarity !== null && ignore_similarity !== undefined) {
+                  payload.ignore_similarity = ignore_similarity;
+                }
+                resData = await B.apiPost("emoji/add", payload);
               } else {
                 throw new Error("No file in FormData");
               }
