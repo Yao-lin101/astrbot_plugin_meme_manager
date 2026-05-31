@@ -1053,12 +1053,11 @@ async def check_duplicates():
 
 @api.route("/emoji/dup/resolve", methods=["POST"])
 async def resolve_duplicates():
-    """解析重复表情包：保留一部分，删除另外一部分，并可选地合并他们的标签和人格"""
+    """解析重复表情包：保留一部分，删除另外一部分"""
     try:
         data = await request.get_json()
         keeps = data.get("keeps", [])
         deletes = data.get("deletes", [])
-        merge = bool(data.get("merge", True))
 
         if not keeps or not deletes:
             return jsonify({"message": "keeps and deletes lists are required"}), 400
@@ -1071,28 +1070,7 @@ async def resolve_duplicates():
         conn = get_db_conn()
         cursor = conn.cursor()
 
-        # 1. If merge is true, extract all emotions and personas from deleted memes
-        merged_emotions = set()
-        merged_personas = set()
-
-        if merge:
-            for filename in deletes:
-                cursor.execute(
-                    "SELECT emotions, personas FROM memes WHERE filename = ?",
-                    (filename,),
-                )
-                row = cursor.fetchone()
-                if row:
-                    if row["emotions"]:
-                        merged_emotions.update(
-                            e.strip() for e in row["emotions"].split(",")
-                        )
-                    if row["personas"]:
-                        merged_personas.update(
-                            p.strip() for p in row["personas"].split(",")
-                        )
-
-        # 2. Delete the deleted memes from database and filesystem
+        # 1. Delete the deleted memes from database and filesystem
         for filename in deletes:
             cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
             cursor.execute(
@@ -1103,42 +1081,6 @@ async def resolve_duplicates():
             file_path = Path(MEMES_DIR) / filename
             if file_path.exists():
                 file_path.unlink()
-
-        # 3. Apply merged emotions & personas to kept memes if merge is enabled
-        if merge and (merged_emotions or merged_personas):
-            for filename in keeps:
-                cursor.execute(
-                    "SELECT emotions, personas FROM memes WHERE filename = ?",
-                    (filename,),
-                )
-                row = cursor.fetchone()
-                if row:
-                    existing_emotions = (
-                        set(row["emotions"].split(",")) if row["emotions"] else set()
-                    )
-                    existing_personas = (
-                        set(row["personas"].split(",")) if row["personas"] else set()
-                    )
-
-                    for emo in merged_emotions:
-                        if emo:
-                            existing_emotions.add(emo)
-
-                    if "*" in merged_personas or "*" in existing_personas:
-                        existing_personas = {"*"}
-                    else:
-                        for p in merged_personas:
-                            if p:
-                                existing_personas.add(p)
-
-                    cursor.execute(
-                        "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
-                        (
-                            ",".join(existing_emotions),
-                            ",".join(existing_personas),
-                            filename,
-                        ),
-                    )
 
         conn.commit()
         conn.close()

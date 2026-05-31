@@ -1421,7 +1421,6 @@
     });
     const similarityThreshold = ref8(85);
     const duplicateGroups = ref8([]);
-    const mergeMetadata = ref8(true);
     const formatBytes = (bytes) => {
       if (!bytes || bytes === 0) return "0 B";
       const k = 1024;
@@ -1521,7 +1520,7 @@
           body: JSON.stringify({
             keeps,
             deletes,
-            merge: mergeMetadata.value
+            merge: false
           })
         });
         if (!res.ok) {
@@ -1541,7 +1540,6 @@
       duplicateModal,
       similarityThreshold,
       duplicateGroups,
-      mergeMetadata,
       formatBytes,
       openDuplicateModal,
       closeDuplicateModal,
@@ -1812,7 +1810,6 @@
         duplicateModal: dedup.duplicateModal,
         similarityThreshold: dedup.similarityThreshold,
         duplicateGroups: dedup.duplicateGroups,
-        mergeMetadata: dedup.mergeMetadata,
         formatBytes: dedup.formatBytes,
         openDuplicateModal: dedup.openDuplicateModal,
         closeDuplicateModal: dedup.closeDuplicateModal,
