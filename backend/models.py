@@ -266,7 +266,7 @@ def add_emoji_to_category(category, image_file, personas="*", ignore_similarity=
     # 判重
     content_hash = _calculate_file_hash(content)
     duplicate_name = _find_duplicate_image(content_hash)
-    if duplicate_name is not None:
+    if duplicate_name is not None and not ignore_similarity:
         # 如果已存在，但在该类别下没有，则将该类别追加到现有文件的 emotions 中
         conn = get_db_conn()
         cursor = conn.cursor()
