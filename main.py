@@ -595,19 +595,34 @@ class MemeSender(Star):
         if not candidates:
             return f"未找到与标签 '{query}' 相关的表情包，请尝试其他的关键词检索。"
 
+        # Group candidates by sorted emotions to ensure uniqueness of labels in the candidate list.
+        groups = {}
+        unique_candidates = []
+        for c in candidates:
+            key = tuple(sorted(e.strip().lower() for e in c["emotions"]))
+            if key not in groups:
+                groups[key] = []
+                unique_candidates.append(c)
+            groups[key].append(c)
+
         if index is None:
             response_text = f"已找到与标签 '{query}' 相关的表情包候选列表：\n"
-            for i, c in enumerate(candidates, start=1):
+            for i, c in enumerate(unique_candidates, start=1):
                 tags_str = ", ".join(c["emotions"])
                 response_text += f"{i}. 标签：[{tags_str}]\n"
             response_text += "请在上述候选中选择最合适的一个序号，并再次调用本工具传入 `index` 参数（如 index=1）来发送对应的表情包。"
             return response_text
 
         idx = int(index) - 1
-        if idx < 0 or idx >= len(candidates):
-            return f"无效的序号 {index}。当前可选的序号范围是 1 到 {len(candidates)}。"
+        if idx < 0 or idx >= len(unique_candidates):
+            return f"无效的序号 {index}。当前可选的序号范围是 1 到 {len(unique_candidates)}。"
 
-        selected_meme = candidates[idx]
+        selected_candidate = unique_candidates[idx]
+        key = tuple(sorted(e.strip().lower() for e in selected_candidate["emotions"]))
+
+        import random
+
+        selected_meme = random.choice(groups[key])
         filename = selected_meme["filename"]
         meme_file = os.path.join(MEMES_DIR, filename)
 
