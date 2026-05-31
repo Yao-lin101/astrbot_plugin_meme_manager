@@ -116,7 +116,7 @@
     </style>
   </head>
   <body>
-    <div id="app" class="layout-container" v-cloak @click="closeContextMenu">
+    <div id="app" class="layout-container" v-cloak @click="closeContextMenu(); otherDropdownVisible = false">
 
       <!-- 主要工作区 (通栏大气的仪表盘布局) -->
       <main class="main-content">
@@ -246,31 +246,41 @@
                 </datalist>
               </div>
             </div>
-            <div class="selection-toolbar-actions">
-              <button class="btn-secondary toggle-sync-btn" :class="{ active: syncDrawerVisible }" @click="syncDrawerVisible = !syncDrawerVisible">
-                <i class="fas fa-arrows-spin icon"></i>同步与设置
-              </button>
-
+            <div class="selection-toolbar-actions" style="display: flex; align-items: center; gap: 8px;">
               <!-- 添加标签按钮 (常驻) -->
               <button id="add-category-btn-top" class="btn-secondary" @click="addCategoryForm.visible = true">
                 <i class="fas fa-plus icon"></i>添加标签
               </button>
 
-              <span id="selection-summary" :class="{ 'active-selection': selectionEnabled }">
-                {{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个' : '批量选择' }}
+              <span v-if="selectionEnabled" id="selection-summary" class="active-selection">
+                已选中 {{ selectedEmojis.size }} 个
               </span>
-              <button v-if="selectionEnabled" id="toggle-selection-mode-btn" class="btn-secondary" @click="toggleSelectionMode">
-                <i class="fas fa-xmark icon"></i>取消选择
-              </button>
+              
               <button id="batch-persona-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="openBatchPersonaModal">
                 <i class="fas fa-user-gear icon"></i>设置人格
               </button>
-              <button id="batch-gif-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="batchConvertToGif">
-                <i class="fas fa-file-image icon"></i>转换为 GIF
-              </button>
+              
               <button id="batch-delete-btn" class="btn-danger" :disabled="selectedEmojis.size === 0" @click="batchDeleteSelected">
                 <i class="fas fa-trash-can icon"></i>删除
               </button>
+
+              <!-- 其他操作下拉菜单 -->
+              <div class="dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button class="btn-secondary dropdown-trigger" @click.stop="otherDropdownVisible = !otherDropdownVisible" style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 500; transition: var(--transition);">
+                  <i class="fas fa-ellipsis-h icon"></i>其他 <i class="fas fa-chevron-down" style="font-size: 10px; margin-left: 2px;"></i>
+                </button>
+                <div class="dropdown-menu" v-show="otherDropdownVisible" style="position: absolute; right: 0; top: 100%; margin-top: 6px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 100; min-width: 160px; display: flex; flex-direction: column; padding: 4px 0; overflow: hidden;">
+                  <button class="dropdown-item" @click="syncDrawerVisible = !syncDrawerVisible; otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-arrows-spin" style="width: 16px; color: var(--text-secondary);"></i> 同步与设置
+                  </button>
+                  <button class="dropdown-item" @click="openDuplicateModal(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-images" style="width: 16px; color: var(--text-secondary);"></i> 检查重复表情
+                  </button>
+                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchConvertToGif(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-file-image" style="width: 16px; color: var(--text-secondary);"></i> 转换为 GIF
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -436,6 +446,122 @@
         </div>
 
       </main>
+
+      <!-- 检查重复表情模态框 -->
+      <div v-if="duplicateModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeDuplicateModal">
+        <div class="emoji-detail-modal-card" style="max-width: 900px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
+          
+          <div class="drawer-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
+            <span class="drawer-title" style="font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
+              <i class="fas fa-clone" style="color: var(--primary-color);"></i>
+              检查重复/相似表情包
+            </span>
+            <button class="drawer-close-btn" @click="closeDuplicateModal">&times;</button>
+          </div>
+
+          <!-- 控制面板 (控制阈值、开始扫描) -->
+          <div class="dedup-control-panel" style="padding: 16px 20px; background: rgba(0, 0, 0, 0.01); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">
+                相似度阈值: <span style="color: var(--primary-color); font-family: monospace; font-size: 14px;">{{ similarityThreshold }}%</span>
+              </label>
+              <input type="range" min="50" max="100" step="1" v-model="similarityThreshold" style="flex: 1; cursor: pointer;" :disabled="duplicateModal.scanning || duplicateModal.resolving" />
+              <span style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;">(推荐 85% - 90%)</span>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <button class="btn-primary" @click="scanDuplicates" :disabled="duplicateModal.scanning || duplicateModal.resolving">
+                <i class="fas" :class="duplicateModal.scanning ? 'fa-spinner fa-spin' : 'fa-search'"></i>
+                {{ duplicateModal.scanning ? '正在扫描...' : '开始扫描' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- 扫描结果列表 -->
+          <div style="flex: 1; overflow-y: auto; padding: 20px; min-height: 200px;">
+            <!-- Loading state -->
+            <div v-if="duplicateModal.scanning" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); gap: 12px;">
+              <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary-color);"></i>
+              <p style="font-size: 14px;">正在全库比对表情特征，这可能需要数秒钟...</p>
+            </div>
+
+            <!-- Empty state (Initial or No duplicates) -->
+            <div v-else-if="duplicateGroups.length === 0" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); text-align: center; gap: 12px;">
+              <i class="far fa-copy" style="font-size: 40px; color: var(--border-color);"></i>
+              <p style="font-size: 14px; max-width: 320px;">
+                {{ duplicateModal.scanning ? '' : '选择合适的相似度阈值，然后点击“开始扫描”来寻找相似表情包' }}
+              </p>
+            </div>
+
+            <!-- Duplicate Groups List -->
+            <div v-else style="display: flex; flex-direction: column; gap: 24px;">
+              <div v-for="(group, gIdx) in duplicateGroups" :key="group.id" class="dedup-group-card" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff; overflow: hidden; box-shadow: var(--shadow-sm);">
+                
+                <div class="dedup-group-header" style="padding: 10px 16px; background: rgba(0, 0, 0, 0.02); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                  <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">
+                    相似组 #{{ gIdx + 1 }}
+                  </span>
+                  <span style="font-size: 11px; background: rgba(59, 130, 246, 0.08); color: var(--primary-color); padding: 2px 8px; border-radius: 10px; font-weight: 500;">
+                    共 {{ group.memes.length }} 张相似图片
+                  </span>
+                </div>
+
+                <div class="dedup-group-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; padding: 16px;">
+                  <div v-for="meme in group.memes" :key="meme.filename" class="dedup-meme-card" :class="meme.action" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; display: flex; gap: 12px; transition: var(--transition); background: #ffffff; position: relative;">
+                    
+                    <!-- Thumbnail with overlay for action -->
+                    <div style="width: 80px; height: 80px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.02); border-radius: 4px; border: 1px solid var(--border-color);" :style="{ backgroundImage: 'url(' + getImageUrl(meme.filename) + ')' }"></div>
+                    
+                    <!-- Info & Action -->
+                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0;">
+                      <div style="margin-bottom: 4px;">
+                        <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" :title="meme.filename">
+                          {{ meme.filename }}
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
+                          <span style="font-family: monospace;">{{ meme.width }}x{{ meme.height }}</span>
+                          <span>&bull;</span>
+                          <span>{{ formatBytes(meme.size_bytes) }}</span>
+                          <span v-if="meme.similarity < 1.0" style="color: var(--primary-color); font-weight: 600;">
+                            &bull; 相似度 {{ Math.round(meme.similarity * 100) }}%
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style="display: flex; gap: 6px; margin-top: 8px;">
+                        <button type="button" class="btn-sm" :class="meme.action === 'keep' ? 'btn-primary' : 'btn-secondary'" style="padding: 3px 10px; font-size: 11px;" @click="toggleMemeAction(group, meme, 'keep')">
+                          <i class="fas fa-check"></i> 保留
+                        </button>
+                        <button type="button" class="btn-sm" :class="meme.action === 'delete' ? 'btn-danger' : 'btn-secondary'" style="padding: 3px 10px; font-size: 11px;" @click="toggleMemeAction(group, meme, 'delete')">
+                          <i class="fas fa-trash-can"></i> 删除
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="drawer-actions" style="padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0, 0, 0, 0.01); flex-shrink: 0;">
+            <div style="font-size: 13px; color: var(--text-secondary);">
+              <span v-if="duplicateGroups.length > 0">
+                已选择删除 <strong style="color: var(--danger-color); font-size: 14px;">{{ totalDeletesCount }}</strong> 张重复表情
+              </span>
+            </div>
+            
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary" @click="closeDuplicateModal" :disabled="duplicateModal.resolving">取消</button>
+              <button class="btn-primary" @click="resolveDuplicates" :disabled="duplicateModal.resolving || totalDeletesCount === 0 || duplicateGroups.length === 0">
+                <i class="fas" :class="duplicateModal.resolving ? 'fa-spinner fa-spin' : 'fa-trash-can'"></i>
+                确认清理 (删除 {{ totalDeletesCount }} 张)
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
 
       <!-- 确认操作模态框 -->
       <div v-if="confirmDialog.visible" class="confirm-modal" role="dialog" aria-modal="true">

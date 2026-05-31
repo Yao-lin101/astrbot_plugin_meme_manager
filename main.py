@@ -131,6 +131,7 @@ class MemeSender(Star):
             batch_edit_personas,
             batch_import_emojis,
             batch_move_emoji,
+            check_duplicates,
             check_sync_process,
             clear_all_emoji,
             clear_category,
@@ -148,6 +149,7 @@ class MemeSender(Star):
             get_sync_status,
             move_emoji,
             rename_category,
+            resolve_duplicates,
             restore_category,
             save_persona_tag,
             sync_config,
@@ -159,7 +161,6 @@ class MemeSender(Star):
 
         apis = [
             ("emoji", get_all_emojis, ["GET"]),
-            ("emoji/<category>", get_emojis_by_category, ["GET"]),
             ("emoji/add", add_emoji, ["POST"]),
             ("emoji/delete", delete_emoji, ["POST"]),
             ("emoji/batch_delete", batch_delete_emoji, ["POST"]),
@@ -187,6 +188,9 @@ class MemeSender(Star):
             ("persona_tags", save_persona_tag, ["POST"]),
             ("emoji/batch_import", batch_import_emojis, ["POST"]),
             ("emoji/file_base64", get_emoji_file_base64, ["GET"]),
+            ("emoji/dup/check", check_duplicates, ["GET"]),
+            ("emoji/dup/resolve", resolve_duplicates, ["POST"]),
+            ("emoji/<category>", get_emojis_by_category, ["GET"]),
         ]
 
         for route, handler, methods in apis:
@@ -213,10 +217,12 @@ class MemeSender(Star):
         self.persona_prompts_backup = {}
         self._reload_personas()
 
-        # 初始化标签向量
+        # 初始化标签向量与表情相似度特征
         from .backend.emotion_handler import sync_tag_embeddings
+        from .backend.similarity import sync_similarity_features
 
         asyncio.create_task(sync_tag_embeddings(self))
+        asyncio.create_task(sync_similarity_features(self))
 
     def wrap_api_handler(self, handler):
         async def wrapper(*args, **kwargs):
@@ -607,3 +613,11 @@ class MemeSender(Star):
     @property
     def streaming_compatibility(self) -> bool:
         return get_config_value(self.config, "streaming_compatibility", False)
+
+    @property
+    def enable_similarity_dedup(self) -> bool:
+        return get_config_value(self.config, "enable_similarity_dedup", True)
+
+    @property
+    def similarity_dedup_threshold(self) -> float:
+        return get_config_value(self.config, "similarity_dedup_threshold", 0.85)
