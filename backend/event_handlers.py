@@ -59,10 +59,15 @@ class EventHandlers:
         )
 
     @staticmethod
-    async def steal_meme(sender, event: AstrMessageEvent, categories: list[str]):
+    async def steal_meme(
+        sender,
+        event: AstrMessageEvent,
+        categories: list[str],
+        description: str | None = None,
+    ):
         from .meme_stealer import steal_meme
 
-        return await steal_meme(sender, event, categories)
+        return await steal_meme(sender, event, categories, description=description)
 
     @staticmethod
     async def auto_steal_meme(sender, event: AstrMessageEvent):

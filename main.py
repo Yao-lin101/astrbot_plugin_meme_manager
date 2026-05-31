@@ -557,17 +557,21 @@ class MemeSender(Star):
         event: AstrMessageEvent,
         categories: list[str] | None = None,
         category: str | None = None,
+        description: str | None = None,
     ):
         """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
 
         Args:
             categories(list): 表情包所属的类别列表，如 ["happy", "sad"] 等。注意：只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时才传入此参数；如果用户只是说“偷图/收录”或未明确指定，请保持此参数为 None，严禁自行推测或生成分类。
             category(string): 同上，表情包所属的类别（单标签兼容，仅在用户明确指定时传入，否则不传）
+            description(string): 对这张表情包画面的简洁描述，请用简短的一句话描述该图内容（如 "一只摊在地上表情无语的猫猫" 或 "熊猫头双手抱头表示痛苦"）。此参数对于表情包的后续精准检索和描述匹配至关重要！
         """
         await self.check_and_reload_if_changed()
         if not categories and category:
             categories = [category]
-        return await EventHandlers.steal_meme(self, event, categories)
+        return await EventHandlers.steal_meme(
+            self, event, categories, description=description
+        )
 
     @llm_tool(name="send_meme")
     async def send_meme(
@@ -595,34 +599,56 @@ class MemeSender(Star):
         if not candidates:
             return f"未找到与标签 '{query}' 相关的表情包，请尝试其他的关键词检索。"
 
-        # Group candidates by sorted emotions to ensure uniqueness of labels in the candidate list.
-        groups = {}
-        unique_candidates = []
+        # Group candidates to avoid duplicates and implement selection logic.
+        display_groups = []
+        desc_lookup = {}
+        tags_lookup = {}
+
         for c in candidates:
-            key = tuple(sorted(e.strip().lower() for e in c["emotions"]))
-            if key not in groups:
-                groups[key] = []
-                unique_candidates.append(c)
-            groups[key].append(c)
+            desc = c.get("description")
+            if desc and desc.strip():
+                desc_text = desc.strip()
+                if desc_text in desc_lookup:
+                    desc_lookup[desc_text]["memes"].append(c)
+                else:
+                    group = {
+                        "type": "description",
+                        "display_text": f"描述：{desc_text}",
+                        "memes": [c],
+                    }
+                    display_groups.append(group)
+                    desc_lookup[desc_text] = group
+            else:
+                key = tuple(sorted(e.strip().lower() for e in c["emotions"]))
+                if key in tags_lookup:
+                    tags_lookup[key]["memes"].append(c)
+                else:
+                    tags_str = ", ".join(c["emotions"])
+                    group = {
+                        "type": "tags",
+                        "display_text": f"标签：[{tags_str}]",
+                        "memes": [c],
+                    }
+                    display_groups.append(group)
+                    tags_lookup[key] = group
 
         if index is None:
             response_text = f"已找到与标签 '{query}' 相关的表情包候选列表：\n"
-            for i, c in enumerate(unique_candidates, start=1):
-                tags_str = ", ".join(c["emotions"])
-                response_text += f"{i}. 标签：[{tags_str}]\n"
+            for i, group in enumerate(display_groups, start=1):
+                response_text += f"{i}. {group['display_text']}\n"
             response_text += "请在上述候选中选择最合适的一个序号，并再次调用本工具传入 `index` 参数（如 index=1）来发送对应的表情包。"
             return response_text
 
         idx = int(index) - 1
-        if idx < 0 or idx >= len(unique_candidates):
-            return f"无效的序号 {index}。当前可选的序号范围是 1 到 {len(unique_candidates)}。"
+        if idx < 0 or idx >= len(display_groups):
+            return (
+                f"无效的序号 {index}。当前可选的序号范围是 1 到 {len(display_groups)}。"
+            )
 
-        selected_candidate = unique_candidates[idx]
-        key = tuple(sorted(e.strip().lower() for e in selected_candidate["emotions"]))
-
+        selected_group = display_groups[idx]
         import random
 
-        selected_meme = random.choice(groups[key])
+        selected_meme = random.choice(selected_group["memes"])
         filename = selected_meme["filename"]
         meme_file = os.path.join(MEMES_DIR, filename)
 
@@ -651,7 +677,12 @@ class MemeSender(Star):
                 except Exception:
                     pass
 
-            return f"表情包已成功发送！已选择标签为 [{', '.join(selected_meme['emotions'])}] 的表情包。"
+            desc_info = (
+                f"描述为 '{selected_meme['description']}'"
+                if selected_meme.get("description")
+                else f"标签为 [{', '.join(selected_meme['emotions'])}]"
+            )
+            return f"表情包已成功发送！已选择{desc_info}的表情包。"
         except Exception as e:
             logger.error(f"[meme_manager] LLM发图工具发送失败: {e}")
             return f"表情包发送失败：{e}"
@@ -701,18 +732,22 @@ class MemeSender(Star):
     @property
     def multimodal_tag_prompt(self) -> str:
         default_tag_prompt = (
-            "请对这张表情包图片进行深度的视觉与语义分析，并从以下几个社交使用维度中提炼出最契合该图的 2-5 个中文分类标签：\n\n"
-            "1. 意图与社交功能维度（使用者想用它达到什么社交目的？）：\n"
-            "   - 如：破冰、开场、敷衍、话题终结（呵呵/递茶）、赞同、反对、索求（抱抱/摸头/红包）等行为补偿。\n"
-            "2. 情绪与心理映射维度（传达的原生或复合情绪是什么？）：\n"
-            "   - 如：开心、委屈、得意、尴尬、强颜欢笑、开摆、自嘲、暴躁、发疯、吃惊、无语。\n"
-            "3. 符号与画面主体维度（画面的主角和主要动作是什么？）：\n"
-            "   - 如：猫猫、柴犬、熊猫头、二次元少女、电脑、睡觉、指点、吃瓜。\n"
-            "4. 社交关系、风格与态度维度（表达了怎样的对话语气或关系态度？）：\n"
-            "   - 如：职场发疯、向下示弱、阴阳怪气、沙雕、高糊、二次元、玩梗、土味、治愈。\n\n"
-            "【标签规则】：\n"
-            "- 标签应当使用简短、高频的中文词汇（如：贴贴、无语、猫猫、开摆、敷衍、职场）。\n"
-            "- 请结合图片内容和上述维度，选择最具有代表性的 2-5 个标签，不需要每个维度都覆盖。"
+            "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
+            "标签策略（重点优化）：\n"
+            "- 标签数量：4-6个精选标签，避免冗余\n"
+            "- 标签优先级（从高到低）：\n"
+            '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
+            '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
+            '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
+            '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
+            '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
+            "- 标签质量：\n"
+            "  * 使用通俗易懂的词汇\n"
+            "  * 考虑用户搜索习惯与词汇偏好\n"
+            "  * 平衡具体性和通用性\n"
+            "  * 避免过于专业或生僻的术语\n\n"
+            "描述：\n"
+            "根据画面和标签结果进行简洁描述。"
         )
         return get_config_value(
             self.config, "multimodal_tag_prompt", default_tag_prompt

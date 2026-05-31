@@ -801,6 +801,16 @@
                 </div>
               </div>
 
+              <!-- 表情包描述 -->
+              <div class="drawer-section">
+                <label for="drawer-description-input">表情描述</label>
+                <textarea id="drawer-description-input" 
+                          v-model="detailEmojiDescription" 
+                          class="form-control" 
+                          style="width: 100%; height: 60px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: #ffffff; color: var(--text-primary); resize: vertical; font-family: inherit; font-size: 13px;" 
+                          placeholder="请输入表情包的简短描述..."></textarea>
+              </div>
+
               <!-- 人格可用性多选 -->
               <div class="drawer-section">
                 <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
