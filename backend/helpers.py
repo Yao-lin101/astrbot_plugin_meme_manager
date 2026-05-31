@@ -248,15 +248,92 @@ def _get_persona_tags_path():
     return PERSONA_TAGS_PATH
 
 
-def load_persona_tags() -> dict[str, str]:
-    from ..utils import load_json
-
+def migrate_old_persona_tags_if_needed(config: dict) -> None:
+    """如果存在旧的 persona_tags.json，则将其迁移到插件配置项中，并删除旧文件。"""
     path = _get_persona_tags_path()
-    return load_json(path, {})
+    if path.exists() and path.is_file():
+        try:
+            from ..utils import load_json
+            old_tags = load_json(path, {})
+            if old_tags:
+                settings = config.get("persona_settings")
+                if not settings or not isinstance(settings, dict):
+                    settings = {}
+                for pid, tag in old_tags.items():
+                    if pid not in settings:
+                        settings[pid] = {
+                            "meme_preference": "",
+                            "meme_use_preference": tag
+                        }
+                config["persona_settings"] = settings
+                if hasattr(config, "save_config"):
+                    config.save_config()
+                logger.info("[meme_manager] 成功将旧的人格表情包标签迁移至配置项")
+            path.unlink()
+        except Exception as e:
+            logger.warning(f"[meme_manager] 迁移旧的人格标签文件失败: {e}")
 
 
-def save_persona_tags(tags: dict[str, str]) -> None:
-    from ..utils import save_json
+def get_persona_setting(config: dict, persona_id: str, key: str) -> str:
+    """获取人格的特定偏好配置 (meme_preference 或 meme_use_preference)"""
+    if not config:
+        return ""
+    settings = config.get("persona_settings", {})
+    if not settings or not isinstance(settings, dict):
+        return ""
+    p_cfg = settings.get(persona_id)
+    if not p_cfg or not isinstance(p_cfg, dict):
+        return ""
+    return p_cfg.get(key, "") or ""
 
-    path = _get_persona_tags_path()
-    save_json(tags, path)
+
+def load_persona_tags(config: dict | None = None) -> dict[str, str]:
+    """获取所有人格的专属标签（兼容旧逻辑，返回 {persona_id: tags_str} 字典）"""
+    if config is None:
+        try:
+            from quart import current_app
+            plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+            if plugin_config:
+                config = plugin_config.get("plugin_config")
+        except Exception:
+            pass
+
+    if config is not None:
+        settings = config.get("persona_settings", {})
+        if not settings or not isinstance(settings, dict):
+            return {}
+        res = {}
+        for pid, val in settings.items():
+            if isinstance(val, dict):
+                res[pid] = val.get("meme_use_preference", "") or ""
+            else:
+                res[pid] = str(val)
+        return res
+
+    return {}
+
+
+def save_persona_tags(tags: dict[str, str], config: dict | None = None) -> None:
+    """保存人格标签（兼容旧逻辑）"""
+    if config is None:
+        try:
+            from quart import current_app
+            plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+            if plugin_config:
+                config = plugin_config.get("plugin_config")
+        except Exception:
+            pass
+
+    if config is not None:
+        settings = config.get("persona_settings", {})
+        if not settings or not isinstance(settings, dict):
+            settings = {}
+        for pid, tag in tags.items():
+            if pid not in settings:
+                settings[pid] = {"meme_preference": "", "meme_use_preference": tag}
+            else:
+                settings[pid]["meme_use_preference"] = tag
+        config["persona_settings"] = settings
+        if hasattr(config, "save_config"):
+            config.save_config()
+

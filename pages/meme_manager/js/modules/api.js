@@ -6,7 +6,8 @@ export function useApi(showToast, pruneSelections) {
   const tagDescriptions = ref({});
   const systemPersonas = ref([]);
   const personaTags = ref({});
-  const personaDedicatedTag = ref("");
+  const personaUsePreference = ref("");
+  const personaCollectPreference = ref("");
   const personaFilter = ref("");
   const activeCategories = ref(['all']);
   
@@ -19,7 +20,9 @@ export function useApi(showToast, pruneSelections) {
     visibleLimit.value = 40;
     try {
       const personaId = personaFilter.value;
-      personaDedicatedTag.value = personaTags.value[personaId] || "";
+      const pConfig = personaTags.value[personaId] || {};
+      personaUsePreference.value = pConfig.meme_use_preference || pConfig.tag || "";
+      personaCollectPreference.value = pConfig.meme_preference || "";
       const url = personaId ? `/api/emoji?persona_id=${encodeURIComponent(personaId)}` : "/api/emoji";
       
       const [emojiRes, tagRes] = await Promise.all([
@@ -77,28 +80,33 @@ export function useApi(showToast, pruneSelections) {
     }
   };
 
-  const savePersonaDedicatedTag = async () => {
+  const savePersonaSettings = async () => {
     const personaId = personaFilter.value;
     if (!personaId) return;
 
-    const tag = personaDedicatedTag.value;
+    const meme_use_preference = personaUsePreference.value;
+    const meme_preference = personaCollectPreference.value;
     try {
       const res = await fetch("/api/persona_tags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           persona_id: personaId,
-          tag: tag
+          meme_use_preference: meme_use_preference,
+          meme_preference: meme_preference
         })
       });
-      if (!res.ok) throw new Error("保存专属标签失败");
+      if (!res.ok) throw new Error("保存专属配置失败");
 
-      if (!tag || !tag.trim()) {
+      if (!meme_use_preference.trim() && !meme_preference.trim()) {
         delete personaTags.value[personaId];
       } else {
-        personaTags.value[personaId] = tag.trim();
+        personaTags.value[personaId] = {
+          meme_use_preference: meme_use_preference.trim(),
+          meme_preference: meme_preference.trim()
+        };
       }
-      showToast("专属标签已保存！", "success", "保存成功");
+      showToast("专属配置已保存！", "success", "保存成功");
     } catch (e) {
       showToast(e.message, "error", "保存失败");
     }
@@ -239,7 +247,8 @@ export function useApi(showToast, pruneSelections) {
     tagDescriptions,
     systemPersonas,
     personaTags,
-    personaDedicatedTag,
+    personaUsePreference,
+    personaCollectPreference,
     personaFilter,
     activeCategories,
     activeCategoryEmojisList,
@@ -249,7 +258,7 @@ export function useApi(showToast, pruneSelections) {
     fetchEmojis,
     fetchPersonas,
     fetchPersonaTags,
-    savePersonaDedicatedTag,
+    savePersonaSettings,
     filteredCategories,
     filteredDrawerTags,
     emojiTagsMap,

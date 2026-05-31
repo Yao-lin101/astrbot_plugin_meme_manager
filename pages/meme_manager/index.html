@@ -252,12 +252,18 @@
                   </option>
                 </select>
               </div>
-              <div v-if="personaFilter" class="persona-tag-wrapper" style="display: inline-flex; align-items: center; gap: 8px;">
-                <label for="persona-tag-input"><i class="fas fa-tag icon"></i>专属标签:</label>
-                <input list="categories-list" id="persona-tag-input" v-model="personaDedicatedTag" @change="savePersonaDedicatedTag" class="form-control" style="width: 160px; height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);" placeholder="(可选) 如 maid" />
-                <datalist id="categories-list">
-                  <option v-for="cat in Object.keys(emojiData)" :key="cat" :value="cat"></option>
-                </datalist>
+              <div v-if="personaFilter" class="persona-tag-wrapper" style="display: inline-flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                  <label for="persona-use-tag-input"><i class="fas fa-tag icon"></i>使用偏好 (标签):</label>
+                  <input list="categories-list" id="persona-use-tag-input" v-model="personaUsePreference" @change="savePersonaSettings" class="form-control" style="width: 160px; height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);" placeholder="(可选) 如 maid" />
+                  <datalist id="categories-list">
+                    <option v-for="cat in Object.keys(emojiData)" :key="cat" :value="cat"></option>
+                  </datalist>
+                </div>
+                <div style="display: inline-flex; align-items: center; gap: 8px;">
+                  <label for="persona-collect-tag-input"><i class="fas fa-eye icon"></i>收集偏好 (描述):</label>
+                  <input id="persona-collect-tag-input" v-model="personaCollectPreference" @change="savePersonaSettings" class="form-control" style="width: 280px; height: 36px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary);" placeholder="(可选) 自然语言描述，如：只收集沙雕图" />
+                </div>
               </div>
             </div>
             <div class="selection-toolbar-actions" style="display: flex; align-items: center; gap: 8px;">

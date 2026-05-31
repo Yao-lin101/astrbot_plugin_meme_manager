@@ -31,6 +31,37 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
         logger.debug("[meme_manager] event.get_result() 为空，结束处理。")
         return
 
+    if getattr(sender, "enable_llm_tool", False):
+        logger.debug("[meme_manager] LLM 发图工具已启用，装饰阶段仅进行文本标签清理。")
+        original_chain = result.chain
+        if original_chain:
+            cleaned_components = []
+            if isinstance(original_chain, str):
+                cleaned = re.sub(
+                    r"<emotions>.*?</emotions>",
+                    "",
+                    original_chain,
+                    flags=re.DOTALL | re.IGNORECASE,
+                )
+                if cleaned.strip():
+                    result.chain = [Plain(cleaned.strip())]
+            elif isinstance(original_chain, list):
+                for comp in original_chain:
+                    if isinstance(comp, Plain):
+                        cleaned = re.sub(
+                            r"<emotions>.*?</emotions>",
+                            "",
+                            comp.text,
+                            flags=re.DOTALL | re.IGNORECASE,
+                        )
+                        if cleaned.strip():
+                            cleaned_components.append(Plain(cleaned.strip()))
+                    else:
+                        cleaned_components.append(comp)
+                result.chain = cleaned_components
+        return
+
+
     if result.result_content_type == ResultContentType.STREAMING_FINISH:
         if sender.streaming_compatibility:
             logger.debug(

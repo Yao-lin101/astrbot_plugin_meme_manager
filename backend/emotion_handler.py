@@ -57,13 +57,12 @@ async def _select_memes_by_emotions_priority(
     from .helpers import load_persona_tags
 
     p_tags = load_persona_tags()
-    dedicated_tag = p_tags.get(persona_id)
-    if dedicated_tag:
-        dedicated_tag = dedicated_tag.strip()
+    dedicated_tag_str = p_tags.get(persona_id) or ""
+    dedicated_tags = [t.strip() for t in dedicated_tag_str.split(",") if t.strip()]
 
     emotions_to_match = (
-        [e for e in found_emotions if e != dedicated_tag]
-        if dedicated_tag
+        [e for e in found_emotions if e not in dedicated_tags]
+        if dedicated_tags
         else found_emotions
     )
 
@@ -87,10 +86,12 @@ async def _select_memes_by_emotions_priority(
                 if e in meme_emotions:
                     position_bonus += max(0, 100 - idx)
 
-            # 专属标签额外加分（500分）
+            # 专属标签额外加分（每个匹配到的专属标签加 500 分）
             dedicated_bonus = 0
-            if dedicated_tag and dedicated_tag in meme_emotions:
-                dedicated_bonus = 500
+            if dedicated_tags:
+                for d_tag in dedicated_tags:
+                    if d_tag in meme_emotions:
+                        dedicated_bonus += 500
 
             score = matched_count * 1000 + position_bonus + dedicated_bonus
             valid_memes.append((filename, score))
@@ -396,6 +397,9 @@ async def _handle_resp_vector(
 
 async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
     """处理 LLM 响应，识别表情"""
+    if getattr(sender, "enable_llm_tool", False):
+        logger.debug("[meme_manager] LLM 发图工具已启用，跳过自动表情识别。")
+        return
     if not response or not response.completion_text:
         logger.debug("[meme_manager] LLM 响应为空，跳过表情识别。")
         return
@@ -484,3 +488,86 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
         logger.error(traceback.format_exc())
     finally:
         sender.found_emotions = []
+
+
+async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict]:
+    """为 LLM 搜索表情包。支持精确子串匹配与向量相似度检索。"""
+    query = query.strip()
+    if not query:
+        return []
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT filename, emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+        (f"%,{persona_id},%",),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    # 获取 Embeddings Provider
+    provider_id = get_config_value(sender.config, "embedding_provider_id", "")
+    embedding_provider = None
+    if provider_id:
+        embedding_provider = sender.context.get_provider_by_id(provider_id)
+    if not embedding_provider:
+        provs = sender.context.get_all_embedding_providers()
+        if provs:
+            embedding_provider = provs[0]
+
+    # 计算 query 的 embedding
+    query_vector = None
+    if embedding_provider:
+        try:
+            query_vector = await embedding_provider.get_embedding(query)
+        except Exception as e:
+            logger.warning(f"[meme_manager] 获取查询词 '{query}' 向量失败: {e}")
+
+    # 获取所有标签的向量
+    from .database import get_all_tag_embeddings
+    tag_embeddings = get_all_tag_embeddings()
+
+    similarity_threshold = get_config_value(
+        sender.config, "embedding_similarity_threshold", 0.6
+    )
+
+    scored_memes = []
+    for row in rows:
+        filename = row["filename"]
+        full_path = os.path.join(MEMES_DIR, filename)
+        if not os.path.exists(full_path):
+            continue
+
+        emotions_str = row["emotions"] or ""
+        emotions = [e.strip() for e in emotions_str.split(",") if e.strip()]
+
+        max_score = 0.0
+        # 1. 尝试子串匹配
+        for emotion in emotions:
+            if query.lower() in emotion.lower():
+                score = 1.0 + (len(query) / len(emotion)) * 0.1
+                if score > max_score:
+                    max_score = score
+
+        # 2. 尝试向量相似度匹配
+        if query_vector and tag_embeddings:
+            for emotion in emotions:
+                tag_vec = tag_embeddings.get(emotion)
+                if tag_vec:
+                    sim = cosine_similarity(query_vector, tag_vec)
+                    if sim >= similarity_threshold:
+                        score = sim
+                        if score > max_score:
+                            max_score = score
+
+        if max_score > 0.0:
+            scored_memes.append({
+                "filename": filename,
+                "emotions": emotions,
+                "score": max_score
+            })
+
+    # 按分数降序排列，最多返回前 8 个
+    scored_memes.sort(key=lambda x: x["score"], reverse=True)
+    return scored_memes[:8]
+
