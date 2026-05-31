@@ -928,6 +928,9 @@ async def check_duplicates():
     """扫描所有表情包以查找重复的相似表情"""
     try:
         threshold = float(request.args.get("threshold", 0.85))
+        logger.info(
+            f"[meme_manager] Starting duplicate scan with threshold={threshold}"
+        )
 
         import json
 
@@ -951,6 +954,7 @@ async def check_duplicates():
             }
             for row in meme_rows
         }
+        logger.info(f"[meme_manager] Loaded {len(meme_meta)} memes metadata entries.")
 
         # Load all similarity features
         cursor.execute(
@@ -958,6 +962,7 @@ async def check_duplicates():
         )
         rows = cursor.fetchall()
         conn.close()
+        logger.info(f"[meme_manager] Loaded {len(rows)} similarity features from DB.")
 
         features_list = []
         for row in rows:
@@ -976,8 +981,15 @@ async def check_duplicates():
                         "meta": meme_meta[filename],
                     }
                 )
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    f"[meme_manager] Failed to load features for {filename}: {e}"
+                )
                 continue
+
+        logger.info(
+            f"[meme_manager] Loaded {len(features_list)} valid features for duplicate comparison."
+        )
 
         # Group similar memes
         from pathlib import Path
@@ -1030,6 +1042,9 @@ async def check_duplicates():
                     )
                 groups.append({"id": f"group_{len(groups) + 1}", "memes": clean_memes})
 
+        logger.info(
+            f"[meme_manager] Duplicate scan complete. Found {len(groups)} duplicate groups."
+        )
         return jsonify({"status": "success", "groups": groups}), 200
     except Exception as e:
         logger.error(f"检查重复表情包失败: {e}", exc_info=True)
