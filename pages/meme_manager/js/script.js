@@ -68,6 +68,44 @@ createApp({
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
     const otherDropdownVisible = ref(false);
+    const showUsePreferenceDropdown = ref(false);
+    const newPreferenceTagInput = ref("");
+
+    const personaUsePreferenceList = computed({
+      get() {
+        const pref = api.personaUsePreference.value;
+        if (!pref) return [];
+        return pref.split(',').map(s => s.trim()).filter(Boolean);
+      },
+      set(list) {
+        api.personaUsePreference.value = list.join(', ');
+        void api.savePersonaSettings();
+      }
+    });
+
+    const toggleUsePreferenceTag = (tag) => {
+      const list = [...personaUsePreferenceList.value];
+      const idx = list.indexOf(tag);
+      if (idx > -1) {
+        list.splice(idx, 1);
+      } else {
+        list.push(tag);
+      }
+      personaUsePreferenceList.value = list;
+    };
+
+    const addNewPreferenceTag = () => {
+      const val = newPreferenceTagInput.value.trim();
+      if (val) {
+        const list = [...personaUsePreferenceList.value];
+        if (!list.includes(val)) {
+          list.push(val);
+          personaUsePreferenceList.value = list;
+        }
+        newPreferenceTagInput.value = "";
+      }
+    };
+
 
     const getImageUrl = (emoji) => {
       if (!emoji) return '';
@@ -243,6 +281,11 @@ createApp({
       // UI States & Navigation
       syncDrawerVisible,
       otherDropdownVisible,
+      showUsePreferenceDropdown,
+      newPreferenceTagInput,
+      personaUsePreferenceList,
+      toggleUsePreferenceTag,
+      addNewPreferenceTag,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,
