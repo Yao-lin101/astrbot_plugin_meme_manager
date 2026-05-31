@@ -531,6 +531,8 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
         sender.config, "embedding_similarity_threshold", 0.6
     )
 
+    query_parts = [q.strip() for q in query.split(",") if q.strip()]
+
     scored_memes = []
     for row in rows:
         filename = row["filename"]
@@ -542,12 +544,22 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
         emotions = [e.strip() for e in emotions_str.split(",") if e.strip()]
 
         max_score = 0.0
-        # 1. 尝试子串匹配
-        for emotion in emotions:
-            if query.lower() in emotion.lower():
-                score = 1.0 + (len(query) / len(emotion)) * 0.1
-                if score > max_score:
-                    max_score = score
+        # 1. 尝试多标签子串匹配与打分提升
+        match_count = 0
+        match_score = 0.0
+        for part in query_parts:
+            part_best = 0.0
+            for emotion in emotions:
+                if part.lower() in emotion.lower():
+                    score = 1.0 + (len(part) / len(emotion)) * 0.1
+                    if score > part_best:
+                        part_best = score
+            if part_best > 0.0:
+                match_count += 1
+                match_score += part_best
+
+        if match_count > 0:
+            max_score = (match_score / len(query_parts)) + 0.5 * (match_count - 1)
 
         # 2. 尝试向量相似度匹配
         if query_vector and tag_embeddings:
@@ -556,9 +568,8 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
                 if tag_vec:
                     sim = cosine_similarity(query_vector, tag_vec)
                     if sim >= similarity_threshold:
-                        score = sim
-                        if score > max_score:
-                            max_score = score
+                        if sim > max_score:
+                            max_score = sim
 
         if max_score > 0.0:
             scored_memes.append({
