@@ -111,6 +111,7 @@ async def steal_meme(
     image_content: bytes | None = None,
     image_hash: str | None = None,
     image_type: str | None = None,
+    description: str | None = None,
 ):
     """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
 
@@ -139,6 +140,7 @@ async def steal_meme(
 
     # 2. 从当前事件消息中提取图片（优先支持引用/回复图片，其次支持同消息内直发图片）
     last_image_url = None
+    description_str = description or ""
 
     # A. 检测当前事件是否引用了图片
     for comp in event.message_obj.message:
@@ -354,12 +356,19 @@ async def steal_meme(
             prompt = (
                 f"{guidelines}\n\n"
                 "【输出格式要求（极其重要）】：\n"
-                '- 请仅以 JSON 数组格式返回，例如：["敷衍", "猫猫", "职场发疯"]\n'
-                "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 数组。"
+                "- 请仅以 JSON 格式的字典对象返回，其中必须包含两个字段：\n"
+                '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
+                '  2. `description` (字符串，对这张表情包画面的简洁描述，如 "一只猫猫摊在地上露出无语的表情")\n'
+                "例如：\n"
+                "{\n"
+                '  "tags": ["敷衍", "猫猫"],\n'
+                '  "description": "一只摊在地上表情无语的猫猫"\n'
+                "}\n"
+                "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
             )
 
             try:
-                logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类...")
+                logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类与描述...")
                 llm_resp = await sender.context.llm_generate(
                     chat_provider_id=provider_id,
                     prompt=prompt,
@@ -372,7 +381,7 @@ async def steal_meme(
                     try:
                         data = json.loads(raw_text)
                     except Exception:
-                        match = re.search(r"\[\s*\"[\s\S]*\"\s*\]", raw_text)
+                        match = re.search(r"\{[\s\S]*\}", raw_text)
                         if match:
                             try:
                                 data = json.loads(match.group(0))
@@ -380,15 +389,22 @@ async def steal_meme(
                                 pass
 
                     parsed_categories = []
-                    if isinstance(data, list):
-                        parsed_categories = [str(x) for x in data]
+                    if isinstance(data, dict):
+                        parsed_categories = [str(x) for x in data.get("tags", [])]
+                        if not description_str:
+                            description_str = str(data.get("description", "")).strip()
                     else:
-                        for cat in valid_categories:
-                            if cat in raw_text:
-                                parsed_categories.append(cat)
+                        if isinstance(data, list):
+                            parsed_categories = [str(x) for x in data]
+                        else:
+                            for cat in valid_categories:
+                                if cat in raw_text:
+                                    parsed_categories.append(cat)
 
                     if parsed_categories:
-                        logger.debug(f"多模态模型判定表情分类为: {parsed_categories}")
+                        logger.debug(
+                            f"多模态模型判定表情分类为: {parsed_categories}, 描述为: {description_str}"
+                        )
                         for cat in parsed_categories:
                             cat = cat.strip()
                             if cat in valid_categories:
@@ -419,7 +435,7 @@ async def steal_meme(
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT filename, emotions, personas FROM memes WHERE original_hash = ?",
+        "SELECT filename, emotions, personas, description FROM memes WHERE original_hash = ?",
         (raw_hash,),
     )
     row = cursor.fetchone()
@@ -442,11 +458,19 @@ async def steal_meme(
             else:
                 existing_personas = {"*"}
 
+            existing_description = row["description"] or ""
+            final_description = (
+                description_str
+                if (description_str and description_str.strip())
+                else existing_description
+            )
+
             cursor.execute(
-                "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
+                "UPDATE memes SET emotions = ?, personas = ?, description = ? WHERE filename = ?",
                 (
                     ",".join(existing_emotions),
                     ",".join(existing_personas),
+                    final_description,
                     existing_filename,
                 ),
             )
@@ -489,6 +513,7 @@ async def steal_meme(
             personas=persona_id,
             config=sender.config,
             original_hash=raw_hash,
+            description=description_str,
         )
 
         # 执行成功，记录缓存

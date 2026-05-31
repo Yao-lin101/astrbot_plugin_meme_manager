@@ -118,6 +118,7 @@ def save_and_register_meme(
     personas: str = "*",
     config: dict = None,
     original_hash: str = None,
+    description: str | None = None,
 ) -> dict:
     """
     保存并注册表情包到数据库和磁盘（由 chat 上传或 steal tool 调用）
@@ -168,7 +169,8 @@ def save_and_register_meme(
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT emotions, personas FROM memes WHERE filename = ?", (safe_name,)
+        "SELECT emotions, personas, description FROM memes WHERE filename = ?",
+        (safe_name,),
     )
     row = cursor.fetchone()
 
@@ -190,25 +192,44 @@ def save_and_register_meme(
         else:
             existing_personas = {"*"}
 
+        existing_description = row["description"] or ""
+        final_description = (
+            description
+            if (description and description.strip())
+            else existing_description
+        )
+
         if original_hash:
             cursor.execute(
-                "UPDATE memes SET emotions = ?, personas = ?, original_hash = ? WHERE filename = ?",
+                "UPDATE memes SET emotions = ?, personas = ?, original_hash = ?, description = ? WHERE filename = ?",
                 (
                     ",".join(existing_emotions),
                     ",".join(existing_personas),
                     original_hash,
+                    final_description,
                     safe_name,
                 ),
             )
         else:
             cursor.execute(
-                "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
-                (",".join(existing_emotions), ",".join(existing_personas), safe_name),
+                "UPDATE memes SET emotions = ?, personas = ?, description = ? WHERE filename = ?",
+                (
+                    ",".join(existing_emotions),
+                    ",".join(existing_personas),
+                    final_description,
+                    safe_name,
+                ),
             )
     else:
         cursor.execute(
-            "INSERT INTO memes (filename, emotions, personas, original_hash) VALUES (?, ?, ?, ?)",
-            (safe_name, ",".join(new_categories), personas, original_hash),
+            "INSERT INTO memes (filename, emotions, personas, original_hash, description) VALUES (?, ?, ?, ?, ?)",
+            (
+                safe_name,
+                ",".join(new_categories),
+                personas,
+                original_hash,
+                description or "",
+            ),
         )
     conn.commit()
     conn.close()

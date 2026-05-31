@@ -29,7 +29,8 @@ def init_db():
         filename TEXT UNIQUE,
         emotions TEXT,
         personas TEXT,
-        original_hash TEXT
+        original_hash TEXT,
+        description TEXT
     )
     """)
     cursor.execute("""
@@ -94,9 +95,15 @@ def init_db():
         cursor.execute("ALTER TABLE meme_steal_attempts ADD COLUMN reason TEXT")
         conn.commit()
 
-    # 检查 original_hash 列是否存在
+    # 检查 description 列是否存在
     cursor.execute("PRAGMA table_info(memes)")
     columns = [row["name"] for row in cursor.fetchall()]
+    if "description" not in columns:
+        logger.info("数据库表中缺少 description 字段，正在进行升级...")
+        cursor.execute("ALTER TABLE memes ADD COLUMN description TEXT")
+        conn.commit()
+
+    # 检查 original_hash 列是否存在
     if "original_hash" not in columns:
         logger.info("数据库表中缺少 original_hash 字段，正在进行升级...")
         cursor.execute("ALTER TABLE memes ADD COLUMN original_hash TEXT")

@@ -499,7 +499,7 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT filename, emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+        "SELECT filename, emotions, description FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
         (f"%,{persona_id},%",),
     )
     rows = cursor.fetchall()
@@ -574,7 +574,12 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
 
         if max_score > 0.0:
             scored_memes.append(
-                {"filename": filename, "emotions": emotions, "score": max_score}
+                {
+                    "filename": filename,
+                    "emotions": emotions,
+                    "description": row["description"] or "",
+                    "score": max_score,
+                }
             )
 
     # 按分数降序排列，最多返回前 8 个

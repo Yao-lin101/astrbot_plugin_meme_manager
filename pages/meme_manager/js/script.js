@@ -323,6 +323,7 @@ createApp({
       // Emoji Actions
       activeDetailEmoji: emojiActions.activeDetailEmoji,
       detailMetadata: emojiActions.detailMetadata,
+      detailEmojiDescription: emojiActions.detailEmojiDescription,
       selectedEmotions: api.selectedEmotions,
       selectedPersonas: emojiActions.selectedPersonas,
       detailDrawerLoading: emojiActions.detailDrawerLoading,
