@@ -106,6 +106,14 @@ createApp({
       }
     };
 
+    const filteredPreferenceCategories = computed(() => {
+      const query = newPreferenceTagInput.value.trim().toLowerCase();
+      const categories = Object.keys(api.emojiData.value || {});
+      if (!query) return categories;
+      return categories.filter(cat => cat.toLowerCase().includes(query));
+    });
+
+
 
     const getImageUrl = (emoji) => {
       if (!emoji) return '';
@@ -286,6 +294,7 @@ createApp({
       personaUsePreferenceList,
       toggleUsePreferenceTag,
       addNewPreferenceTag,
+      filteredPreferenceCategories,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,

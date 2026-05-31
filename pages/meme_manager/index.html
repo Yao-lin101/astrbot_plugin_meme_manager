@@ -315,11 +315,11 @@
                     <div style="padding: 4px 8px; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 4px;" @click.stop>
                       <input type="text" v-model="newPreferenceTagInput" @keyup.enter="addNewPreferenceTag" placeholder="回车添加新标签..." style="width: 100%; height: 26px; font-size: 12px; padding: 0 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); outline: none;" />
                     </div>
-                    <label v-for="cat in Object.keys(emojiData)" :key="cat" @click.stop style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13px; margin: 0; user-select: none; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <label v-for="cat in filteredPreferenceCategories" :key="cat" @click.stop style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13px; margin: 0; user-select: none; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
                       <input type="checkbox" :checked="personaUsePreferenceList.includes(cat)" @change="toggleUsePreferenceTag(cat)" style="width: 14px; height: 14px; cursor: pointer;" />
                       <span style="flex: 1;">{{ cat }}</span>
                     </label>
-                    <div v-if="Object.keys(emojiData).length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 13px; text-align: center;">暂无标签</div>
+                    <div v-if="filteredPreferenceCategories.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 13px; text-align: center;">暂无匹配标签</div>
                   </div>
                 </div>
               </div>
