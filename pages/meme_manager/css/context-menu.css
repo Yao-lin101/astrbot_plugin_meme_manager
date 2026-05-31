@@ -1,0 +1,50 @@
+/* Floating context menu */
+.batch-context-menu {
+  position: fixed;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  z-index: 1000;
+  width: 170px;
+  overflow: hidden;
+}
+
+.batch-context-menu-header {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.batch-context-menu-header p {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.batch-context-menu-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.batch-context-menu-actions button {
+  width: 100%;
+  text-align: left;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  font-size: 12px;
+  background: transparent;
+  border-radius: 0;
+  color: var(--text-primary);
+}
+
+.batch-context-menu-actions button:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.batch-context-menu-actions button.danger {
+  color: var(--danger-color);
+}
+.batch-context-menu-actions button.danger:hover {
+  background: rgba(239, 68, 68, 0.05);
+}

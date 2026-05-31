@@ -1,0 +1,70 @@
+/* Page Toolbar component */
+.page-toolbar {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 14px 20px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-sm);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.selection-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+}
+
+.persona-filter-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.persona-filter-wrapper label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.persona-filter-wrapper select {
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition);
+}
+
+.persona-filter-wrapper select:focus {
+  border-color: var(--primary-color);
+}
+
+.selection-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+#selection-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-right: 8px;
+}
+
+.active-selection {
+  color: #2563eb !important;
+  font-weight: 600;
+}
