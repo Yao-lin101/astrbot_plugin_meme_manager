@@ -12,10 +12,12 @@ from astrbot.api.star import Context, Star, register
 from .backend.category_manager import CategoryManager
 from .backend.commands_handler import CommandsHandler
 from .backend.event_handlers import EventHandlers
+from .backend.helpers import migrate_old_persona_tags_if_needed, get_persona_setting
 from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
 from .utils import get_config_value
+
 
 
 @register(
@@ -27,6 +29,8 @@ class MemeSender(Star):
     def __init__(self, context: Context, config: dict | None = None):
         super().__init__(context)
         self.config = config or {}
+        migrate_old_persona_tags_if_needed(self.config)
+
 
         # Monkeypatch OneBot image serializer to support sticker (subType=1) format
         try:
@@ -217,6 +221,16 @@ class MemeSender(Star):
         self.persona_prompts_backup = {}
         self._reload_personas()
 
+        # 根据配置激活或停用 LLM 工具
+        try:
+            if self.enable_llm_tool:
+                self.context.activate_llm_tool("send_meme")
+            else:
+                self.context.deactivate_llm_tool("send_meme")
+        except Exception as e:
+            logger.warning(f"[meme_manager] 无法激活/停用 LLM 发图工具: {e}")
+
+
         # 初始化标签向量与表情相似度特征
         from .backend.emotion_handler import sync_tag_embeddings
         from .backend.similarity import sync_similarity_features
@@ -320,9 +334,28 @@ class MemeSender(Star):
                 continue
 
             original_prompt = self.persona_prompts_backup.get(name, "")
-            persona["prompt"] = (
-                original_prompt + "\n\n" + self.meme_prompt + format_instruction
-            )
+
+            # 从配置中获取该人格的偏好
+            pref = get_persona_setting(self.config, persona_id, "meme_preference") or get_persona_setting(self.config, name, "meme_preference")
+            use_pref = get_persona_setting(self.config, persona_id, "meme_use_preference") or get_persona_setting(self.config, name, "meme_use_preference")
+
+            pref_prompt = ""
+            if pref:
+                pref_prompt += f"<meme_preference>{pref}</meme_preference>"
+            if use_pref:
+                if pref_prompt:
+                    pref_prompt += "\n"
+                pref_prompt += f"<meme_use_preference>{use_pref}</meme_use_preference>"
+
+            injected_prompt = original_prompt
+            if pref_prompt:
+                injected_prompt += "\n\n" + pref_prompt
+
+            if self.enable_llm_tool:
+                persona["prompt"] = injected_prompt
+            else:
+                persona["prompt"] = injected_prompt + "\n\n" + self.meme_prompt + format_instruction
+
 
     async def reload_emotions(self):
         """动态重新加载表情配置"""
@@ -520,6 +553,75 @@ class MemeSender(Star):
             categories = [category]
         return await EventHandlers.steal_meme(self, event, categories)
 
+    @llm_tool(name="send_meme")
+    async def send_meme(
+        self,
+        event: AstrMessageEvent,
+        query: str,
+        index: int | None = None,
+    ):
+        """搜索并发送表情包。
+
+        Args:
+            query(string): 检索表情包的标签，如 '猫猫'
+            index(number): 选中的表情包序号（从 1 开始）。如果首次调用或需要展示候选列表供选择，请不要进行传值；如果已获得候选列表，请传入选中的序号进行发送。
+        """
+        await self.check_and_reload_if_changed()
+
+        from .backend.helpers import get_persona_id
+        persona_id = await get_persona_id(self, event)
+
+        from .backend.emotion_handler import search_memes_for_llm
+        candidates = await search_memes_for_llm(self, query, persona_id)
+
+        if not candidates:
+            return f"未找到与标签 '{query}' 相关的表情包，请尝试其他的关键词检索。"
+
+        if index is None:
+            response_text = f"已找到与标签 '{query}' 相关的表情包候选列表：\n"
+            for i, c in enumerate(candidates, start=1):
+                tags_str = ", ".join(c["emotions"])
+                response_text += f"{i}. 标签：[{tags_str}]\n"
+            response_text += "请在上述候选中选择最合适的一个序号，并再次调用本工具传入 `index` 参数（如 index=1）来发送对应的表情包。"
+            return response_text
+
+        idx = int(index) - 1
+        if idx < 0 or idx >= len(candidates):
+            return f"无效的序号 {index}。当前可选的序号范围是 1 到 {len(candidates)}。"
+
+        selected_meme = candidates[idx]
+        filename = selected_meme["filename"]
+        meme_file = os.path.join(MEMES_DIR, filename)
+
+        if not os.path.exists(meme_file):
+            return "所选表情包文件不存在或已被删除。"
+
+        from .backend.helpers import convert_to_gif
+        final_meme_file = convert_to_gif(meme_file, self)
+
+        try:
+            img = Image.fromFileSystem(final_meme_file)
+            object.__setattr__(img, "sub_type", 1) # 发送为表情包格式
+
+            if event.get_platform_name() == "gewechat":
+                await event.send(MessageChain([img]))
+            else:
+                await self.context.send_message(
+                    event.unified_msg_origin,
+                    MessageChain([img]),
+                )
+
+            if final_meme_file != meme_file and os.path.exists(final_meme_file):
+                try:
+                    os.remove(final_meme_file)
+                except Exception:
+                    pass
+
+            return f"表情包已成功发送！已选择标签为 [{', '.join(selected_meme['emotions'])}] 的表情包。"
+        except Exception as e:
+            logger.error(f"[meme_manager] LLM发图工具发送失败: {e}")
+            return f"表情包发送失败：{e}"
+
     async def terminate(self):
         """清理资源"""
         personas = self.context.provider_manager.personas
@@ -621,3 +723,8 @@ class MemeSender(Star):
     @property
     def similarity_dedup_threshold(self) -> float:
         return get_config_value(self.config, "similarity_dedup_threshold", 0.85)
+
+    @property
+    def enable_llm_tool(self) -> bool:
+        return get_config_value(self.config, "enable_llm_tool", False)
+

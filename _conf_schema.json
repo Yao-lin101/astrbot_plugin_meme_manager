@@ -281,5 +281,17 @@
         "hint": "相似度大于此阈值时，新表情包将被判定为重复图片并拒绝收录。"
       }
     }
+  },
+  "enable_llm_tool": {
+    "description": "启用大模型表情包发送工具",
+    "type": "bool",
+    "default": false,
+    "hint": "启用后，表情包发送将作为工具提供给大模型自行检索并选择发送，不再由系统自动分析文本发送。"
+  },
+  "persona_settings": {
+    "description": "人格专属表情包偏好配置",
+    "type": "text",
+    "default": "{}",
+    "hint": "配置各个人格的表情收集和使用偏好，以 JSON 格式存储"
   }
 }
