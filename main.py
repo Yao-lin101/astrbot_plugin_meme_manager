@@ -131,6 +131,7 @@ class MemeSender(Star):
             batch_edit_personas,
             batch_import_emojis,
             batch_move_emoji,
+            check_duplicates,
             check_sync_process,
             clear_all_emoji,
             clear_category,
@@ -148,20 +149,18 @@ class MemeSender(Star):
             get_sync_status,
             move_emoji,
             rename_category,
+            resolve_duplicates,
             restore_category,
             save_persona_tag,
             sync_config,
             sync_from_remote,
             sync_to_remote,
-            check_duplicates,
-            resolve_duplicates,
         )
 
         PLUGIN_NAME = "astrbot_plugin_meme_manager"
 
         apis = [
             ("emoji", get_all_emojis, ["GET"]),
-            ("emoji/<category>", get_emojis_by_category, ["GET"]),
             ("emoji/add", add_emoji, ["POST"]),
             ("emoji/delete", delete_emoji, ["POST"]),
             ("emoji/batch_delete", batch_delete_emoji, ["POST"]),
@@ -191,6 +190,7 @@ class MemeSender(Star):
             ("emoji/file_base64", get_emoji_file_base64, ["GET"]),
             ("emoji/check_duplicates", check_duplicates, ["GET"]),
             ("emoji/resolve_duplicates", resolve_duplicates, ["POST"]),
+            ("emoji/<category>", get_emojis_by_category, ["GET"]),
         ]
 
         for route, handler, methods in apis:

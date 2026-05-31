@@ -929,8 +929,9 @@ async def check_duplicates():
     try:
         threshold = float(request.args.get("threshold", 0.85))
 
-        from .database import get_db_conn
         import json
+
+        from .database import get_db_conn
         from .similarity import calculate_similarity_score
 
         conn = get_db_conn()
@@ -980,7 +981,9 @@ async def check_duplicates():
 
         # Group similar memes
         from pathlib import Path
+
         from ..config import MEMES_DIR
+
         groups = []
         visited = set()
 
@@ -1014,15 +1017,17 @@ async def check_duplicates():
                 for m in group_memes:
                     file_path = Path(MEMES_DIR) / m["filename"]
                     size_bytes = file_path.stat().st_size if file_path.exists() else 0
-                    clean_memes.append({
-                        "filename": m["filename"],
-                        "emotions": m["meta"]["emotions"],
-                        "personas": m["meta"]["personas"],
-                        "similarity": m["similarity"],
-                        "width": m.get("width", 0),
-                        "height": m.get("height", 0),
-                        "size_bytes": size_bytes
-                    })
+                    clean_memes.append(
+                        {
+                            "filename": m["filename"],
+                            "emotions": m["meta"]["emotions"],
+                            "personas": m["meta"]["personas"],
+                            "similarity": m["similarity"],
+                            "width": m.get("width", 0),
+                            "height": m.get("height", 0),
+                            "size_bytes": size_bytes,
+                        }
+                    )
                 groups.append({"id": f"group_{len(groups) + 1}", "memes": clean_memes})
 
         return jsonify({"status": "success", "groups": groups}), 200
@@ -1132,4 +1137,3 @@ async def resolve_duplicates():
     except Exception as e:
         logger.error(f"清理重复表情包失败: {e}", exc_info=True)
         return jsonify({"message": str(e)}), 500
-
