@@ -1,5 +1,5 @@
 (() => {
-  // js/modules/toasts.js
+  // pages/meme_manager/js/modules/toasts.js
   var { ref } = window.Vue;
   function useToasts() {
     const toasts = ref([]);
@@ -21,7 +21,7 @@
     };
   }
 
-  // js/modules/modals.js
+  // pages/meme_manager/js/modules/modals.js
   var { ref: ref2, reactive, nextTick } = window.Vue;
   function useModals(showToast) {
     const confirmDialog = reactive({
@@ -192,7 +192,7 @@
     };
   }
 
-  // js/modules/api.js
+  // pages/meme_manager/js/modules/api.js
   var { ref: ref3, computed } = window.Vue;
   function useApi(showToast, pruneSelections) {
     const emojiData = ref3({});
@@ -425,7 +425,7 @@
     };
   }
 
-  // js/modules/selection.js
+  // pages/meme_manager/js/modules/selection.js
   var { ref: ref4, computed: computed2 } = window.Vue;
   function useSelection(emojiData, allEmojisList) {
     const selectedEmojis = ref4(/* @__PURE__ */ new Map());
@@ -498,7 +498,7 @@
     };
   }
 
-  // js/modules/sync.js
+  // pages/meme_manager/js/modules/sync.js
   var { ref: ref5 } = window.Vue;
   function useSync(showToast, fetchEmojis) {
     const syncChecking = ref5(false);
@@ -663,7 +663,7 @@
     };
   }
 
-  // js/modules/categories.js
+  // pages/meme_manager/js/modules/categories.js
   var { ref: ref6 } = window.Vue;
   function useCategories(showToast, fetchEmojis, checkSyncStatus, renameCategoryModal, addCategoryForm, emojiData, activeCategories, confirm2, showDangerConfirm) {
     const openRenameCategory = (category) => {
@@ -782,7 +782,7 @@
     };
   }
 
-  // js/modules/emojiActions.js
+  // pages/meme_manager/js/modules/emojiActions.js
   var { ref: ref7, reactive: reactive2, nextTick: nextTick2 } = window.Vue;
   function useEmojiActions({
     showToast,
@@ -1411,7 +1411,7 @@
     };
   }
 
-  // js/modules/dedup.js
+  // pages/meme_manager/js/modules/dedup.js
   var { ref: ref8, computed: computed3 } = window.Vue;
   function useDedup(showToast, fetchEmojis) {
     const duplicateModal = ref8({
@@ -1443,7 +1443,7 @@
       duplicateGroups.value = [];
       try {
         const thresholdVal = similarityThreshold.value / 100;
-        const res = await fetch(`/api/emoji/check_duplicates?threshold=${thresholdVal}`);
+        const res = await fetch(`/api/emoji/dup/check?threshold=${thresholdVal}`);
         if (!res.ok) {
           throw new Error("\u626B\u63CF\u91CD\u590D\u8868\u60C5\u5305\u8BF7\u6C42\u5931\u8D25");
         }
@@ -1513,7 +1513,7 @@
       }
       duplicateModal.value.resolving = true;
       try {
-        const res = await fetch("/api/emoji/resolve_duplicates", {
+        const res = await fetch("/api/emoji/dup/resolve", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -1552,7 +1552,7 @@
     };
   }
 
-  // js/script.js
+  // pages/meme_manager/js/script.js
   var { createApp, ref: ref9, computed: computed4, onMounted, onUnmounted } = Vue;
   createApp({
     setup() {

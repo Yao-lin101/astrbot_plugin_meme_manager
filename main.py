@@ -188,8 +188,8 @@ class MemeSender(Star):
             ("persona_tags", save_persona_tag, ["POST"]),
             ("emoji/batch_import", batch_import_emojis, ["POST"]),
             ("emoji/file_base64", get_emoji_file_base64, ["GET"]),
-            ("emoji/check_duplicates", check_duplicates, ["GET"]),
-            ("emoji/resolve_duplicates", resolve_duplicates, ["POST"]),
+            ("emoji/dup/check", check_duplicates, ["GET"]),
+            ("emoji/dup/resolve", resolve_duplicates, ["POST"]),
             ("emoji/<category>", get_emojis_by_category, ["GET"]),
         ]
 

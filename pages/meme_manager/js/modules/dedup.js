@@ -35,7 +35,7 @@ export function useDedup(showToast, fetchEmojis) {
     duplicateGroups.value = [];
     try {
       const thresholdVal = similarityThreshold.value / 100;
-      const res = await fetch(`/api/emoji/check_duplicates?threshold=${thresholdVal}`);
+      const res = await fetch(`/api/emoji/dup/check?threshold=${thresholdVal}`);
       if (!res.ok) {
         throw new Error("扫描重复表情包请求失败");
       }
@@ -117,7 +117,7 @@ export function useDedup(showToast, fetchEmojis) {
 
     duplicateModal.value.resolving = true;
     try {
-      const res = await fetch("/api/emoji/resolve_duplicates", {
+      const res = await fetch("/api/emoji/dup/resolve", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

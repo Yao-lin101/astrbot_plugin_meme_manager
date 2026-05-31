@@ -923,7 +923,7 @@ async def get_emoji_file_base64():
         return jsonify({"message": f"读取文件失败: {e}"}), 500
 
 
-@api.route("/emoji/check_duplicates", methods=["GET"])
+@api.route("/emoji/dup/check", methods=["GET"])
 async def check_duplicates():
     """扫描所有表情包以查找重复的相似表情"""
     try:
@@ -1051,7 +1051,7 @@ async def check_duplicates():
         return jsonify({"message": str(e)}), 500
 
 
-@api.route("/emoji/resolve_duplicates", methods=["POST"])
+@api.route("/emoji/dup/resolve", methods=["POST"])
 async def resolve_duplicates():
     """解析重复表情包：保留一部分，删除另外一部分，并可选地合并他们的标签和人格"""
     try:
