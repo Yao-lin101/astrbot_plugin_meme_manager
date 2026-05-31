@@ -700,7 +700,7 @@ async def get_personas():
 
 @api.route("/emoji/edit", methods=["POST"])
 async def edit_emoji():
-    """编辑表情包的标签和允许的人格"""
+    """编辑表情包的标签和允许的人格与描述"""
     try:
         from pathlib import Path
 
@@ -708,6 +708,7 @@ async def edit_emoji():
         filename = data.get("filename")
         emotions = data.get("emotions")  # List of emotions
         personas = data.get("personas")  # List of persona IDs, or ["*"]
+        description = data.get("description")
 
         if not filename:
             return jsonify({"message": "Filename is required"}), 400
@@ -720,10 +721,16 @@ async def edit_emoji():
         emotions_str = ",".join(emotions) if isinstance(emotions, list) else emotions
         personas_str = ",".join(personas) if isinstance(personas, list) else personas
 
-        cursor.execute(
-            "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
-            (emotions_str, personas_str, filename),
-        )
+        if "description" in data:
+            cursor.execute(
+                "UPDATE memes SET emotions = ?, personas = ?, description = ? WHERE filename = ?",
+                (emotions_str, personas_str, description, filename),
+            )
+        else:
+            cursor.execute(
+                "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
+                (emotions_str, personas_str, filename),
+            )
         conn.commit()
 
         # Check if the meme has emotions. If not, delete it.
@@ -758,13 +765,14 @@ async def get_emoji_info(filename):
         conn = get_db_conn()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT emotions, personas FROM memes WHERE filename = ?", (filename,)
+            "SELECT emotions, personas, description FROM memes WHERE filename = ?",
+            (filename,),
         )
         row = cursor.fetchone()
         conn.close()
 
         if not row:
-            return jsonify({"emotions": [], "personas": []}), 404
+            return jsonify({"emotions": [], "personas": [], "description": ""}), 404
 
         emotions = (
             [e.strip() for e in row["emotions"].split(",")] if row["emotions"] else []
@@ -772,9 +780,15 @@ async def get_emoji_info(filename):
         personas = (
             [p.strip() for p in row["personas"].split(",")] if row["personas"] else []
         )
+        description = row["description"] or ""
 
         return jsonify(
-            {"filename": filename, "emotions": emotions, "personas": personas}
+            {
+                "filename": filename,
+                "emotions": emotions,
+                "personas": personas,
+                "description": description,
+            }
         ), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
