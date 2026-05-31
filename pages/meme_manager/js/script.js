@@ -308,7 +308,6 @@ createApp({
       duplicateModal: dedup.duplicateModal,
       similarityThreshold: dedup.similarityThreshold,
       duplicateGroups: dedup.duplicateGroups,
-      mergeMetadata: dedup.mergeMetadata,
       formatBytes: dedup.formatBytes,
       openDuplicateModal: dedup.openDuplicateModal,
       closeDuplicateModal: dedup.closeDuplicateModal,

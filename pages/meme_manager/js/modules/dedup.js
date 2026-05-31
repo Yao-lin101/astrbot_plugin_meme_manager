@@ -9,7 +9,6 @@ export function useDedup(showToast, fetchEmojis) {
 
   const similarityThreshold = ref(85); // 50 - 100
   const duplicateGroups = ref([]);
-  const mergeMetadata = ref(true);
 
   const formatBytes = (bytes) => {
     if (!bytes || bytes === 0) return '0 B';
@@ -125,7 +124,7 @@ export function useDedup(showToast, fetchEmojis) {
         body: JSON.stringify({
           keeps,
           deletes,
-          merge: mergeMetadata.value
+          merge: false
         })
       });
 
@@ -148,7 +147,6 @@ export function useDedup(showToast, fetchEmojis) {
     duplicateModal,
     similarityThreshold,
     duplicateGroups,
-    mergeMetadata,
     formatBytes,
     openDuplicateModal,
     closeDuplicateModal,

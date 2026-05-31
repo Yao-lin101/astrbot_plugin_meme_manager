@@ -465,11 +465,6 @@
             </div>
             
             <div style="display: flex; align-items: center; gap: 16px;">
-              <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: var(--text-primary);">
-                <input type="checkbox" v-model="mergeMetadata" :disabled="duplicateModal.scanning || duplicateModal.resolving" style="width: 14px; height: 14px;" />
-                <span>自动合并分类标签与适用角色</span>
-              </label>
-              
               <button class="btn-primary" @click="scanDuplicates" :disabled="duplicateModal.scanning || duplicateModal.resolving">
                 <i class="fas" :class="duplicateModal.scanning ? 'fa-spinner fa-spin' : 'fa-search'"></i>
                 {{ duplicateModal.scanning ? '正在扫描...' : '开始扫描' }}
