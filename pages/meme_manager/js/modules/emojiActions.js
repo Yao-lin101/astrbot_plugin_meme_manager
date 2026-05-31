@@ -495,8 +495,54 @@ export function useEmojiActions({
           body: formData,
         });
 
+        let resData = null;
+        try {
+          resData = await res.json();
+        } catch (err) {
+          // ignore
+        }
+
         if (res.status === 409) {
-          dups++;
+          if (resData && resData.code === "similar_emoji") {
+            const localUrl = URL.createObjectURL(file);
+            const similarUrl = `/api/file/meme_manager/memes/file/${encodeURIComponent(resData.existing_filename)}`;
+            
+            const confirmed = await confirm(
+              "检测到相似表情包",
+              `表情包「${file.name}」与已有表情「${resData.existing_filename}」相似度达 ${Math.round(resData.similarity * 100)}%，是否仍要继续上传？`,
+              "继续上传",
+              "primary",
+              similarUrl,
+              localUrl
+            );
+            
+            URL.revokeObjectURL(localUrl);
+
+            if (confirmed) {
+              const forceFormData = new FormData();
+              forceFormData.append("category", category);
+              forceFormData.append("image_file", file);
+              forceFormData.append("ignore_similarity", "true");
+              
+              try {
+                const forceRes = await fetch("/api/emoji/add", {
+                  method: "POST",
+                  body: forceFormData,
+                });
+                if (forceRes.ok) {
+                  completed++;
+                } else {
+                  failed++;
+                }
+              } catch (err) {
+                failed++;
+              }
+            } else {
+              dups++;
+            }
+          } else {
+            dups++;
+          }
         } else if (!res.ok) {
           throw new Error();
         } else {

@@ -6,6 +6,7 @@ from quart import Blueprint, current_app, jsonify, request
 from ..config import MEMES_DIR
 from .models import (
     DuplicateEmojiError,
+    SimilarEmojiError,
     add_emoji_to_category,
     batch_convert_to_gif,
     batch_copy_emojis,
@@ -117,11 +118,15 @@ async def add_emoji():
     """添加表情包到指定类别"""
     try:
         is_json_request = request.is_json
+        ignore_similarity = False
         if is_json_request:
             data = await request.get_json()
             category = data.get("category")
             filename = data.get("filename")
             base64_data = data.get("base64_data")
+            ignore_similarity = data.get("ignore_similarity", False)
+            if isinstance(ignore_similarity, str):
+                ignore_similarity = ignore_similarity.lower() == "true"
             if not category or not filename or not base64_data:
                 return jsonify({"message": "没有找到上传的图片文件或缺少类别"}), 400
 
@@ -152,6 +157,7 @@ async def add_emoji():
             # 使用 await 获取表单数据
             form = await request.form
             category = form.get("category")
+            ignore_similarity = form.get("ignore_similarity", "false").lower() == "true"
 
         if not category:
             return jsonify({"message": "没有指定类别"}), 400
@@ -160,10 +166,14 @@ async def add_emoji():
             return jsonify({"message": "无效的图片文件"}), 400
 
         # 记录上传信息
-        logger.info(f"收到上传请求: 类别={category}, 文件名={image_file.filename}")
+        logger.info(
+            f"收到上传请求: 类别={category}, 文件名={image_file.filename}, 忽略相似度={ignore_similarity}"
+        )
 
         try:
-            result = add_emoji_to_category(category, image_file)
+            result = add_emoji_to_category(
+                category, image_file, ignore_similarity=ignore_similarity
+            )
 
             # 添加成功后同步配置
             plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
@@ -181,6 +191,20 @@ async def add_emoji():
                 }
             ), 201
 
+        except SimilarEmojiError as inner_e:
+            logger.info(f"跳过相似表情包 (待确认): {inner_e}")
+            response_payload = {
+                "message": str(inner_e),
+                "code": "similar_emoji",
+                "category": category,
+                "similarity": inner_e.similarity,
+                "existing_filename": inner_e.existing_filename,
+            }
+            if is_json_request:
+                response_payload["is_duplicate"] = True
+                return jsonify(response_payload), 200
+            else:
+                return jsonify(response_payload), 409
         except DuplicateEmojiError as inner_e:
             logger.info(f"跳过重复表情包: {inner_e}")
             response_payload = {

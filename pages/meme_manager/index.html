@@ -577,6 +577,19 @@
         <div class="confirm-modal-card">
           <h2>{{ confirmDialog.title }}</h2>
           <p>{{ confirmDialog.description }}</p>
+          <div v-if="confirmDialog.imageUrl || confirmDialog.localImageUrl" class="confirm-modal-comparison">
+            <div v-if="confirmDialog.localImageUrl" class="comparison-column">
+              <div class="comparison-label">新上传的图片</div>
+              <img :src="confirmDialog.localImageUrl" alt="Uploading Meme" />
+            </div>
+            <div v-if="confirmDialog.imageUrl && confirmDialog.localImageUrl" class="comparison-separator">
+              <i class="fas fa-arrows-left-right"></i>
+            </div>
+            <div v-if="confirmDialog.imageUrl" class="comparison-column">
+              <div class="comparison-label">已有的相似表情</div>
+              <img :src="confirmDialog.imageUrl" alt="Similar Meme" />
+            </div>
+          </div>
           <div class="confirm-modal-actions">
             <button class="btn-secondary" @click="handleConfirm(false)">取消</button>
             <button :class="confirmDialog.confirmClass === 'danger' ? 'btn-danger' : 'btn-primary'" @click="handleConfirm(true)">

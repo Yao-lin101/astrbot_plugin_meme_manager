@@ -246,7 +246,7 @@ def save_and_register_meme(
     return {"path": str(dest_path), "filename": safe_name}
 
 
-def add_emoji_to_category(category, image_file, personas="*"):
+def add_emoji_to_category(category, image_file, personas="*", ignore_similarity=False):
     """添加表情包到指定类别（WebUI 上传端点调用）"""
     if not image_file:
         logger.error("没有接收到文件")
@@ -289,7 +289,7 @@ def add_emoji_to_category(category, image_file, personas="*"):
     # 相似度去重 (Pillow dHash + Histogram)
     cfg = _get_plugin_config()
     enable_similarity = get_config_value(cfg, "enable_similarity_dedup", True)
-    if enable_similarity:
+    if enable_similarity and not ignore_similarity:
         from .similarity import check_image_similarity
 
         similarity_threshold = get_config_value(cfg, "similarity_dedup_threshold", 0.85)
