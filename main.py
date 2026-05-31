@@ -153,6 +153,8 @@ class MemeSender(Star):
             sync_config,
             sync_from_remote,
             sync_to_remote,
+            check_duplicates,
+            resolve_duplicates,
         )
 
         PLUGIN_NAME = "astrbot_plugin_meme_manager"
@@ -187,6 +189,8 @@ class MemeSender(Star):
             ("persona_tags", save_persona_tag, ["POST"]),
             ("emoji/batch_import", batch_import_emojis, ["POST"]),
             ("emoji/file_base64", get_emoji_file_base64, ["GET"]),
+            ("emoji/check_duplicates", check_duplicates, ["GET"]),
+            ("emoji/resolve_duplicates", resolve_duplicates, ["POST"]),
         ]
 
         for route, handler, methods in apis:
