@@ -22,6 +22,18 @@ class DuplicateEmojiError(ValueError):
         super().__init__(f"同一分类中已存在相同文件：{existing_filename}")
 
 
+class SimilarEmojiError(DuplicateEmojiError):
+    """Raised when an uploaded emoji is highly similar to an existing one."""
+
+    def __init__(self, existing_filename: str, similarity: float):
+        self.existing_filename = existing_filename
+        self.similarity = similarity
+        super().__init__(existing_filename)
+        self.args = (
+            f"检测到已存在相似度极高 ({similarity:.2%}) 的表情包 (文件名: {existing_filename})",
+        )
+
+
 def _is_supported_image(filename: str) -> bool:
     return filename.lower().endswith(IMAGE_EXTENSIONS)
 
@@ -201,6 +213,36 @@ def save_and_register_meme(
     conn.commit()
     conn.close()
 
+    # 计算并存储表情相似度特征
+    try:
+        import json
+
+        from .similarity import extract_similarity_features
+
+        features = extract_similarity_features(image_bytes)
+        if features:
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO meme_similarity_features
+                (filename, width, height, aspect_ratio, frame_count, features_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    safe_name,
+                    features["width"],
+                    features["height"],
+                    features["aspect_ratio"],
+                    features["frame_count"],
+                    json.dumps(features["frames"]),
+                ),
+            )
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        logger.warning(f"保存相似度特征失败 for {safe_name}: {e}")
+
     return {"path": str(dest_path), "filename": safe_name}
 
 
@@ -244,6 +286,21 @@ def add_emoji_to_category(category, image_file, personas="*"):
         conn.close()
         raise DuplicateEmojiError(duplicate_name)
 
+    # 相似度去重 (Pillow dHash + Histogram)
+    cfg = _get_plugin_config()
+    enable_similarity = get_config_value(cfg, "enable_similarity_dedup", True)
+    if enable_similarity:
+        from .similarity import check_image_similarity
+
+        similarity_threshold = get_config_value(cfg, "similarity_dedup_threshold", 0.85)
+        sim_match = check_image_similarity(content, similarity_threshold)
+        if sim_match:
+            matched_filename, score = sim_match
+            logger.info(
+                f"添加表情包被相似度检测拦截: 与 {matched_filename} 相似度 {score:.4f}"
+            )
+            raise SimilarEmojiError(matched_filename, score)
+
     result = save_and_register_meme(
         content, filename, category, personas, original_hash=content_hash
     )
@@ -271,6 +328,14 @@ def delete_emoji_from_category(category, image_file):
         cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
         conn.commit()
         conn.close()
+
+        # 删除相似度特征缓存
+        try:
+            from .database import delete_meme_similarity_features
+
+            delete_meme_similarity_features(filename)
+        except Exception as e:
+            logger.warning(f"删除表情 {filename} 的相似度特征缓存失败: {e}")
 
         file_path = Path(MEMES_DIR) / filename
         if file_path.exists():
@@ -460,6 +525,17 @@ def clear_category_emojis(category: str) -> dict[str, object]:
 
         if not emotions:
             cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
+
+            try:
+                cursor.execute(
+                    "DELETE FROM meme_similarity_features WHERE filename = ?",
+                    (filename,),
+                )
+            except Exception as e:
+                logger.warning(
+                    f"清除分类时删除表情 {filename} 的相似度特征缓存失败: {e}"
+                )
+
             file_path = Path(MEMES_DIR) / filename
             if file_path.exists():
                 file_path.unlink()
@@ -496,6 +572,13 @@ def clear_all_emojis() -> dict[str, object]:
     cursor.execute("DELETE FROM memes")
     conn.commit()
     conn.close()
+
+    try:
+        from .database import clear_all_meme_similarity_features
+
+        clear_all_meme_similarity_features()
+    except Exception as e:
+        logger.warning(f"清空表情库时清空相似度特征缓存失败: {e}")
 
     return {"deleted_by_category": deleted_by_category}
 

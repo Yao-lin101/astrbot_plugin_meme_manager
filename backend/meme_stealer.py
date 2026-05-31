@@ -204,6 +204,55 @@ async def steal_meme(
             logger.error(f"下载图片或检测格式失败: {e}", exc_info=True)
             return f"下载/解析图片失败：{str(e)}"
 
+    # 5.5. 相似度去重判定 (Pillow dHash + Histogram)
+    enable_similarity = get_config_value(sender.config, "enable_similarity_dedup", True)
+    if enable_similarity:
+        from .similarity import check_image_similarity
+
+        similarity_threshold = get_config_value(
+            sender.config, "similarity_dedup_threshold", 0.85
+        )
+        sim_match = check_image_similarity(content, similarity_threshold)
+        if sim_match:
+            matched_filename, score = sim_match
+            logger.info(
+                f"[meme_manager] 手动偷图被相似度检测拦截: 与 {matched_filename} 相似度 {score:.4f}"
+            )
+
+            # Query the existing similar meme to check its personas
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT personas FROM memes WHERE filename = ?",
+                (matched_filename,),
+            )
+            row = cursor.fetchone()
+            if row:
+                existing_personas = (
+                    set(row["personas"].split(",")) if row["personas"] else set()
+                )
+                if "*" in existing_personas or persona_id in existing_personas:
+                    conn.close()
+                    return f"该表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），且当前人格已拥有该表情包使用权限，拒绝重复收录。"
+
+                # Append persona_id to existing_personas
+                if persona_id != "*":
+                    existing_personas.add(persona_id)
+                else:
+                    existing_personas = {"*"}
+
+                cursor.execute(
+                    "UPDATE memes SET personas = ? WHERE filename = ?",
+                    (",".join(existing_personas), matched_filename),
+                )
+                conn.commit()
+                conn.close()
+                await sender.reload_emotions()
+                return f"此表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），已自动为您追加当前人格【{persona_id}】的使用权限。"
+            else:
+                conn.close()
+                return f"该表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），拒绝重复收录。"
+
     # 6. 表情包收集偏好判定
     attempt = get_steal_attempt(raw_hash, persona_id)
     if attempt:
@@ -545,6 +594,61 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
             f"[meme_manager] 自动偷表情：图片 {raw_hash} 存在历史处理记录，跳过。"
         )
         return
+
+    # A.5 检查相似度去重 (Pillow dHash + Histogram)
+    enable_similarity = get_config_value(sender.config, "enable_similarity_dedup", True)
+    if enable_similarity:
+        from .similarity import check_image_similarity
+
+        similarity_threshold = get_config_value(
+            sender.config, "similarity_dedup_threshold", 0.85
+        )
+        sim_match = check_image_similarity(content, similarity_threshold)
+        if sim_match:
+            matched_filename, score = sim_match
+
+            # Check if this persona already owns it
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT personas FROM memes WHERE filename = ?",
+                (matched_filename,),
+            )
+            row = cursor.fetchone()
+            if row:
+                existing_personas = (
+                    set(row["personas"].split(",")) if row["personas"] else set()
+                )
+                if "*" in existing_personas or persona_id in existing_personas:
+                    conn.close()
+                    logger.debug(
+                        f"[meme_manager] 自动偷表情：图片 {raw_hash} 相似于已有表情 {matched_filename} 且已被当前人格拥有，跳过。"
+                    )
+                    return
+
+                # Append persona_id to existing_personas
+                if persona_id != "*":
+                    existing_personas.add(persona_id)
+                else:
+                    existing_personas = {"*"}
+
+                cursor.execute(
+                    "UPDATE memes SET personas = ? WHERE filename = ?",
+                    (",".join(existing_personas), matched_filename),
+                )
+                conn.commit()
+                conn.close()
+                await sender.reload_emotions()
+                logger.info(
+                    f"[meme_manager] 自动偷表情：检测到相似表情 {matched_filename} (相似度: {score:.4f})，已为人格 {persona_id} 追加使用权限。"
+                )
+                return
+            else:
+                conn.close()
+                logger.debug(
+                    f"[meme_manager] 自动偷表情：图片 {raw_hash} 相似于已有表情 {matched_filename} (相似度: {score:.4f})，但记录已丢失，跳过。"
+                )
+                return
 
     # B. 检查 memes 表中是否已经包含这个 original_hash 且已被此 persona 拥有
     conn = get_db_conn()

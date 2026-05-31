@@ -374,6 +374,9 @@ def get_config_value(config: dict, key: str, default: Any = None) -> Any:
         "embedding_similarity_threshold": "embedding_config",
         "embedding_tag_weight": "embedding_config",
         "embedding_text_weight": "embedding_config",
+        # similarity_dedup_config
+        "enable_similarity_dedup": "similarity_dedup_config",
+        "similarity_dedup_threshold": "similarity_dedup_config",
     }
 
     if key in mapping:

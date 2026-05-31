@@ -1,5 +1,5 @@
 (() => {
-  // modules/toasts.js
+  // pages/meme_manager/js/modules/toasts.js
   var { ref } = window.Vue;
   function useToasts() {
     const toasts = ref([]);
@@ -21,7 +21,7 @@
     };
   }
 
-  // modules/modals.js
+  // pages/meme_manager/js/modules/modals.js
   var { ref: ref2, reactive, nextTick } = window.Vue;
   function useModals(showToast) {
     const confirmDialog = reactive({
@@ -64,7 +64,7 @@
       visible: false,
       selectedEmojis: /* @__PURE__ */ new Set()
     });
-    const confirm = (title, description, confirmLabel = "\u786E\u8BA4", confirmClass = "") => {
+    const confirm2 = (title, description, confirmLabel = "\u786E\u8BA4", confirmClass = "") => {
       return new Promise((resolve) => {
         confirmDialog.title = title;
         confirmDialog.description = description;
@@ -175,7 +175,7 @@
       addCategoryForm,
       renameCategoryModal,
       importModal,
-      confirm,
+      confirm: confirm2,
       handleConfirm,
       showDangerConfirm,
       startDangerCountdown,
@@ -192,7 +192,7 @@
     };
   }
 
-  // modules/api.js
+  // pages/meme_manager/js/modules/api.js
   var { ref: ref3, computed } = window.Vue;
   function useApi(showToast, pruneSelections) {
     const emojiData = ref3({});
@@ -425,7 +425,7 @@
     };
   }
 
-  // modules/selection.js
+  // pages/meme_manager/js/modules/selection.js
   var { ref: ref4, computed: computed2 } = window.Vue;
   function useSelection(emojiData, allEmojisList) {
     const selectedEmojis = ref4(/* @__PURE__ */ new Map());
@@ -498,7 +498,7 @@
     };
   }
 
-  // modules/sync.js
+  // pages/meme_manager/js/modules/sync.js
   var { ref: ref5 } = window.Vue;
   function useSync(showToast, fetchEmojis) {
     const syncChecking = ref5(false);
@@ -663,9 +663,9 @@
     };
   }
 
-  // modules/categories.js
+  // pages/meme_manager/js/modules/categories.js
   var { ref: ref6 } = window.Vue;
-  function useCategories(showToast, fetchEmojis, checkSyncStatus, renameCategoryModal, addCategoryForm, emojiData, activeCategories, confirm, showDangerConfirm) {
+  function useCategories(showToast, fetchEmojis, checkSyncStatus, renameCategoryModal, addCategoryForm, emojiData, activeCategories, confirm2, showDangerConfirm) {
     const openRenameCategory = (category) => {
       renameCategoryModal.category = category;
       renameCategoryModal.originalCategory = category;
@@ -752,7 +752,7 @@
       }
     };
     const deleteCategory = async (category) => {
-      const confirmed = await confirm(
+      const confirmed = await confirm2(
         `\u5220\u9664\u6807\u7B7E\u300C${category}\u300D`,
         `\u786E\u8BA4\u5220\u9664\u6807\u7B7E\u300C${category}\u300D\u5417\uFF1F\u6B64\u64CD\u4F5C\u5C06\u6E05\u9664\u8BE5\u6807\u7B7E\u7684\u6240\u6709\u8868\u60C5\u5305\u6807\u7B7E\uFF0C\u82E5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u6807\u7B7E\uFF0C\u5BF9\u5E94\u7684\u78C1\u76D8\u6587\u4EF6\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`,
         "\u786E\u8BA4\u5220\u9664",
@@ -782,7 +782,7 @@
     };
   }
 
-  // modules/emojiActions.js
+  // pages/meme_manager/js/modules/emojiActions.js
   var { ref: ref7, reactive: reactive2, nextTick: nextTick2 } = window.Vue;
   function useEmojiActions({
     showToast,
@@ -794,7 +794,7 @@
     emojiData,
     allEmojisList,
     getEmojiTags,
-    confirm,
+    confirm: confirm2,
     showDangerConfirm,
     moveModal,
     batchPersonaModal,
@@ -941,7 +941,7 @@
       const isAll = category === "all";
       const title = isAll ? "\u7269\u7406\u5220\u9664\u8868\u60C5\u5305" : "\u5220\u9664\u6807\u7B7E / \u6587\u4EF6";
       const promptText = isAll ? "\u786E\u8BA4\u7269\u7406\u5220\u9664\u8BE5\u8868\u60C5\u5305\u5417\uFF1F\u6B64\u64CD\u4F5C\u5C06\u6C38\u4E45\u4ECE\u78C1\u76D8\u548C\u6240\u6709\u6807\u7B7E\u4E0B\u5220\u9664\u8BE5\u8868\u60C5\u6587\u4EF6\uFF01" : `\u786E\u8BA4\u4ECE\u6807\u7B7E\u300C${category}\u300D\u4E0B\u79FB\u9664\u8868\u60C5\u5305\uFF1F\u82E5\u8BE5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u6807\u7B7E\uFF0C\u5B83\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`;
-      const confirmed = await confirm(
+      const confirmed = await confirm2(
         title,
         promptText,
         "\u786E\u8BA4\u5220\u9664",
@@ -965,7 +965,7 @@
     const batchDeleteSelected = async () => {
       const items = Array.from(selectedEmojis.value.values());
       if (items.length === 0) return;
-      const confirmed = await confirm(
+      const confirmed = await confirm2(
         "\u6279\u91CF\u5220\u9664\u8868\u60C5\u5305",
         `\u786E\u8BA4\u5220\u9664\u5DF2\u9009\u4E2D\u7684 ${items.length} \u4E2A\u8868\u60C5\u5305\uFF1F\u8FD9\u4F1A\u79FB\u9664\u5176\u6807\u7B7E\uFF0C\u82E5\u8BE5\u8868\u60C5\u5305\u4E0D\u5C5E\u4E8E\u5176\u4ED6\u4EFB\u4F55\u6807\u7B7E\uFF0C\u5B83\u5C06\u88AB\u7269\u7406\u5220\u9664\u3002`,
         "\u786E\u8BA4\u6279\u91CF\u5220\u9664",
@@ -1005,7 +1005,7 @@
     const batchConvertToGif = async () => {
       const items = Array.from(selectedEmojis.value.values());
       if (items.length === 0) return;
-      const confirmed = await confirm(
+      const confirmed = await confirm2(
         "\u8F6C\u6362\u4E3A GIF",
         `\u786E\u8BA4\u5C06\u9009\u4E2D\u7684 ${items.length} \u4E2A\u8868\u60C5\u5305\u8F6C\u6362\u4E3A GIF \u683C\u5F0F\u5417\uFF1F(\u79FB\u52A8\u7AEF QQ \u5BF9 WEBP \u52A8\u56FE\u652F\u6301\u4E0D\u4F73\uFF0C\u63A8\u8350\u8F6C\u6362)`,
         "\u786E\u8BA4\u8F6C\u6362",
@@ -1251,7 +1251,7 @@
       contextMenu.visible = false;
       const count = contextMenu.targetItems.length;
       if (count === 0) return;
-      const confirmed = await confirm(
+      const confirmed = await confirm2(
         "\u6279\u91CF\u5220\u9664\u8868\u60C5\u5305",
         `\u786E\u8BA4\u5220\u9664\u53F3\u952E\u9009\u4E2D\u7684 ${count} \u4E2A\u8868\u60C5\u5305\u5417\uFF1F\u6B64\u64CD\u4F5C\u4E0D\u53EF\u6062\u590D\u3002`,
         "\u786E\u8BA4\u5220\u9664",
@@ -1296,7 +1296,7 @@
       contextMenu.visible = false;
       const count = contextMenu.targetItems.length;
       if (count === 0) return;
-      const confirmed = await confirm(
+      const confirmed = await confirm2(
         "\u8F6C\u6362\u4E3A GIF",
         `\u786E\u8BA4\u5C06\u9009\u4E2D\u7684 ${count} \u4E2A\u8868\u60C5\u5305\u8F6C\u6362\u4E3A GIF \u683C\u5F0F\u5417\uFF1F(\u79FB\u52A8\u7AEF QQ \u5BF9 WEBP \u52A8\u56FE\u652F\u6301\u4E0D\u4F73\uFF0C\u63A8\u8350\u8F6C\u6362)`,
         "\u786E\u8BA4\u8F6C\u6362",
@@ -1411,8 +1411,147 @@
     };
   }
 
-  // script.js
-  var { createApp, ref: ref8, computed: computed3, onMounted, onUnmounted } = Vue;
+  // pages/meme_manager/js/modules/dedup.js
+  var { ref: ref8, computed: computed3 } = window.Vue;
+  function useDedup(showToast, fetchEmojis) {
+    const duplicateModal = ref8({
+      visible: false,
+      scanning: false,
+      resolving: false
+    });
+    const similarityThreshold = ref8(85);
+    const duplicateGroups = ref8([]);
+    const formatBytes = (bytes) => {
+      if (!bytes || bytes === 0) return "0 B";
+      const k = 1024;
+      const sizes = ["B", "KB", "MB", "GB"];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+    };
+    const openDuplicateModal = () => {
+      duplicateGroups.value = [];
+      duplicateModal.value.visible = true;
+      duplicateModal.value.scanning = false;
+      duplicateModal.value.resolving = false;
+    };
+    const closeDuplicateModal = () => {
+      duplicateModal.value.visible = false;
+    };
+    const scanDuplicates = async () => {
+      duplicateModal.value.scanning = true;
+      duplicateGroups.value = [];
+      try {
+        const thresholdVal = similarityThreshold.value / 100;
+        const res = await fetch(`/api/emoji/dup/check?threshold=${thresholdVal}`);
+        if (!res.ok) {
+          throw new Error("\u626B\u63CF\u91CD\u590D\u8868\u60C5\u5305\u8BF7\u6C42\u5931\u8D25");
+        }
+        const data = await res.json();
+        const groups = data.groups || [];
+        groups.forEach((group) => {
+          if (group.memes && group.memes.length > 0) {
+            group.memes.forEach((meme, index) => {
+              meme.action = index === 0 ? "keep" : "delete";
+            });
+          }
+        });
+        duplicateGroups.value = groups;
+        if (groups.length === 0) {
+          showToast("\u672A\u68C0\u6D4B\u5230\u4EFB\u4F55\u91CD\u590D/\u76F8\u4F3C\u7684\u8868\u60C5\u5305\uFF01", "success", "\u626B\u63CF\u5B8C\u6210");
+        } else {
+          showToast(`\u626B\u63CF\u5B8C\u6210\uFF0C\u5171\u53D1\u73B0 ${groups.length} \u7EC4\u76F8\u4F3C\u8868\u60C5\u5305\uFF01`, "info", "\u626B\u63CF\u5B8C\u6210");
+        }
+      } catch (e) {
+        console.error(e);
+        showToast(e.message || "\u672A\u77E5\u9519\u8BEF", "error", "\u626B\u63CF\u5931\u8D25");
+      } finally {
+        duplicateModal.value.scanning = false;
+      }
+    };
+    const toggleMemeAction = (group, targetMeme, action) => {
+      targetMeme.action = action;
+    };
+    const totalDeletesCount = computed3(() => {
+      let count = 0;
+      duplicateGroups.value.forEach((group) => {
+        group.memes.forEach((meme) => {
+          if (meme.action === "delete") {
+            count++;
+          }
+        });
+      });
+      return count;
+    });
+    const resolveDuplicates = async () => {
+      const keeps = [];
+      const deletes = [];
+      duplicateGroups.value.forEach((group) => {
+        group.memes.forEach((meme) => {
+          if (meme.action === "keep") {
+            keeps.push(meme.filename);
+          } else if (meme.action === "delete") {
+            deletes.push(meme.filename);
+          }
+        });
+      });
+      if (deletes.length === 0) {
+        showToast("\u6CA1\u6709\u9009\u62E9\u9700\u8981\u6E05\u7406/\u5220\u9664\u7684\u8868\u60C5\u5305\uFF01", "warning", "\u64CD\u4F5C\u63D0\u793A");
+        return;
+      }
+      let hasGroupWithNoKeeps = false;
+      for (const group of duplicateGroups.value) {
+        const keepCount = group.memes.filter((m) => m.action === "keep").length;
+        if (keepCount === 0) {
+          hasGroupWithNoKeeps = true;
+          break;
+        }
+      }
+      if (hasGroupWithNoKeeps) {
+        const confirmProceed = confirm("\u68C0\u6D4B\u5230\u6709\u90E8\u5206\u91CD\u590D\u8868\u60C5\u7EC4\u672A\u9009\u62E9\u4FDD\u7559\u4EFB\u4F55\u56FE\u7247\uFF0C\u8FD9\u610F\u5473\u7740\u8BE5\u7EC4\u7684\u56FE\u7247\u5C06\u5168\u90E8\u88AB\u5220\u9664\u3002\u662F\u5426\u7EE7\u7EED\uFF1F");
+        if (!confirmProceed) return;
+      }
+      duplicateModal.value.resolving = true;
+      try {
+        const res = await fetch("/api/emoji/dup/resolve", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            keeps,
+            deletes,
+            merge: false
+          })
+        });
+        if (!res.ok) {
+          throw new Error("\u6E05\u7406\u91CD\u590D\u8868\u60C5\u5305\u8BF7\u6C42\u5931\u8D25");
+        }
+        showToast("\u91CD\u590D\u8868\u60C5\u5305\u6E05\u7406\u6210\u529F\uFF01", "success", "\u6E05\u7406\u6210\u529F");
+        duplicateModal.value.visible = false;
+        await fetchEmojis();
+      } catch (e) {
+        console.error(e);
+        showToast(e.message || "\u672A\u77E5\u9519\u8BEF", "error", "\u6E05\u7406\u5931\u8D25");
+      } finally {
+        duplicateModal.value.resolving = false;
+      }
+    };
+    return {
+      duplicateModal,
+      similarityThreshold,
+      duplicateGroups,
+      formatBytes,
+      openDuplicateModal,
+      closeDuplicateModal,
+      scanDuplicates,
+      toggleMemeAction,
+      resolveDuplicates,
+      totalDeletesCount
+    };
+  }
+
+  // pages/meme_manager/js/script.js
+  var { createApp, ref: ref9, computed: computed4, onMounted, onUnmounted } = Vue;
   createApp({
     setup() {
       const { toasts, showToast, removeToast } = useToasts();
@@ -1453,18 +1592,20 @@
         drawerTagSearchQuery: api.drawerTagSearchQuery,
         selectedEmotions: api.selectedEmotions
       });
-      const syncDrawerVisible = ref8(false);
-      const isDrawerInputFocused = ref8(false);
+      const dedup = useDedup(showToast, api.fetchEmojis);
+      const syncDrawerVisible = ref9(false);
+      const isDrawerInputFocused = ref9(false);
+      const otherDropdownVisible = ref9(false);
       const getImageUrl = (emoji) => {
         if (!emoji) return "";
         return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
       };
-      const activeCategory = computed3(() => {
+      const activeCategory = computed4(() => {
         if (api.activeCategories.value.includes("all")) return "all";
         if (api.activeCategories.value.length === 0) return "all";
         return api.activeCategories.value[0];
       });
-      const activeCategoriesDisplayName = computed3(() => {
+      const activeCategoriesDisplayName = computed4(() => {
         if (api.activeCategories.value.includes("all") || api.activeCategories.value.length === 0) {
           return "\u5168\u90E8\u8868\u60C5";
         }
@@ -1489,7 +1630,7 @@
         api.visibleLimit.value = 40;
         emojiActions.closeDetailDrawer();
       };
-      const sortedActiveEmojisList = computed3(() => {
+      const sortedActiveEmojisList = computed4(() => {
         const list = [...api.activeCategoryEmojisList.value];
         list.sort((a, b) => {
           const ta = api.emojiMtimes.value[a] || 0;
@@ -1498,14 +1639,14 @@
         });
         return list;
       });
-      const currentEmojiIndex = computed3(() => {
+      const currentEmojiIndex = computed4(() => {
         if (!emojiActions.activeDetailEmoji.value) return -1;
         return sortedActiveEmojisList.value.indexOf(emojiActions.activeDetailEmoji.value);
       });
-      const hasPreviousEmoji = computed3(() => {
+      const hasPreviousEmoji = computed4(() => {
         return currentEmojiIndex.value > 0;
       });
-      const hasNextEmoji = computed3(() => {
+      const hasNextEmoji = computed4(() => {
         const idx = currentEmojiIndex.value;
         return idx > -1 && idx < sortedActiveEmojisList.value.length - 1;
       });
@@ -1606,6 +1747,7 @@
         toggleImportEmoji: modals.toggleImportEmoji,
         // UI States & Navigation
         syncDrawerVisible,
+        otherDropdownVisible,
         selectCategory,
         hasPreviousEmoji,
         hasNextEmoji,
@@ -1665,7 +1807,18 @@
         handleCreateTagInDrawer: emojiActions.handleCreateTagInDrawer,
         handleBackspace: emojiActions.handleBackspace,
         isDrawerInputFocused,
-        getImageUrl
+        getImageUrl,
+        // Dedup
+        duplicateModal: dedup.duplicateModal,
+        similarityThreshold: dedup.similarityThreshold,
+        duplicateGroups: dedup.duplicateGroups,
+        formatBytes: dedup.formatBytes,
+        openDuplicateModal: dedup.openDuplicateModal,
+        closeDuplicateModal: dedup.closeDuplicateModal,
+        scanDuplicates: dedup.scanDuplicates,
+        toggleMemeAction: dedup.toggleMemeAction,
+        resolveDuplicates: dedup.resolveDuplicates,
+        totalDeletesCount: dedup.totalDeletesCount
       };
     }
   }).mount("#app");

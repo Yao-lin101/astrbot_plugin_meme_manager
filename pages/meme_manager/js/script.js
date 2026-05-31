@@ -5,6 +5,7 @@ import { useSelection } from './modules/selection.js';
 import { useSync } from './modules/sync.js';
 import { useCategories } from './modules/categories.js';
 import { useEmojiActions } from './modules/emojiActions.js';
+import { useDedup } from './modules/dedup.js';
 
 const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
@@ -60,9 +61,13 @@ createApp({
       selectedEmotions: api.selectedEmotions,
     });
 
+    // 7. Dedup
+    const dedup = useDedup(showToast, api.fetchEmojis);
+
     // Local UI states
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
+    const otherDropdownVisible = ref(false);
 
     const getImageUrl = (emoji) => {
       if (!emoji) return '';
@@ -236,6 +241,7 @@ createApp({
 
       // UI States & Navigation
       syncDrawerVisible,
+      otherDropdownVisible,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,
@@ -299,6 +305,18 @@ createApp({
       handleBackspace: emojiActions.handleBackspace,
       isDrawerInputFocused,
       getImageUrl,
+
+      // Dedup
+      duplicateModal: dedup.duplicateModal,
+      similarityThreshold: dedup.similarityThreshold,
+      duplicateGroups: dedup.duplicateGroups,
+      formatBytes: dedup.formatBytes,
+      openDuplicateModal: dedup.openDuplicateModal,
+      closeDuplicateModal: dedup.closeDuplicateModal,
+      scanDuplicates: dedup.scanDuplicates,
+      toggleMemeAction: dedup.toggleMemeAction,
+      resolveDuplicates: dedup.resolveDuplicates,
+      totalDeletesCount: dedup.totalDeletesCount,
     };
   },
 }).mount("#app");
