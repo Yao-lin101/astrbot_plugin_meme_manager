@@ -33,34 +33,38 @@ def sample_frame_indices(
     return sorted(indices)
 
 
-def calculate_dhash(frame: PILImage.Image) -> str:
+def calculate_dhash(frame: PILImage.Image) -> int:
     """Calculate difference hash (dhash) for a frame.
 
     Resizes image to 9x8, converts to grayscale, and compares adjacent pixels.
-    Produces a 64-bit binary string (64 characters of '0' or '1').
+    Produces a 64-bit integer.
     """
-    gray_img = frame.convert("L").resize((9, 8), PILImage.Resampling.LANCZOS)
+    gray_img = frame.convert("L").resize((9, 8), PILImage.Resampling.BILINEAR)
     pixels = list(gray_img.getdata())
 
-    dhash_str = ""
+    dhash_val = 0
     for y in range(8):
         row_offset = y * 9
         for x in range(8):
             left = pixels[row_offset + x]
             right = pixels[row_offset + x + 1]
-            dhash_str += "1" if left > right else "0"
+            if left > right:
+                dhash_val |= 1 << (y * 8 + x)
 
-    return dhash_str
+    return dhash_val
 
 
 def calculate_histogram(frame: PILImage.Image) -> list[float]:
-    """Calculate normalized grayscale histogram with 64 bins."""
-    gray_img = frame.convert("L").resize((32, 32), PILImage.Resampling.LANCZOS)
-    pixels = list(gray_img.getdata())
+    """Calculate normalized 3D RGB color histogram with 64 bins (4 bins per channel)."""
+    rgb_img = frame.convert("RGB").resize((32, 32), PILImage.Resampling.BILINEAR)
+    pixels = list(rgb_img.getdata())
 
     histogram = [0] * 64
-    for pixel in pixels:
-        bin_idx = min(63, pixel // 4)  # 256 / 64 = 4
+    for r, g, b in pixels:
+        r_bin = min(3, r // 64)
+        g_bin = min(3, g // 64)
+        b_bin = min(3, b // 64)
+        bin_idx = r_bin * 16 + g_bin * 4 + b_bin
         histogram[bin_idx] += 1
 
     total = len(pixels) or 1
@@ -107,9 +111,9 @@ def extract_similarity_features(image_bytes: bytes) -> dict | None:
         return None
 
 
-def hamming_distance(h1: str, h2: str) -> int:
-    """Compute Hamming distance between two binary hash strings."""
-    return sum(c1 != c2 for c1, c2 in zip(h1, h2))
+def hamming_distance(h1: int, h2: int) -> int:
+    """Compute Hamming distance between two binary hashes (integers)."""
+    return (h1 ^ h2).bit_count()
 
 
 def histogram_similarity(hist1: list[float], hist2: list[float]) -> float:
@@ -120,24 +124,30 @@ def histogram_similarity(hist1: list[float], hist2: list[float]) -> float:
 def calculate_frame_similarity(f1: dict, f2: dict) -> float:
     """Compute similarity between two frames."""
     h_dist = hamming_distance(f1["hash"], f2["hash"])
-    h_sim = 1.0 - h_dist / max(len(f1["hash"]), 1)
+    h_sim = 1.0 - h_dist / 64.0
     hist_sim = histogram_similarity(f1["histogram"], f2["histogram"])
     return h_sim * 0.7 + hist_sim * 0.3
 
 
 def calculate_frame_set_similarity(frames1: list[dict], frames2: list[dict]) -> float:
-    """Compute set-based frame similarity (handles dynamic animation frames)."""
+    """Compute symmetric set-based frame similarity (handles dynamic animation frames)."""
     if not frames1 or not frames2:
         return 0.0
-    scores = []
-    for f1 in frames1:
-        max_score = 0.0
-        for f2 in frames2:
-            score = calculate_frame_similarity(f1, f2)
-            if score > max_score:
-                max_score = score
-        scores.append(max_score)
-    return sum(scores) / len(scores) if scores else 0.0
+
+    def match_one_way(f_src: list[dict], f_dst: list[dict]) -> float:
+        scores = []
+        for f1 in f_src:
+            max_score = 0.0
+            for f2 in f_dst:
+                score = calculate_frame_similarity(f1, f2)
+                if score > max_score:
+                    max_score = score
+            scores.append(max_score)
+        return sum(scores) / len(scores) if scores else 0.0
+
+    sim_1_to_2 = match_one_way(frames1, frames2)
+    sim_2_to_1 = match_one_way(frames2, frames1)
+    return (sim_1_to_2 + sim_2_to_1) / 2.0
 
 
 def calculate_dimension_similarity(w1: int, h1: int, w2: int, h2: int) -> float:
@@ -168,18 +178,31 @@ def check_image_similarity(
     """Check if the provided image is similar to any existing meme in the database.
 
     Returns:
+    ---
         (matched_filename, similarity_score) if a match is found, else None.
     """
     new_features = extract_similarity_features(image_bytes)
     if not new_features:
         return None
 
-    # Load all cached features from the database
+    # Calculate dynamic max aspect ratio difference based on threshold to optimize query
+    max_aspect_diff = (
+        max(0.2, 1.0 - (threshold - 0.8) / 0.2) if threshold > 0.8 else 1.0
+    )
+    aspect_low = new_features["aspect_ratio"] - max_aspect_diff
+    aspect_high = new_features["aspect_ratio"] + max_aspect_diff
+
+    # Load matched features from the database
     conn = get_db_conn()
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "SELECT filename, width, height, aspect_ratio, frame_count, features_json FROM meme_similarity_features"
+            """
+            SELECT filename, width, height, aspect_ratio, frame_count, features_json
+            FROM meme_similarity_features
+            WHERE aspect_ratio BETWEEN ? AND ?
+            """,
+            (aspect_low, aspect_high),
         )
         rows = cursor.fetchall()
     except Exception as e:

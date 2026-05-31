@@ -74,6 +74,18 @@ def init_db():
     """)
     conn.commit()
 
+    # 升级 similarity_features 表数据（版本2：使用整型哈希与彩色直方图，需要清空旧数据重新同步）
+    SIMILARITY_V2_MARKER = PLUGIN_DATA_DIR / ".similarity_v2_migrated"
+    if not SIMILARITY_V2_MARKER.exists():
+        try:
+            cursor.execute("DELETE FROM meme_similarity_features")
+            conn.commit()
+            with open(SIMILARITY_V2_MARKER, "w") as f:
+                f.write("migrated")
+            logger.info("已清空旧版图片相似度特征缓存以进行 V2 升级。")
+        except Exception as e:
+            logger.warning(f"升级相似度特征缓存失败: {e}")
+
     # 检查 meme_steal_attempts 表中的 reason 字段是否存在
     cursor.execute("PRAGMA table_info(meme_steal_attempts)")
     steal_columns = [row["name"] for row in cursor.fetchall()]
