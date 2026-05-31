@@ -213,10 +213,12 @@ class MemeSender(Star):
         self.persona_prompts_backup = {}
         self._reload_personas()
 
-        # 初始化标签向量
+        # 初始化标签向量与表情相似度特征
         from .backend.emotion_handler import sync_tag_embeddings
+        from .backend.similarity import sync_similarity_features
 
         asyncio.create_task(sync_tag_embeddings(self))
+        asyncio.create_task(sync_similarity_features(self))
 
     def wrap_api_handler(self, handler):
         async def wrapper(*args, **kwargs):
@@ -607,3 +609,11 @@ class MemeSender(Star):
     @property
     def streaming_compatibility(self) -> bool:
         return get_config_value(self.config, "streaming_compatibility", False)
+
+    @property
+    def enable_similarity_dedup(self) -> bool:
+        return get_config_value(self.config, "enable_similarity_dedup", True)
+
+    @property
+    def similarity_dedup_threshold(self) -> float:
+        return get_config_value(self.config, "similarity_dedup_threshold", 0.85)

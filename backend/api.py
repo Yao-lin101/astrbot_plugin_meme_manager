@@ -45,6 +45,7 @@ def trigger_tag_vectorization() -> None:
         import asyncio
 
         from .emotion_handler import sync_tag_embeddings
+
         asyncio.create_task(sync_tag_embeddings(sender))
 
 

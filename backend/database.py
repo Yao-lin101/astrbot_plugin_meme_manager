@@ -62,6 +62,16 @@ def init_db():
         embedding TEXT
     )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS meme_similarity_features (
+        filename TEXT UNIQUE,
+        width INTEGER,
+        height INTEGER,
+        aspect_ratio REAL,
+        frame_count INTEGER,
+        features_json TEXT
+    )
+    """)
     conn.commit()
 
     # 检查 meme_steal_attempts 表中的 reason 字段是否存在
@@ -353,5 +363,25 @@ def clear_all_tag_embeddings() -> None:
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM tag_embeddings")
+    conn.commit()
+    conn.close()
+
+
+def delete_meme_similarity_features(filename: str) -> None:
+    """删除指定表情包的相似度特征"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM meme_similarity_features WHERE filename = ?", (filename,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def clear_all_meme_similarity_features() -> None:
+    """清空所有缓存的表情相似度特征"""
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM meme_similarity_features")
     conn.commit()
     conn.close()

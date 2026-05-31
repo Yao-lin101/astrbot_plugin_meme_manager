@@ -263,5 +263,23 @@
         "hint": "LLM 回复文本内容语义的相似度加权比例。双通道混合检索总分 = 显式标签相似度 * 标签权重 + 回复文本相似度 * 文本权重。"
       }
     }
+  },
+  "similarity_dedup_config": {
+    "description": "相似度去重配置",
+    "type": "object",
+    "items": {
+      "enable_similarity_dedup": {
+        "description": "启用表情包相似度去重",
+        "type": "bool",
+        "default": true,
+        "hint": "是否启用表情相似度去重（dHash + 直方图算法）。启用后，当新保存/上传的表情包与已有表情包相似度超过阈值时，自动拦截去重。"
+      },
+      "similarity_dedup_threshold": {
+        "description": "表情相似度去重阈值 (0-1)",
+        "type": "float",
+        "default": 0.85,
+        "hint": "相似度大于此阈值时，新表情包将被判定为重复图片并拒绝收录。"
+      }
+    }
   }
 }
