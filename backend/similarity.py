@@ -114,12 +114,7 @@ def hamming_distance(h1: str, h2: str) -> int:
 
 def histogram_similarity(hist1: list[float], hist2: list[float]) -> float:
     """Compute histogram intersection similarity."""
-    intersection = 0.0
-    union = 0.0
-    for h1, h2 in zip(hist1, hist2):
-        intersection += min(h1, h2)
-        union += max(h1, h2)
-    return intersection / union if union > 0.0 else 0.0
+    return sum(min(h1, h2) for h1, h2 in zip(hist1, hist2))
 
 
 def calculate_frame_similarity(f1: dict, f2: dict) -> float:
@@ -164,11 +159,7 @@ def calculate_similarity_score(features1: dict, features2: dict) -> float:
     aspect_diff = abs(features1["aspect_ratio"] - features2["aspect_ratio"])
     aspect_sim = max(0.0, 1.0 - aspect_diff)
 
-    dim_sim = calculate_dimension_similarity(
-        features1["width"], features1["height"], features2["width"], features2["height"]
-    )
-
-    return frame_sim * 0.7 + aspect_sim * 0.2 + dim_sim * 0.1
+    return frame_sim * 0.8 + aspect_sim * 0.2
 
 
 def check_image_similarity(
