@@ -921,3 +921,215 @@ async def get_emoji_file_base64():
         ), 200
     except Exception as e:
         return jsonify({"message": f"读取文件失败: {e}"}), 500
+
+
+@api.route("/emoji/check_duplicates", methods=["GET"])
+async def check_duplicates():
+    """扫描所有表情包以查找重复的相似表情"""
+    try:
+        threshold = float(request.args.get("threshold", 0.85))
+
+        from .database import get_db_conn
+        import json
+        from .similarity import calculate_similarity_score
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+
+        # Load all memes metadata
+        cursor.execute("SELECT filename, emotions, personas FROM memes")
+        meme_rows = cursor.fetchall()
+        meme_meta = {
+            row["filename"]: {
+                "emotions": [e.strip() for e in row["emotions"].split(",")]
+                if row["emotions"]
+                else [],
+                "personas": [p.strip() for p in row["personas"].split(",")]
+                if row["personas"]
+                else [],
+            }
+            for row in meme_rows
+        }
+
+        # Load all similarity features
+        cursor.execute(
+            "SELECT filename, width, height, aspect_ratio, frame_count, features_json FROM meme_similarity_features"
+        )
+        rows = cursor.fetchall()
+        conn.close()
+
+        features_list = []
+        for row in rows:
+            filename = row["filename"]
+            if filename not in meme_meta:
+                continue
+            try:
+                features_list.append(
+                    {
+                        "filename": filename,
+                        "width": row["width"],
+                        "height": row["height"],
+                        "aspect_ratio": row["aspect_ratio"],
+                        "frame_count": row["frame_count"],
+                        "frames": json.loads(row["features_json"]),
+                        "meta": meme_meta[filename],
+                    }
+                )
+            except Exception:
+                continue
+
+        # Group similar memes
+        from pathlib import Path
+        from ..config import MEMES_DIR
+        groups = []
+        visited = set()
+
+        for i, f1 in enumerate(features_list):
+            if f1["filename"] in visited:
+                continue
+
+            group_memes = [f1]
+            visited.add(f1["filename"])
+
+            for f2 in features_list[i + 1 :]:
+                if f2["filename"] in visited:
+                    continue
+
+                if abs(f1["aspect_ratio"] - f2["aspect_ratio"]) > 0.15:
+                    continue
+
+                score = calculate_similarity_score(f1, f2)
+                if score >= threshold:
+                    f2_copy = dict(f2)
+                    f2_copy["similarity"] = score
+                    group_memes.append(f2_copy)
+                    visited.add(f2["filename"])
+
+            if len(group_memes) > 1:
+                f1_copy = dict(f1)
+                f1_copy["similarity"] = 1.0
+                group_memes[0] = f1_copy
+
+                clean_memes = []
+                for m in group_memes:
+                    file_path = Path(MEMES_DIR) / m["filename"]
+                    size_bytes = file_path.stat().st_size if file_path.exists() else 0
+                    clean_memes.append({
+                        "filename": m["filename"],
+                        "emotions": m["meta"]["emotions"],
+                        "personas": m["meta"]["personas"],
+                        "similarity": m["similarity"],
+                        "width": m.get("width", 0),
+                        "height": m.get("height", 0),
+                        "size_bytes": size_bytes
+                    })
+                groups.append({"id": f"group_{len(groups) + 1}", "memes": clean_memes})
+
+        return jsonify({"status": "success", "groups": groups}), 200
+    except Exception as e:
+        logger.error(f"检查重复表情包失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
+
+@api.route("/emoji/resolve_duplicates", methods=["POST"])
+async def resolve_duplicates():
+    """解析重复表情包：保留一部分，删除另外一部分，并可选地合并他们的标签和人格"""
+    try:
+        data = await request.get_json()
+        keeps = data.get("keeps", [])
+        deletes = data.get("deletes", [])
+        merge = bool(data.get("merge", True))
+
+        if not keeps or not deletes:
+            return jsonify({"message": "keeps and deletes lists are required"}), 400
+
+        from pathlib import Path
+
+        from ..config import MEMES_DIR
+        from .database import delete_meme_similarity_features, get_db_conn
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+
+        # 1. If merge is true, extract all emotions and personas from deleted memes
+        merged_emotions = set()
+        merged_personas = set()
+
+        if merge:
+            for filename in deletes:
+                cursor.execute(
+                    "SELECT emotions, personas FROM memes WHERE filename = ?",
+                    (filename,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    if row["emotions"]:
+                        merged_emotions.update(
+                            e.strip() for e in row["emotions"].split(",")
+                        )
+                    if row["personas"]:
+                        merged_personas.update(
+                            p.strip() for p in row["personas"].split(",")
+                        )
+
+        # 2. Delete the deleted memes from database and filesystem
+        for filename in deletes:
+            cursor.execute("DELETE FROM memes WHERE filename = ?", (filename,))
+            delete_meme_similarity_features(filename)
+
+            file_path = Path(MEMES_DIR) / filename
+            if file_path.exists():
+                file_path.unlink()
+
+        # 3. Apply merged emotions & personas to kept memes if merge is enabled
+        if merge and (merged_emotions or merged_personas):
+            for filename in keeps:
+                cursor.execute(
+                    "SELECT emotions, personas FROM memes WHERE filename = ?",
+                    (filename,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    existing_emotions = (
+                        set(row["emotions"].split(",")) if row["emotions"] else set()
+                    )
+                    existing_personas = (
+                        set(row["personas"].split(",")) if row["personas"] else set()
+                    )
+
+                    for emo in merged_emotions:
+                        if emo:
+                            existing_emotions.add(emo)
+
+                    if "*" in merged_personas or "*" in existing_personas:
+                        existing_personas = {"*"}
+                    else:
+                        for p in merged_personas:
+                            if p:
+                                existing_personas.add(p)
+
+                    cursor.execute(
+                        "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
+                        (
+                            ",".join(existing_emotions),
+                            ",".join(existing_personas),
+                            filename,
+                        ),
+                    )
+
+        conn.commit()
+        conn.close()
+
+        # Reload
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        category_manager = plugin_config.get("category_manager")
+        if category_manager:
+            category_manager.sync_with_filesystem()
+
+        trigger_tag_vectorization()
+
+        return jsonify({"status": "success", "message": "重复表情清理完成"}), 200
+    except Exception as e:
+        logger.error(f"清理重复表情包失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
