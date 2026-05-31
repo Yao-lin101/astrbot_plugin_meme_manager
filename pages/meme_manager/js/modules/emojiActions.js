@@ -22,6 +22,7 @@ export function useEmojiActions({
   const activeDetailEmoji = ref(null);
   const detailMetadata = ref(null);
   const selectedPersonas = ref([]);
+  const detailEmojiDescription = ref("");
   const detailDrawerLoading = ref(false);
 
   // Upload state tracking
@@ -60,6 +61,7 @@ export function useEmojiActions({
       detailMetadata.value = metadata;
       selectedEmotions.value = metadata.emotions || [];
       selectedPersonas.value = metadata.personas || [];
+      detailEmojiDescription.value = metadata.description || "";
     } catch (e) {
       showToast(e.message, "error", "加载表情属性失败");
       closeDetailDrawer();
@@ -73,6 +75,7 @@ export function useEmojiActions({
     detailMetadata.value = null;
     selectedEmotions.value = [];
     selectedPersonas.value = [];
+    detailEmojiDescription.value = "";
     drawerTagSearchQuery.value = "";
   };
 
@@ -164,6 +167,7 @@ export function useEmojiActions({
           filename: emoji,
           emotions: selectedEmotions.value,
           personas: personas,
+          description: detailEmojiDescription.value,
         }),
       });
       if (!res.ok) throw new Error("保存属性失败");
@@ -740,6 +744,7 @@ export function useEmojiActions({
   return {
     activeDetailEmoji,
     detailMetadata,
+    detailEmojiDescription,
     selectedEmotions,
     selectedPersonas,
     detailDrawerLoading,
