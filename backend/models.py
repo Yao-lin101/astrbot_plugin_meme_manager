@@ -246,7 +246,7 @@ def save_and_register_meme(
     return {"path": str(dest_path), "filename": safe_name}
 
 
-def add_emoji_to_category(category, image_file, personas="*"):
+def add_emoji_to_category(category, image_file, personas="*", ignore_similarity=False):
     """添加表情包到指定类别（WebUI 上传端点调用）"""
     if not image_file:
         logger.error("没有接收到文件")
@@ -266,7 +266,7 @@ def add_emoji_to_category(category, image_file, personas="*"):
     # 判重
     content_hash = _calculate_file_hash(content)
     duplicate_name = _find_duplicate_image(content_hash)
-    if duplicate_name is not None:
+    if duplicate_name is not None and not ignore_similarity:
         # 如果已存在，但在该类别下没有，则将该类别追加到现有文件的 emotions 中
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -289,7 +289,7 @@ def add_emoji_to_category(category, image_file, personas="*"):
     # 相似度去重 (Pillow dHash + Histogram)
     cfg = _get_plugin_config()
     enable_similarity = get_config_value(cfg, "enable_similarity_dedup", True)
-    if enable_similarity:
+    if enable_similarity and not ignore_similarity:
         from .similarity import check_image_similarity
 
         similarity_threshold = get_config_value(cfg, "similarity_dedup_threshold", 0.85)

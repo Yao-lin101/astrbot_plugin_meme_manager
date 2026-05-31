@@ -42,6 +42,7 @@
             if (body instanceof FormData) {
               const category = body.get('category');
               const file = body.get('image_file');
+              const ignore_similarity = body.get('ignore_similarity');
               if (file) {
                 const base64Data = await new Promise((resolve, reject) => {
                   const reader = new FileReader();
@@ -49,11 +50,15 @@
                   reader.onerror = reject;
                   reader.readAsDataURL(file);
                 });
-                resData = await B.apiPost("emoji/add", {
+                const payload = {
                   category: category,
                   filename: file.name,
                   base64_data: base64Data
-                });
+                };
+                if (ignore_similarity !== null && ignore_similarity !== undefined) {
+                  payload.ignore_similarity = ignore_similarity;
+                }
+                resData = await B.apiPost("emoji/add", payload);
               } else {
                 throw new Error("No file in FormData");
               }
@@ -577,6 +582,19 @@
         <div class="confirm-modal-card">
           <h2>{{ confirmDialog.title }}</h2>
           <p>{{ confirmDialog.description }}</p>
+          <div v-if="confirmDialog.imageUrl || confirmDialog.localImageUrl" class="confirm-modal-comparison">
+            <div v-if="confirmDialog.localImageUrl" class="comparison-column">
+              <div class="comparison-label">新上传的图片</div>
+              <img :src = "confirmDialog.localImageUrl" alt="Uploading Meme" />
+            </div>
+            <div v-if="confirmDialog.imageUrl && confirmDialog.localImageUrl" class="comparison-separator">
+              <i class="fas fa-arrows-left-right"></i>
+            </div>
+            <div v-if="confirmDialog.imageUrl" class="comparison-column">
+              <div class="comparison-label">已有的相似表情</div>
+              <img :src = "confirmDialog.imageUrl" alt="Similar Meme" />
+            </div>
+          </div>
           <div class="confirm-modal-actions">
             <button class="btn-secondary" @click="handleConfirm(false)">取消</button>
             <button :class="confirmDialog.confirmClass === 'danger' ? 'btn-danger' : 'btn-primary'" @click="handleConfirm(true)">

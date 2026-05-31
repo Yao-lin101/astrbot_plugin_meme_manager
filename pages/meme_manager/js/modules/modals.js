@@ -7,6 +7,8 @@ export function useModals(showToast) {
     description: "",
     confirmLabel: "确认",
     confirmClass: "",
+    imageUrl: "",
+    localImageUrl: "",
     resolve: null,
   });
 
@@ -47,12 +49,14 @@ export function useModals(showToast) {
     selectedEmojis: new Set(),
   });
 
-  const confirm = (title, description, confirmLabel = "确认", confirmClass = "") => {
+  const confirm = (title, description, confirmLabel = "确认", confirmClass = "", imageUrl = "", localImageUrl = "") => {
     return new Promise((resolve) => {
       confirmDialog.title = title;
       confirmDialog.description = description;
       confirmDialog.confirmLabel = confirmLabel;
       confirmDialog.confirmClass = confirmClass;
+      confirmDialog.imageUrl = imageUrl;
+      confirmDialog.localImageUrl = localImageUrl;
       confirmDialog.resolve = resolve;
       confirmDialog.visible = true;
     });
@@ -61,6 +65,8 @@ export function useModals(showToast) {
   const handleConfirm = (value) => {
     confirmDialog.visible = false;
     if (confirmDialog.resolve) confirmDialog.resolve(value);
+    confirmDialog.imageUrl = "";
+    confirmDialog.localImageUrl = "";
   };
 
   const showDangerConfirm = (title, description, actionLabel = "确认操作") => {
