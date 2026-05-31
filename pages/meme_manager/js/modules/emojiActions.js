@@ -495,8 +495,61 @@ export function useEmojiActions({
           body: formData,
         });
 
+        let resData = null;
+        try {
+          resData = await res.json();
+        } catch (err) {
+          // ignore
+        }
+
         if (res.status === 409) {
-          dups++;
+          if (resData && (resData.code === "similar_emoji" || resData.code === "duplicate_emoji")) {
+            const localUrl = URL.createObjectURL(file);
+            const targetFilename = resData.existing_filename || resData.filename;
+            const similarUrl = `/api/file/meme_manager/memes/file/${encodeURIComponent(targetFilename)}`;
+            
+            const isSimilar = resData.code === "similar_emoji";
+            const title = isSimilar ? "检测到相似表情包" : "检测到完全相同的表情包";
+            const description = isSimilar
+              ? `表情包「${file.name}」与已有表情「${targetFilename}」相似度达 ${Math.round(resData.similarity * 100)}%，是否仍要继续上传？`
+              : `分类中已存在完全相同的文件「${targetFilename}」，是否仍要强制上传为新文件？`;
+
+            const confirmed = await confirm(
+              title,
+              description,
+              "继续上传",
+              "primary",
+              similarUrl,
+              localUrl
+            );
+            
+            URL.revokeObjectURL(localUrl);
+
+            if (confirmed) {
+              const forceFormData = new FormData();
+              forceFormData.append("category", category);
+              forceFormData.append("image_file", file);
+              forceFormData.append("ignore_similarity", "true");
+              
+              try {
+                const forceRes = await fetch("/api/emoji/add", {
+                  method: "POST",
+                  body: forceFormData,
+                });
+                if (forceRes.ok) {
+                  completed++;
+                } else {
+                  failed++;
+                }
+              } catch (err) {
+                failed++;
+              }
+            } else {
+              dups++;
+            }
+          } else {
+            dups++;
+          }
         } else if (!res.ok) {
           throw new Error();
         } else {
