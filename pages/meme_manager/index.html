@@ -116,7 +116,7 @@
     </style>
   </head>
   <body>
-    <div id="app" class="layout-container" v-cloak @click="closeContextMenu">
+    <div id="app" class="layout-container" v-cloak @click="closeContextMenu(); otherDropdownVisible = false">
 
       <!-- 主要工作区 (通栏大气的仪表盘布局) -->
       <main class="main-content">
@@ -246,36 +246,41 @@
                 </datalist>
               </div>
             </div>
-            <div class="selection-toolbar-actions">
-              <button class="btn-secondary toggle-sync-btn" :class="{ active: syncDrawerVisible }" @click="syncDrawerVisible = !syncDrawerVisible">
-                <i class="fas fa-arrows-spin icon"></i>同步与设置
-              </button>
-
+            <div class="selection-toolbar-actions" style="display: flex; align-items: center; gap: 8px;">
               <!-- 添加标签按钮 (常驻) -->
               <button id="add-category-btn-top" class="btn-secondary" @click="addCategoryForm.visible = true">
                 <i class="fas fa-plus icon"></i>添加标签
               </button>
 
-              <!-- 检查重复表情按钮 -->
-              <button id="check-duplicates-btn-top" class="btn-secondary" @click="openDuplicateModal">
-                <i class="fas fa-images icon"></i>检查重复表情
-              </button>
-
-              <span id="selection-summary" :class="{ 'active-selection': selectionEnabled }">
-                {{ selectionEnabled ? '已选中 ' + selectedEmojis.size + ' 个' : '批量选择' }}
+              <span v-if="selectionEnabled" id="selection-summary" class="active-selection">
+                已选中 {{ selectedEmojis.size }} 个
               </span>
-              <button v-if="selectionEnabled" id="toggle-selection-mode-btn" class="btn-secondary" @click="toggleSelectionMode">
-                <i class="fas fa-xmark icon"></i>取消选择
-              </button>
+              
               <button id="batch-persona-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="openBatchPersonaModal">
                 <i class="fas fa-user-gear icon"></i>设置人格
               </button>
-              <button id="batch-gif-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="batchConvertToGif">
-                <i class="fas fa-file-image icon"></i>转换为 GIF
-              </button>
+              
               <button id="batch-delete-btn" class="btn-danger" :disabled="selectedEmojis.size === 0" @click="batchDeleteSelected">
                 <i class="fas fa-trash-can icon"></i>删除
               </button>
+
+              <!-- 其他操作下拉菜单 -->
+              <div class="dropdown-wrapper" style="position: relative; display: inline-block;">
+                <button class="btn-secondary dropdown-trigger" @click.stop="otherDropdownVisible = !otherDropdownVisible" style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 500; transition: var(--transition);">
+                  <i class="fas fa-ellipsis-h icon"></i>其他 <i class="fas fa-chevron-down" style="font-size: 10px; margin-left: 2px;"></i>
+                </button>
+                <div class="dropdown-menu" v-show="otherDropdownVisible" style="position: absolute; right: 0; top: 100%; margin-top: 6px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 100; min-width: 160px; display: flex; flex-direction: column; padding: 4px 0; overflow: hidden;">
+                  <button class="dropdown-item" @click="syncDrawerVisible = !syncDrawerVisible; otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-arrows-spin" style="width: 16px; color: var(--text-secondary);"></i> 同步与设置
+                  </button>
+                  <button class="dropdown-item" @click="openDuplicateModal(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-images" style="width: 16px; color: var(--text-secondary);"></i> 检查重复表情
+                  </button>
+                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchConvertToGif(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-file-image" style="width: 16px; color: var(--text-secondary);"></i> 转换为 GIF
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

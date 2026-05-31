@@ -1595,6 +1595,7 @@
       const dedup = useDedup(showToast, api.fetchEmojis);
       const syncDrawerVisible = ref9(false);
       const isDrawerInputFocused = ref9(false);
+      const otherDropdownVisible = ref9(false);
       const getImageUrl = (emoji) => {
         if (!emoji) return "";
         return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
@@ -1746,6 +1747,7 @@
         toggleImportEmoji: modals.toggleImportEmoji,
         // UI States & Navigation
         syncDrawerVisible,
+        otherDropdownVisible,
         selectCategory,
         hasPreviousEmoji,
         hasNextEmoji,

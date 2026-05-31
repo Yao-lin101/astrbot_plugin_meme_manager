@@ -67,6 +67,7 @@ createApp({
     // Local UI states
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
+    const otherDropdownVisible = ref(false);
 
     const getImageUrl = (emoji) => {
       if (!emoji) return '';
@@ -240,6 +241,7 @@ createApp({
 
       // UI States & Navigation
       syncDrawerVisible,
+      otherDropdownVisible,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,
