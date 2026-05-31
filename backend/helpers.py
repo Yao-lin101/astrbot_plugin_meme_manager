@@ -248,6 +248,31 @@ def _get_persona_tags_path():
     return PERSONA_TAGS_PATH
 
 
+def get_settings_dict(config: dict) -> dict:
+    """获取解析后的人格偏好配置字典"""
+    import json
+    val = config.get("persona_settings", "{}")
+    if not val:
+        return {}
+    if isinstance(val, dict):
+        return val
+    if isinstance(val, str):
+        try:
+            return json.loads(val)
+        except Exception as e:
+            logger.warning(f"[meme_manager] Failed to parse persona_settings JSON: {e}")
+            return {}
+    return {}
+
+
+def save_settings_dict(config: dict, settings: dict) -> None:
+    """序列化并保存人格偏好配置字典"""
+    import json
+    config["persona_settings"] = json.dumps(settings, ensure_ascii=False)
+    if hasattr(config, "save_config"):
+        config.save_config()
+
+
 def migrate_old_persona_tags_if_needed(config: dict) -> None:
     """如果存在旧的 persona_tags.json，则将其迁移到插件配置项中，并删除旧文件。"""
     path = _get_persona_tags_path()
@@ -256,18 +281,14 @@ def migrate_old_persona_tags_if_needed(config: dict) -> None:
             from ..utils import load_json
             old_tags = load_json(path, {})
             if old_tags:
-                settings = config.get("persona_settings")
-                if not settings or not isinstance(settings, dict):
-                    settings = {}
+                settings = get_settings_dict(config)
                 for pid, tag in old_tags.items():
                     if pid not in settings:
                         settings[pid] = {
                             "meme_preference": "",
                             "meme_use_preference": tag
                         }
-                config["persona_settings"] = settings
-                if hasattr(config, "save_config"):
-                    config.save_config()
+                save_settings_dict(config, settings)
                 logger.info("[meme_manager] 成功将旧的人格表情包标签迁移至配置项")
             path.unlink()
         except Exception as e:
@@ -278,9 +299,7 @@ def get_persona_setting(config: dict, persona_id: str, key: str) -> str:
     """获取人格的特定偏好配置 (meme_preference 或 meme_use_preference)"""
     if not config:
         return ""
-    settings = config.get("persona_settings", {})
-    if not settings or not isinstance(settings, dict):
-        return ""
+    settings = get_settings_dict(config)
     p_cfg = settings.get(persona_id)
     if not p_cfg or not isinstance(p_cfg, dict):
         return ""
@@ -299,9 +318,7 @@ def load_persona_tags(config: dict | None = None) -> dict[str, str]:
             pass
 
     if config is not None:
-        settings = config.get("persona_settings", {})
-        if not settings or not isinstance(settings, dict):
-            return {}
+        settings = get_settings_dict(config)
         res = {}
         for pid, val in settings.items():
             if isinstance(val, dict):
@@ -325,15 +342,12 @@ def save_persona_tags(tags: dict[str, str], config: dict | None = None) -> None:
             pass
 
     if config is not None:
-        settings = config.get("persona_settings", {})
-        if not settings or not isinstance(settings, dict):
-            settings = {}
+        settings = get_settings_dict(config)
         for pid, tag in tags.items():
             if pid not in settings:
                 settings[pid] = {"meme_preference": "", "meme_use_preference": tag}
             else:
                 settings[pid]["meme_use_preference"] = tag
-        config["persona_settings"] = settings
-        if hasattr(config, "save_config"):
-            config.save_config()
+        save_settings_dict(config, settings)
+
 

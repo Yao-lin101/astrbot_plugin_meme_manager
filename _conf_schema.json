@@ -290,8 +290,8 @@
   },
   "persona_settings": {
     "description": "人格专属表情包偏好配置",
-    "type": "dict",
-    "default": {},
-    "hint": "配置各个人格的表情收集和使用偏好，格式为：{'人格ID/名称': {'meme_preference': '收集偏好描述', 'meme_use_preference': '使用偏好标签'}}"
+    "type": "text",
+    "default": "{}",
+    "hint": "配置各个人格的表情收集和使用偏好，以 JSON 格式存储"
   }
 }

@@ -820,9 +820,8 @@ async def get_persona_tags():
         sender = plugin_config.get("sender")
         if not sender:
             return jsonify({})
-        settings = sender.config.get("persona_settings", {})
-        if not isinstance(settings, dict):
-            settings = {}
+        from .helpers import get_settings_dict
+        settings = get_settings_dict(sender.config)
         return jsonify(settings)
     except Exception as e:
         logger.error(f"获取人格专属标签失败: {e}", exc_info=True)
@@ -846,9 +845,8 @@ async def save_persona_tag():
         if not sender:
             return jsonify({"message": "Sender not found"}), 404
 
-        settings = sender.config.get("persona_settings", {})
-        if not isinstance(settings, dict):
-            settings = {}
+        from .helpers import get_settings_dict, save_settings_dict
+        settings = get_settings_dict(sender.config)
 
         # 如果 tag 和偏好描述都为空，则移除此配置
         if not meme_preference.strip() and not meme_use_preference.strip():
@@ -860,9 +858,7 @@ async def save_persona_tag():
                 "meme_use_preference": meme_use_preference.strip()
             }
 
-        sender.config["persona_settings"] = settings
-        if hasattr(sender.config, "save_config"):
-            sender.config.save_config()
+        save_settings_dict(sender.config, settings)
 
         # 重新加载表情配置
         await sender.reload_emotions()
@@ -875,6 +871,7 @@ async def save_persona_tag():
     except Exception as e:
         logger.error(f"保存人格专属标签失败: {e}", exc_info=True)
         return jsonify({"message": str(e)}), 500
+
 
 
 
