@@ -61,7 +61,6 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                 result.chain = cleaned_components
         return
 
-
     if result.result_content_type == ResultContentType.STREAMING_FINISH:
         if sender.streaming_compatibility:
             logger.debug(

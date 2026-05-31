@@ -251,6 +251,7 @@ def _get_persona_tags_path():
 def get_settings_dict(config: dict) -> dict:
     """获取解析后的人格偏好配置字典"""
     import json
+
     val = config.get("persona_settings", "{}")
     if not val:
         return {}
@@ -268,6 +269,7 @@ def get_settings_dict(config: dict) -> dict:
 def save_settings_dict(config: dict, settings: dict) -> None:
     """序列化并保存人格偏好配置字典"""
     import json
+
     config["persona_settings"] = json.dumps(settings, ensure_ascii=False)
     if hasattr(config, "save_config"):
         config.save_config()
@@ -279,6 +281,7 @@ def migrate_old_persona_tags_if_needed(config: dict) -> None:
     if path.exists() and path.is_file():
         try:
             from ..utils import load_json
+
             old_tags = load_json(path, {})
             if old_tags:
                 settings = get_settings_dict(config)
@@ -286,7 +289,7 @@ def migrate_old_persona_tags_if_needed(config: dict) -> None:
                     if pid not in settings:
                         settings[pid] = {
                             "meme_preference": "",
-                            "meme_use_preference": tag
+                            "meme_use_preference": tag,
                         }
                 save_settings_dict(config, settings)
                 logger.info("[meme_manager] 成功将旧的人格表情包标签迁移至配置项")
@@ -311,6 +314,7 @@ def load_persona_tags(config: dict | None = None) -> dict[str, str]:
     if config is None:
         try:
             from quart import current_app
+
             plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
             if plugin_config:
                 config = plugin_config.get("plugin_config")
@@ -335,6 +339,7 @@ def save_persona_tags(tags: dict[str, str], config: dict | None = None) -> None:
     if config is None:
         try:
             from quart import current_app
+
             plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
             if plugin_config:
                 config = plugin_config.get("plugin_config")
@@ -349,5 +354,3 @@ def save_persona_tags(tags: dict[str, str], config: dict | None = None) -> None:
             else:
                 settings[pid]["meme_use_preference"] = tag
         save_settings_dict(config, settings)
-
-

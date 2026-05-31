@@ -525,6 +525,7 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
 
     # 获取所有标签的向量
     from .database import get_all_tag_embeddings
+
     tag_embeddings = get_all_tag_embeddings()
 
     similarity_threshold = get_config_value(
@@ -572,13 +573,10 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
                             max_score = sim
 
         if max_score > 0.0:
-            scored_memes.append({
-                "filename": filename,
-                "emotions": emotions,
-                "score": max_score
-            })
+            scored_memes.append(
+                {"filename": filename, "emotions": emotions, "score": max_score}
+            )
 
     # 按分数降序排列，最多返回前 8 个
     scored_memes.sort(key=lambda x: x["score"], reverse=True)
     return scored_memes[:8]
-

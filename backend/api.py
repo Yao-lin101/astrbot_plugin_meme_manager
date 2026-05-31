@@ -821,6 +821,7 @@ async def get_persona_tags():
         if not sender:
             return jsonify({})
         from .helpers import get_settings_dict
+
         settings = get_settings_dict(sender.config)
         return jsonify(settings)
     except Exception as e:
@@ -835,7 +836,9 @@ async def save_persona_tag():
         data = await request.get_json()
         persona_id = data.get("persona_id")
         meme_preference = data.get("meme_preference", "")
-        meme_use_preference = data.get("meme_use_preference", data.get("tag", "")) # tag 兼容旧格式
+        meme_use_preference = data.get(
+            "meme_use_preference", data.get("tag", "")
+        )  # tag 兼容旧格式
 
         if not persona_id:
             return jsonify({"message": "Persona ID is required"}), 400
@@ -846,6 +849,7 @@ async def save_persona_tag():
             return jsonify({"message": "Sender not found"}), 404
 
         from .helpers import get_settings_dict, save_settings_dict
+
         settings = get_settings_dict(sender.config)
 
         # 如果 tag 和偏好描述都为空，则移除此配置
@@ -855,7 +859,7 @@ async def save_persona_tag():
         else:
             settings[persona_id] = {
                 "meme_preference": meme_preference.strip(),
-                "meme_use_preference": meme_use_preference.strip()
+                "meme_use_preference": meme_use_preference.strip(),
             }
 
         save_settings_dict(sender.config, settings)
@@ -871,8 +875,6 @@ async def save_persona_tag():
     except Exception as e:
         logger.error(f"保存人格专属标签失败: {e}", exc_info=True)
         return jsonify({"message": str(e)}), 500
-
-
 
 
 @api.route("/emoji/batch_import", methods=["POST"])

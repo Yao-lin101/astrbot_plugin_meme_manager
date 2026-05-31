@@ -12,12 +12,11 @@ from astrbot.api.star import Context, Star, register
 from .backend.category_manager import CategoryManager
 from .backend.commands_handler import CommandsHandler
 from .backend.event_handlers import EventHandlers
-from .backend.helpers import migrate_old_persona_tags_if_needed, get_persona_setting
+from .backend.helpers import get_persona_setting, migrate_old_persona_tags_if_needed
 from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
 from .utils import get_config_value
-
 
 
 @register(
@@ -30,7 +29,6 @@ class MemeSender(Star):
         super().__init__(context)
         self.config = config or {}
         migrate_old_persona_tags_if_needed(self.config)
-
 
         # Monkeypatch OneBot image serializer to support sticker (subType=1) format
         try:
@@ -230,7 +228,6 @@ class MemeSender(Star):
         except Exception as e:
             logger.warning(f"[meme_manager] 无法激活/停用 LLM 发图工具: {e}")
 
-
         # 初始化标签向量与表情相似度特征
         from .backend.emotion_handler import sync_tag_embeddings
         from .backend.similarity import sync_similarity_features
@@ -349,8 +346,12 @@ class MemeSender(Star):
             original_prompt = self.persona_prompts_backup.get(name, "")
 
             # 从配置中获取该人格的偏好
-            pref = get_persona_setting(self.config, persona_id, "meme_preference") or get_persona_setting(self.config, name, "meme_preference")
-            use_pref = get_persona_setting(self.config, persona_id, "meme_use_preference") or get_persona_setting(self.config, name, "meme_use_preference")
+            pref = get_persona_setting(
+                self.config, persona_id, "meme_preference"
+            ) or get_persona_setting(self.config, name, "meme_preference")
+            use_pref = get_persona_setting(
+                self.config, persona_id, "meme_use_preference"
+            ) or get_persona_setting(self.config, name, "meme_use_preference")
 
             pref_prompt = ""
             if pref:
@@ -368,8 +369,9 @@ class MemeSender(Star):
                 persona["prompt"] = injected_prompt + tool_instruction
             else:
                 behavior_prompt = f"\n\n<meme_behavior_instructions>\n{self.meme_prompt}\n</meme_behavior_instructions>"
-                persona["prompt"] = injected_prompt + behavior_prompt + format_instruction
-
+                persona["prompt"] = (
+                    injected_prompt + behavior_prompt + format_instruction
+                )
 
     async def reload_emotions(self):
         """动态重新加载表情配置"""
@@ -583,9 +585,11 @@ class MemeSender(Star):
         await self.check_and_reload_if_changed()
 
         from .backend.helpers import get_persona_id
+
         persona_id = await get_persona_id(self, event)
 
         from .backend.emotion_handler import search_memes_for_llm
+
         candidates = await search_memes_for_llm(self, query, persona_id)
 
         if not candidates:
@@ -611,11 +615,12 @@ class MemeSender(Star):
             return "所选表情包文件不存在或已被删除。"
 
         from .backend.helpers import convert_to_gif
+
         final_meme_file = convert_to_gif(meme_file, self)
 
         try:
             img = Image.fromFileSystem(final_meme_file)
-            object.__setattr__(img, "sub_type", 1) # 发送为表情包格式
+            object.__setattr__(img, "sub_type", 1)  # 发送为表情包格式
 
             if event.get_platform_name() == "gewechat":
                 await event.send(MessageChain([img]))
@@ -741,4 +746,3 @@ class MemeSender(Star):
     @property
     def enable_llm_tool(self) -> bool:
         return get_config_value(self.config, "enable_llm_tool", False)
-
