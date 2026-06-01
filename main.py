@@ -221,7 +221,7 @@ class MemeSender(Star):
 
         # 根据配置激活或停用 LLM 工具
         try:
-            if self.enable_llm_tool:
+            if self.enable_llm_tool in ("tool", "hybrid"):
                 self.context.activate_llm_tool("send_meme")
             else:
                 self.context.deactivate_llm_tool("send_meme")
@@ -327,11 +327,22 @@ class MemeSender(Star):
             "\n\n<meme_tool_instructions>\n"
             "【表情包工具发送指引（极其重要）】:\n"
             "你拥有发送本地表情包的专属工具 `send_meme`。在对话过程中，为了活跃气氛或展现你的个性，你应该根据当前的聊天氛围、你的人格设定以及表情包使用偏好（供参考），积极、自然地使用此工具发送表情包。\n"
-            "工具调用必须遵循以下两步工作流：\n"
-            "1. 检索候选：先调用 `send_meme(query='检索词')`（不传 `index` 参数）来搜索候选表情包列表。强烈建议并鼓励你使用多个由英文逗号分隔的检索词（例如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这更有助于精准且切合语境地匹配表情包。\n"
-            "2. 选择并发送：阅读检索返回的表情包候选列表，选择其中最符合当前语境的一个，然后再次调用 `send_meme(query='检索词', index=选择的序号)`（如 index=1）正式发送表情包。\n"
-            "注意：在单次回复中，你可以多次调用本工具进行检索或发送，但严禁使用其他任何外部网络搜索或画图工具发图。\n"
+            "注意：在单次回复中，你可以多次调用本工具进行检索或发送。\n"
+            "除非用户要求，否则严禁使用其他任何外部网络搜索或画图工具发图。\n"
             "</meme_tool_instructions>"
+        )
+
+        hybrid_instruction = (
+            "\n\n<meme_hybrid_instructions>\n"
+            "【表情包发送指引（极其重要）】:\n"
+            "为了丰富对话效果，你可以通过以下两种方式来发送表情包：\n"
+            "1. 【情绪标签（日常推荐）】: 你可以直接在回复的【最末尾】且【单独一行】输出固定格式的表情标记块：<emotions>标签1, 标签2, ...</emotions>（例如 <emotions>得意, 摸头, 猫猫</emotions>，用英文逗号 `,` 分隔）。系统在后台会自动匹配并发送对应的表情包。适合日常闲聊表达语气和简单情绪。\n"
+            "2. 【专属工具（精准检索）】: 你拥有专属工具 `send_meme`。当遇到特殊场景（如用户明确要求发送某张表情包，或你需要更精准地查找/挑选表情包）时，请使用此工具。工具调用遵循以下两步工作流：\n"
+            "【注意事项】:\n"
+            "- **你需要十分积极地发送表情包。**\n"
+            "- 如果在单次回复中调用了 `send_meme` 发送了表情包，就【不要】再在回复末尾输出 `<emotions>` 情绪标签块，避免重复发送表情包。\n"
+            "- 除非用户要求，否则严禁使用其他任何外部网络搜索或画图工具发图。\n"
+            "</meme_hybrid_instructions>"
         )
 
         for persona in personas:
@@ -365,8 +376,10 @@ class MemeSender(Star):
             if pref_prompt:
                 injected_prompt += "\n\n" + pref_prompt
 
-            if self.enable_llm_tool:
+            if self.enable_llm_tool == "tool":
                 persona["prompt"] = injected_prompt + tool_instruction
+            elif self.enable_llm_tool == "hybrid":
+                persona["prompt"] = injected_prompt + hybrid_instruction
             else:
                 behavior_prompt = f"\n\n<meme_behavior_instructions>\n{self.meme_prompt}\n</meme_behavior_instructions>"
                 persona["prompt"] = (
@@ -794,5 +807,10 @@ class MemeSender(Star):
         return get_config_value(self.config, "similarity_dedup_threshold", 0.85)
 
     @property
-    def enable_llm_tool(self) -> bool:
-        return get_config_value(self.config, "enable_llm_tool", False)
+    def enable_llm_tool(self) -> str:
+        val = get_config_value(self.config, "enable_llm_tool", "tag")
+        if val is True:
+            return "tool"
+        elif val is False:
+            return "tag"
+        return val

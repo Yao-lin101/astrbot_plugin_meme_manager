@@ -397,8 +397,8 @@ async def _handle_resp_vector(
 
 async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
     """处理 LLM 响应，识别表情"""
-    if getattr(sender, "enable_llm_tool", False):
-        logger.debug("[meme_manager] LLM 发图工具已启用，跳过自动表情识别。")
+    if getattr(sender, "enable_llm_tool", "tag") == "tool":
+        logger.debug("[meme_manager] LLM 发图工具仅限工具模式启用，跳过自动表情识别。")
         return
     if not response or not response.completion_text:
         logger.debug("[meme_manager] LLM 响应为空，跳过表情识别。")

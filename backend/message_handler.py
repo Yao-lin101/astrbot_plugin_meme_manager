@@ -31,8 +31,10 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
         logger.debug("[meme_manager] event.get_result() 为空，结束处理。")
         return
 
-    if getattr(sender, "enable_llm_tool", False):
-        logger.debug("[meme_manager] LLM 发图工具已启用，装饰阶段仅进行文本标签清理。")
+    if getattr(sender, "enable_llm_tool", "tag") == "tool":
+        logger.debug(
+            "[meme_manager] LLM 发图工具仅限工具模式启用，装饰阶段仅进行文本标签清理。"
+        )
         original_chain = result.chain
         if original_chain:
             cleaned_components = []
