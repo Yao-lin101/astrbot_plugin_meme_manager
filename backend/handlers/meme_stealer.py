@@ -12,10 +12,10 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Reply
 
-from ..utils import get_config_value
-from .database import get_db_conn, get_steal_attempt, save_steal_attempt
-from .helpers import get_persona_id, get_persona_prompt
-from .models import save_and_register_meme
+from ...utils import get_config_value
+from ..core.helpers import get_persona_id, get_persona_prompt
+from ..db.database import get_db_conn, get_steal_attempt, save_steal_attempt
+from ..db.models import save_and_register_meme
 
 
 async def _check_meme_preference_match(
@@ -209,7 +209,7 @@ async def steal_meme(
     # 5.5. 相似度去重判定 (Pillow dHash + Histogram)
     enable_similarity = get_config_value(sender.config, "enable_similarity_dedup", True)
     if enable_similarity:
-        from .similarity import check_image_similarity
+        from ..db.similarity import check_image_similarity
 
         similarity_threshold = get_config_value(
             sender.config, "similarity_dedup_threshold", 0.85
@@ -623,7 +623,7 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
     # A.5 检查相似度去重 (Pillow dHash + Histogram)
     enable_similarity = get_config_value(sender.config, "enable_similarity_dedup", True)
     if enable_similarity:
-        from .similarity import check_image_similarity
+        from ..db.similarity import check_image_similarity
 
         similarity_threshold = get_config_value(
             sender.config, "similarity_dedup_threshold", 0.85
@@ -695,7 +695,7 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
                 return
 
     # C. 统计并递增该图片哈希的全局看见次数，若小于设定的阈值，则仅记录次数不触发偷图
-    from .database import increment_image_seen_count
+    from ..db.database import increment_image_seen_count
 
     min_seen = get_config_value(sender.config, "auto_steal_min_seen", 2)
     seen_count = increment_image_seen_count(raw_hash)

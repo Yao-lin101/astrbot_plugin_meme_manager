@@ -242,7 +242,7 @@ PERSONA_TAGS_PATH = None
 def _get_persona_tags_path():
     global PERSONA_TAGS_PATH
     if PERSONA_TAGS_PATH is None:
-        from ..config import PLUGIN_DATA_DIR
+        from ...config import PLUGIN_DATA_DIR
 
         PERSONA_TAGS_PATH = PLUGIN_DATA_DIR / "persona_tags.json"
     return PERSONA_TAGS_PATH
@@ -280,7 +280,7 @@ def migrate_old_persona_tags_if_needed(config: dict) -> None:
     path = _get_persona_tags_path()
     if path.exists() and path.is_file():
         try:
-            from ..utils import load_json
+            from ...utils import load_json
 
             old_tags = load_json(path, {})
             if old_tags:

@@ -5,7 +5,7 @@ from astrbot.api.provider import LLMResponse
 class EventHandlers:
     @staticmethod
     async def _get_persona_id(sender, event: AstrMessageEvent) -> str:
-        from .helpers import get_persona_id
+        from ..core.helpers import get_persona_id
 
         return await get_persona_id(sender, event)
 
@@ -13,7 +13,7 @@ class EventHandlers:
     async def _select_memes_by_emotions_priority(
         sender, found_emotions: list[str], persona_id: str
     ) -> list[str]:
-        from .emotion_handler import _select_memes_by_emotions_priority
+        from ..core.emotion_handler import _select_memes_by_emotions_priority
 
         return await _select_memes_by_emotions_priority(
             sender, found_emotions, persona_id
@@ -21,7 +21,7 @@ class EventHandlers:
 
     @staticmethod
     async def resp(sender, event: AstrMessageEvent, response: LLMResponse):
-        from .emotion_handler import handle_resp
+        from ..core.emotion_handler import handle_resp
 
         await handle_resp(sender, event, response)
 
@@ -77,36 +77,36 @@ class EventHandlers:
 
     @staticmethod
     def _is_likely_emotion_markup(markup, text, position):
-        from .helpers import is_likely_emotion_markup
+        from ..core.helpers import is_likely_emotion_markup
 
         return is_likely_emotion_markup(markup, text, position)
 
     @staticmethod
     def _is_likely_emotion(word, text, position, valid_emotions, sender):
-        from .helpers import is_likely_emotion
+        from ..core.helpers import is_likely_emotion
 
         return is_likely_emotion(word, text, position, valid_emotions, sender)
 
     @staticmethod
     def _convert_to_gif(image_path: str, sender) -> str:
-        from .helpers import convert_to_gif
+        from ..core.helpers import convert_to_gif
 
         return convert_to_gif(image_path, sender)
 
     @staticmethod
     def _is_position_in_thinking_tags(text: str, position: int) -> bool:
-        from .helpers import is_position_in_thinking_tags
+        from ..core.helpers import is_position_in_thinking_tags
 
         return is_position_in_thinking_tags(text, position)
 
     @staticmethod
     async def _send_memes_streaming(sender, event: AstrMessageEvent):
-        from .emotion_handler import _send_memes_streaming
+        from ..core.emotion_handler import _send_memes_streaming
 
         await _send_memes_streaming(sender, event)
 
     @staticmethod
     def _merge_components_with_images(sender, components, images):
-        from .helpers import merge_components_with_images
+        from ..core.helpers import merge_components_with_images
 
         return merge_components_with_images(sender, components, images)
