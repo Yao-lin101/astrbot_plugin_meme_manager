@@ -3,8 +3,8 @@ import os
 
 from quart import Blueprint, current_app, jsonify, request
 
-from ..config import MEMES_DIR
-from .models import (
+from ...config import MEMES_DIR
+from ..db.models import (
     DuplicateEmojiError,
     SimilarEmojiError,
     add_emoji_to_category,
@@ -45,7 +45,7 @@ def trigger_tag_vectorization() -> None:
     if sender:
         import asyncio
 
-        from .emotion_handler import sync_tag_embeddings
+        from ..core.emotion_handler import sync_tag_embeddings
 
         asyncio.create_task(sync_tag_embeddings(sender))
 
@@ -55,7 +55,7 @@ async def get_all_emojis():
     """获取所有表情包（按类别分组），支持按人格过滤"""
     persona_id = request.args.get("persona_id")
 
-    from .database import get_db_conn
+    from ..db.database import get_db_conn
 
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -713,7 +713,7 @@ async def edit_emoji():
         if not filename:
             return jsonify({"message": "Filename is required"}), 400
 
-        from .database import get_db_conn
+        from ..db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -760,7 +760,7 @@ async def edit_emoji():
 async def get_emoji_info(filename):
     """获取特定表情包的信息"""
     try:
-        from .database import get_db_conn
+        from ..db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -805,7 +805,7 @@ async def batch_edit_personas():
         if not isinstance(filenames, list) or not filenames:
             return jsonify({"message": "filenames list is required"}), 400
 
-        from .database import get_db_conn
+        from ..db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -834,7 +834,7 @@ async def get_persona_tags():
         sender = plugin_config.get("sender")
         if not sender:
             return jsonify({})
-        from .helpers import get_settings_dict
+        from ..core.helpers import get_settings_dict
 
         settings = get_settings_dict(sender.config)
         return jsonify(settings)
@@ -862,7 +862,7 @@ async def save_persona_tag():
         if not sender:
             return jsonify({"message": "Sender not found"}), 404
 
-        from .helpers import get_settings_dict, save_settings_dict
+        from ..core.helpers import get_settings_dict, save_settings_dict
 
         settings = get_settings_dict(sender.config)
 
@@ -902,7 +902,7 @@ async def batch_import_emojis():
         if not category or not isinstance(filenames, list) or not filenames:
             return jsonify({"message": "Category and filenames list are required"}), 400
 
-        from .database import get_db_conn
+        from ..db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -949,7 +949,7 @@ async def get_emoji_file_base64():
     import base64
     import mimetypes
 
-    from ..config import MEMES_DIR
+    from ...config import MEMES_DIR
 
     filename = request.args.get("filename")
     if not filename:
@@ -996,8 +996,8 @@ async def check_duplicates():
 
         import json
 
-        from .database import get_db_conn
-        from .similarity import calculate_similarity_score
+        from ..db.database import get_db_conn
+        from ..db.similarity import calculate_similarity_score
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -1056,7 +1056,7 @@ async def check_duplicates():
         # Group similar memes
         from pathlib import Path
 
-        from ..config import MEMES_DIR
+        from ...config import MEMES_DIR
 
         groups = []
         visited = set()
@@ -1126,8 +1126,8 @@ async def resolve_duplicates():
 
         from pathlib import Path
 
-        from ..config import MEMES_DIR
-        from .database import get_db_conn
+        from ...config import MEMES_DIR
+        from ..db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()

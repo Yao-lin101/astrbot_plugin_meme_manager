@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image as PILImage
 
-from ..config import MEMES_DIR
+from ...config import MEMES_DIR
 from .database import get_db_conn
 
 logger = logging.getLogger(__name__)

@@ -1,8 +1,8 @@
 import logging
 import os
 
-from ..config import DEFAULT_CATEGORIES, MEMES_DATA_PATH, MEMES_DIR
-from ..utils import ensure_dir_exists, load_json, save_json
+from ...config import DEFAULT_CATEGORIES, MEMES_DATA_PATH, MEMES_DIR
+from ...utils import ensure_dir_exists, load_json, save_json
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class CategoryManager:
     def get_local_categories(self) -> set[str]:
         """获取本地表情包库中的类别标签"""
         try:
-            from .database import get_db_conn
+            from ..db.database import get_db_conn
 
             conn = get_db_conn()
             cursor = conn.cursor()
@@ -90,7 +90,7 @@ class CategoryManager:
             self.categories[idx] = new_name
 
             # 更新数据库中的表情标签
-            from .database import get_db_conn
+            from ..db.database import get_db_conn
 
             conn = get_db_conn()
             cursor = conn.cursor()
@@ -127,7 +127,7 @@ class CategoryManager:
                 save_json(self.categories, MEMES_DATA_PATH)
 
             # 清除表情标签和空文件
-            from .models import clear_category_emojis
+            from ..db.models import clear_category_emojis
 
             clear_category_emojis(category)
 

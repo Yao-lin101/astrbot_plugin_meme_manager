@@ -9,12 +9,12 @@ from astrbot.core.utils.session_waiter import (
     session_waiter,
 )
 
-from ..config import MEMES_DIR
-from ..utils import (
+from ...config import MEMES_DIR
+from ...utils import (
     compress_image,
 )
-from .database import get_db_conn, migrate_filesystem_to_db
-from .models import (
+from ..db.database import get_db_conn, migrate_filesystem_to_db
+from ..db.models import (
     clear_all_emojis,
     get_emoji_by_category,
 )
@@ -241,7 +241,7 @@ class CommandsHandler:
 
         clear_all_emojis()
         sender.category_manager.clear_all_categories()
-        from .database import clear_all_tag_embeddings
+        from ..db.database import clear_all_tag_embeddings
 
         clear_all_tag_embeddings()
         sender._reload_personas()
@@ -489,7 +489,7 @@ class CommandsHandler:
         compress_gif = cfg.get("compress_gif", False)
         compression_format = cfg.get("compression_format", "original")
 
-        from .database import get_db_conn
+        from ..db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -574,8 +574,8 @@ class CommandsHandler:
         """清空缓存的标签向量并重新计算"""
         import asyncio
 
-        from .database import clear_all_tag_embeddings
-        from .emotion_handler import sync_tag_embeddings
+        from ..core.emotion_handler import sync_tag_embeddings
+        from ..db.database import clear_all_tag_embeddings
 
         clear_all_tag_embeddings()
         yield event.plain_result(

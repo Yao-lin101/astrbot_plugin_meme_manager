@@ -8,12 +8,12 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Plain
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 
-from ..config import MEMES_DIR
-from .emotion_handler import (
+from ...config import MEMES_DIR
+from ..core.emotion_handler import (
     _select_memes_by_emotions_priority,
     _send_memes_streaming,
 )
-from .helpers import (
+from ..core.helpers import (
     convert_to_gif,
     get_persona_id,
     merge_components_with_images,

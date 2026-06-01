@@ -6,8 +6,8 @@ from pathlib import Path
 from quart import current_app
 from werkzeug.utils import secure_filename
 
-from ..config import MEMES_DIR
-from ..utils import compress_image, get_config_value
+from ...config import MEMES_DIR
+from ...utils import compress_image, get_config_value
 from .database import get_db_conn
 
 logger = logging.getLogger(__name__)
