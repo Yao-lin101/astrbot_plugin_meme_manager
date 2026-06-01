@@ -1,7 +1,7 @@
 import logging
 import os
 
-from .backend.database import migrate_filesystem_to_db
+from .backend.db.database import migrate_filesystem_to_db
 from .config import (
     BASE_DATA_DIR,
     DEFAULT_CATEGORIES,

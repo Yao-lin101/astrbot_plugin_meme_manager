@@ -283,10 +283,15 @@
     }
   },
   "enable_llm_tool": {
-    "description": "启用大模型表情包发送工具",
-    "type": "bool",
-    "default": false,
-    "hint": "启用后，表情包发送将作为工具提供给大模型自行检索并选择发送，不再由系统自动分析文本发送。"
+    "description": "表情包发送模式",
+    "type": "string",
+    "default": "tag",
+    "options": [
+      "tag",
+      "tool",
+      "hybrid"
+    ],
+    "hint": "选择表情包发送模式：'tag' (情绪标签模式), 'tool' (大模型发送工具), 'hybrid' (混合模式：平时使用情绪标签，特殊场景使用工具)"
   },
   "persona_settings": {
     "description": "人格专属表情包偏好配置",

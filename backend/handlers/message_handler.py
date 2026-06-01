@@ -8,12 +8,12 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Plain
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 
-from ..config import MEMES_DIR
-from .emotion_handler import (
+from ...config import MEMES_DIR
+from ..core.emotion_handler import (
     _select_memes_by_emotions_priority,
     _send_memes_streaming,
 )
-from .helpers import (
+from ..core.helpers import (
     convert_to_gif,
     get_persona_id,
     merge_components_with_images,
@@ -31,8 +31,10 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
         logger.debug("[meme_manager] event.get_result() 为空，结束处理。")
         return
 
-    if getattr(sender, "enable_llm_tool", False):
-        logger.debug("[meme_manager] LLM 发图工具已启用，装饰阶段仅进行文本标签清理。")
+    if getattr(sender, "enable_llm_tool", "tag") == "tool":
+        logger.debug(
+            "[meme_manager] LLM 发图工具仅限工具模式启用，装饰阶段仅进行文本标签清理。"
+        )
         original_chain = result.chain
         if original_chain:
             cleaned_components = []

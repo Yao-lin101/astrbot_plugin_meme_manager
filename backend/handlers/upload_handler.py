@@ -9,7 +9,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Plain
 
-from .models import save_and_register_meme
+from ..db.models import save_and_register_meme
 
 
 async def handle_upload_image(sender, event: AstrMessageEvent):

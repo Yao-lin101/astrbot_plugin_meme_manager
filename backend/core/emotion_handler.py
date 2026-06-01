@@ -10,9 +10,9 @@ from astrbot.api.provider import LLMResponse
 from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 
-from ..config import MEMES_DIR
-from ..utils import get_config_value
-from .database import get_db_conn
+from ...config import MEMES_DIR
+from ...utils import get_config_value
+from ..db.database import get_db_conn
 from .helpers import (
     convert_to_gif,
     get_persona_id,
@@ -134,7 +134,11 @@ def cosine_similarity(v1, v2):
 async def sync_tag_embeddings(sender):
     """后台增量计算缺失标签的向量并同步至 SQLite"""
     try:
-        from .database import get_all_tag_embeddings, get_db_conn, save_tag_embedding
+        from ..db.database import (
+            get_all_tag_embeddings,
+            get_db_conn,
+            save_tag_embedding,
+        )
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -270,7 +274,7 @@ async def _handle_resp_vector(
     # 5. 计算相似度匹配
     found_vector = set()
     if embedding_provider:
-        from .database import get_all_tag_embeddings
+        from ..db.database import get_all_tag_embeddings
 
         tag_embeddings = get_all_tag_embeddings()
 
@@ -397,8 +401,8 @@ async def _handle_resp_vector(
 
 async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
     """处理 LLM 响应，识别表情"""
-    if getattr(sender, "enable_llm_tool", False):
-        logger.debug("[meme_manager] LLM 发图工具已启用，跳过自动表情识别。")
+    if getattr(sender, "enable_llm_tool", "tag") == "tool":
+        logger.debug("[meme_manager] LLM 发图工具仅限工具模式启用，跳过自动表情识别。")
         return
     if not response or not response.completion_text:
         logger.debug("[meme_manager] LLM 响应为空，跳过表情识别。")
@@ -524,7 +528,7 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
             logger.warning(f"[meme_manager] 获取查询词 '{query}' 向量失败: {e}")
 
     # 获取所有标签的向量
-    from .database import get_all_tag_embeddings
+    from ..db.database import get_all_tag_embeddings
 
     tag_embeddings = get_all_tag_embeddings()
 

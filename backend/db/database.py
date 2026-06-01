@@ -4,7 +4,7 @@ import shutil
 import sqlite3
 from pathlib import Path
 
-from ..config import MEMES_DIR, PLUGIN_DATA_DIR
+from ...config import MEMES_DIR, PLUGIN_DATA_DIR
 
 logger = logging.getLogger(__name__)
 DB_PATH = PLUGIN_DATA_DIR / "memes.db"
