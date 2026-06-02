@@ -228,12 +228,13 @@ export function useModals(showToast) {
   };
 
   const startBatchAnalyze = async (selectedEmojisMap, fetchEmojis) => {
-    if (!selectedEmojisMap || selectedEmojisMap.size === 0) {
+    const map = selectedEmojisMap && (selectedEmojisMap.value || selectedEmojisMap);
+    if (!map || map.size === 0) {
       showToast("没有选中任何表情包", "warning", "未选择表情");
       return;
     }
 
-    const filenames = Array.from(selectedEmojisMap.values()).map(item => item.emoji);
+    const filenames = Array.from(map.values()).map(item => item.emoji);
 
     try {
       const res = await fetch("/api/emoji/batch_analyze", {
