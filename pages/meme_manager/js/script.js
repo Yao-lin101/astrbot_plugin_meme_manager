@@ -271,6 +271,7 @@ createApp({
       addCategoryForm: modals.addCategoryForm,
       renameCategoryModal: modals.renameCategoryModal,
       importModal: modals.importModal,
+      batchAnalyzeModal: modals.batchAnalyzeModal,
       confirm: modals.confirm,
       handleConfirm: modals.handleConfirm,
       showDangerConfirm: modals.showDangerConfirm,
@@ -285,6 +286,10 @@ createApp({
       openImportModal: modals.openImportModal,
       closeImportModal: modals.closeImportModal,
       toggleImportEmoji: modals.toggleImportEmoji,
+      openBatchAnalyzeModal: modals.openBatchAnalyzeModal,
+      closeBatchAnalyzeModal: modals.closeBatchAnalyzeModal,
+      startBatchAnalyze: () => modals.startBatchAnalyze(selection.selectedEmojis, api.fetchEmojis),
+      cancelBatchAnalyze: modals.cancelBatchAnalyze,
 
       // UI States & Navigation
       syncDrawerVisible,
