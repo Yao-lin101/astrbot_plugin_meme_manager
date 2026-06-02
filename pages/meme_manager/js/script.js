@@ -313,6 +313,7 @@ createApp({
       imgHostStatus: sync.imgHostStatus,
       checkSyncStatus: sync.checkSyncStatus,
       syncConfig: sync.syncConfig,
+      restoreCategory: sync.restoreCategory,
       removeFromConfig: sync.removeFromConfig,
       checkImgHostSyncStatus: sync.checkImgHostSyncStatus,
       syncToRemote: sync.syncToRemote,
@@ -377,6 +378,22 @@ createApp({
       toggleMemeAction: dedup.toggleMemeAction,
       resolveDuplicates: dedup.resolveDuplicates,
       totalDeletesCount: dedup.totalDeletesCount,
+
+      // Cleanup unused categories
+      async cleanupUnusedCategories() {
+        try {
+          const resp = await fetch('/api/category/cleanup_unused', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+          const data = await resp.json();
+          if (data.count > 0) {
+            showToast('清理完成', `${data.message}`, 'success');
+            fetchEmojis();
+          } else {
+            showToast('清理完成', data.message, 'info');
+          }
+        } catch (e) {
+          showToast('清理失败', e.message, 'error');
+        }
+      },
     };
   },
 }).mount("#app");

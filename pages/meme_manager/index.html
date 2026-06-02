@@ -171,6 +171,7 @@
                         <div v-for="cat in syncStatus.deletedCategories" :key="cat" class="deleted-item">
                           <span class="deleted-name">{{ cat }}</span>
                           <div class="deleted-actions">
+                            <button class="btn-sm" @click="restoreCategory(cat)">恢复文件夹</button>
                             <button class="btn-sm btn-danger" @click="removeFromConfig(cat)">删除配置</button>
                           </div>
                         </div>
@@ -291,6 +292,9 @@
                   </button>
                   <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchRenameToTags(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
                     <i class="fas fa-tags" style="width: 16px; color: var(--text-secondary);"></i> 更名为标签集合
+                  </button>
+                  <button class="dropdown-item" @click="cleanupUnusedCategories(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" onmouseover="this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-broom" style="width: 16px; color: var(--text-secondary);"></i> 清理孤立标签
                   </button>
                 </div>
               </div>
@@ -734,6 +738,18 @@
                   </option>
                 </select>
                 <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">需要选择支持图片理解（多模态）的供应商实例，否则分析可能会失败。</p>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label style="font-size: 14px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 8px;">并发数量</label>
+                <select class="form-control" v-model="batchAnalyzeModal.concurrency" style="width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary);">
+                  <option value="1">1 个并发（最慢，最省 token）</option>
+                  <option value="2">2 个并发</option>
+                  <option value="3">3 个并发（推荐）</option>
+                  <option value="5">5 个并发</option>
+                  <option value="10">10 个并发（最快）</option>
+                </select>
+                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">并发数越高分析越快，但同时占用更多 AI 请求配额。</p>
               </div>
 
               <div class="form-group" style="margin-bottom: 0;">

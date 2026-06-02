@@ -27,12 +27,6 @@ async def batch_delete_emoji():
     if not result["category_exists"]:
         return jsonify({"message": "Category not found"}), 404
 
-    # 删除后可能产生空标签，同步清理配置
-    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
-    category_manager = plugin_config.get("category_manager")
-    if category_manager:
-        category_manager.sync_with_filesystem()
-
     deleted_files = result["deleted_files"]
     missing_files = result["missing_files"]
     return jsonify(
@@ -87,12 +81,6 @@ async def move_emoji():
     if result["missing"]:
         return jsonify({"message": "Emoji not found"}), 404
 
-    # 移动后源标签可能变空，同步清理配置
-    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
-    category_manager = plugin_config.get("category_manager")
-    if category_manager:
-        category_manager.sync_with_filesystem()
-
     return jsonify(
         {
             "message": "Emoji moved successfully",
@@ -131,12 +119,6 @@ async def batch_move_emoji():
     result = batch_move_emojis(source_category, image_files, target_category)
     if not result["source_category_exists"]:
         return jsonify({"message": "Source category not found"}), 404
-
-    # 移动后源标签可能变空，同步清理配置
-    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
-    category_manager = plugin_config.get("category_manager")
-    if category_manager:
-        category_manager.sync_with_filesystem()
 
     moved_files = result["moved_files"]
     missing_files = result["missing_files"]
@@ -406,6 +388,9 @@ async def batch_analyze_emojis():
     if not provider_id:
         return jsonify({"message": "provider_id 是必需的"}), 400
 
+    # 并发数量由前端传入，默认 3
+    concurrency = max(1, min(10, int(data.get("concurrency", 3))))
+
     plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
     sender = plugin_config.get("sender")
     if not sender:
@@ -432,6 +417,7 @@ async def batch_analyze_emojis():
             pass_existing_tags_as_ref,
             prompt_content,
             sender,
+            concurrency,
         )
     )
 
@@ -463,6 +449,7 @@ async def run_batch_analyze_task(
     pass_existing_tags_as_ref,
     prompt_content,
     sender,
+    concurrency=3,
 ):
     """后台批量分析执行函数"""
     global batch_analyze_status, cancel_batch_analyze_flag
@@ -480,10 +467,9 @@ async def run_batch_analyze_task(
     from .common import trigger_tag_vectorization
 
     # 单次 LLM 调用的超时与重试控制。
-    # 图片打标本应很快，但底层 provider 的默认 HTTP 超时往往长达数分钟，
-    # 因此这里用 asyncio.wait_for 主动收紧，并对失败（含超时）做有限次重试。
-    ANALYZE_TIMEOUT = 30  # 单次请求超时（秒）
-    MAX_ATTEMPTS = 3      # 最多尝试次数（首次 + 重试 2 次）
+    # GIF 图分析较慢，超时设 120 秒并最多重试 3 次。
+    ANALYZE_TIMEOUT = 120  # 单次请求超时（秒）
+    MAX_ATTEMPTS = 3       # 最多尝试次数（首次 + 重试 2 次）
 
     # 在一开始，先将所有文件状态置为等待中
     batch_analyze_status["results"] = [
@@ -496,21 +482,22 @@ async def run_batch_analyze_task(
         for filename in filenames
     ]
 
-    try:
-        for idx, filename in enumerate(filenames):
+    semaphore = asyncio.Semaphore(concurrency)
+    completed_count = 0
+
+    async def analyze_one(idx: int, filename: str):
+        nonlocal completed_count
+        if cancel_batch_analyze_flag:
+            batch_analyze_status["results"][idx]["status"] = "error"
+            batch_analyze_status["results"][idx]["error"] = "任务已被取消"
+            return
+        async with semaphore:
             if cancel_batch_analyze_flag:
-                logger.info("批量分析表情包任务被用户取消。")
-                # 将后续等待中的更新为已取消/失败
-                for r in batch_analyze_status["results"]:
-                    if r["status"] == "waiting":
-                        r["status"] = "error"
-                        r["error"] = "任务已被取消"
-                break
+                batch_analyze_status["results"][idx]["status"] = "error"
+                batch_analyze_status["results"][idx]["error"] = "任务已被取消"
+                return
 
-            batch_analyze_status["current_index"] = idx + 1
             batch_analyze_status["current_file"] = filename
-
-            # 更新当前文件的状态为分析中
             r_item = batch_analyze_status["results"][idx]
             r_item["status"] = "running"
 
@@ -539,7 +526,7 @@ async def run_batch_analyze_task(
                 b64_data = base64.b64encode(content).decode("utf-8")
                 image_data_uri = f"data:{mime_type};base64,{b64_data}"
 
-                # 查询现有数据，以便进行参考及后续的部分更新
+                # 查询现有数据
                 conn = get_db_conn()
                 cursor = conn.cursor()
                 cursor.execute(
@@ -592,13 +579,6 @@ async def run_batch_analyze_task(
                         f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
                     )
 
-                # 根据勾选条件，优化模型提示词
-                target_str = []
-                if analyze_tags:
-                    target_str.append("tags (数组，表情包对应的标签列表)")
-                if analyze_description:
-                    target_str.append("description (字符串，对这张表情包画面的简洁描述)")
-
                 prompt = (
                     f"{guidelines}\n\n"
                     f"【输出格式要求（极其重要）】：\n"
@@ -623,13 +603,14 @@ async def run_batch_analyze_task(
                     "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
                 )
 
-                # 调用模型 + 解析 + 字段校验，整段纳入有限次重试。
-                # 超时（asyncio.wait_for）、空返回、JSON 解析失败、缺字段都会触发重试。
+                # 调用模型 + 解析 + 字段校验，有限次重试
                 parsed_tags = []
                 parsed_desc = ""
                 last_error = None
 
                 for attempt in range(1, MAX_ATTEMPTS + 1):
+                    if cancel_batch_analyze_flag:
+                        break
                     try:
                         llm_resp = await asyncio.wait_for(
                             sender.context.llm_generate(
@@ -677,12 +658,10 @@ async def run_batch_analyze_task(
                             else:
                                 raise ValueError("模型返回中缺少 description 字段")
 
-                        # 本次尝试成功，跳出重试循环
                         last_error = None
                         break
 
                     except asyncio.CancelledError:
-                        # 用户取消，必须放行，不重试
                         raise
                     except asyncio.TimeoutError:
                         last_error = TimeoutError(
@@ -698,11 +677,14 @@ async def run_batch_analyze_task(
                             f"（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
                         )
 
-                    # 还有剩余尝试次数则指数退避后重试
-                    if attempt < MAX_ATTEMPTS:
+                    if attempt < MAX_ATTEMPTS and not cancel_batch_analyze_flag:
                         await asyncio.sleep(2 ** (attempt - 1))
 
-                # 所有尝试均失败，抛出由外层统一记为 error
+                if cancel_batch_analyze_flag:
+                    r_item["status"] = "error"
+                    r_item["error"] = "任务已被取消"
+                    return
+
                 if last_error is not None:
                     raise last_error
 
@@ -722,7 +704,6 @@ async def run_batch_analyze_task(
                 conn.commit()
                 conn.close()
 
-                # 填充结果
                 r_item["status"] = "success"
                 r_item["tags"] = (
                     parsed_tags
@@ -732,34 +713,39 @@ async def run_batch_analyze_task(
                 r_item["description"] = final_desc
 
             except Exception as e:
-                logger.error(f"分析表情包失败: {filename}, 错误: {e}", exc_info=True)
+                if not cancel_batch_analyze_flag:
+                    logger.error(f"分析表情包失败: {filename}, 错误: {e}", exc_info=True)
                 r_item["status"] = "error"
                 r_item["error"] = str(e)
+            finally:
+                nonlocal completed_count
+                completed_count += 1
+                batch_analyze_status["current_index"] = completed_count
 
-            # 稍微间隔一下，避免请求太频繁
-            await asyncio.sleep(0.5)
+    # 并发执行所有分析任务
+    coros = [analyze_one(i, f) for i, f in enumerate(filenames)]
+    await asyncio.gather(*coros, return_exceptions=True)
 
-    except asyncio.CancelledError:
-        logger.info("批量分析表情包任务被用户强行取消 (asyncio.CancelledError)。")
-        # 将当前及后续等待中的更新为已取消/失败
+    # 用户取消的情况下标记剩余未处理的
+    if cancel_batch_analyze_flag:
+        logger.info("批量分析表情包任务被用户取消。")
         for r in batch_analyze_status["results"]:
-            if r["status"] in ("waiting", "running"):
+            if r["status"] == "waiting":
                 r["status"] = "error"
                 r["error"] = "任务已被取消"
-        raise
-    finally:
-        batch_analyze_status["status"] = "completed"
 
-        # 全局重构向量与重新加载
-        try:
-            trigger_tag_vectorization()
-        except Exception as e:
-            logger.error(f"批量分析后触发向量化失败: {e}")
+    batch_analyze_status["status"] = "completed"
 
-        try:
-            await sender.reload_emotions()
-        except Exception as e:
-            logger.error(f"批量分析后重新加载表情配置失败: {e}")
+    # 全局重构向量与重新加载
+    try:
+        trigger_tag_vectorization()
+    except Exception as e:
+        logger.error(f"批量分析后触发向量化失败: {e}")
+
+    try:
+        await sender.reload_emotions()
+    except Exception as e:
+        logger.error(f"批量分析后重新加载表情配置失败: {e}")
 
 
 async def batch_rename_emojis_to_tags():

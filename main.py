@@ -27,7 +27,7 @@ from .init import init_plugin
 
 
 @register(
-    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "3.20"
+    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "4.8.1"
 )
 class MemeSender(Star, MemeConfigMixin):
     context: Context

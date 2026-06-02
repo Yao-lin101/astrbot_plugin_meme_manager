@@ -57,6 +57,7 @@ export function useModals(showToast) {
     analyzeTags: true,
     analyzeDescription: true,
     passExistingTagsAsRef: false,
+    concurrency: 3,
     promptTemplate: { intro: "", tags: "", desc: "" },
     promptContent: "",
     isPromptManuallyEdited: false,
@@ -249,6 +250,7 @@ export function useModals(showToast) {
     batchAnalyzeModal.analyzeTags = true;
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
+    batchAnalyzeModal.concurrency = 3;
     batchAnalyzeModal.isPromptManuallyEdited = false;
 
     try {
@@ -292,6 +294,7 @@ export function useModals(showToast) {
           analyze_tags: batchAnalyzeModal.analyzeTags,
           analyze_description: batchAnalyzeModal.analyzeDescription,
           pass_existing_tags_as_ref: batchAnalyzeModal.passExistingTagsAsRef,
+          concurrency: batchAnalyzeModal.concurrency,
           prompt_content: batchAnalyzeModal.promptContent
         })
       });

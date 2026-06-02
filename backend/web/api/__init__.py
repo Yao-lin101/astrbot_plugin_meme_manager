@@ -14,6 +14,7 @@ from .batch import (
     batch_rename_emojis_to_tags,
 )
 from .category import (
+    cleanup_unused_categories,
     clear_all_emoji,
     clear_category,
     delete_category,
@@ -55,6 +56,7 @@ __all__ = [
     "batch_rename_emojis_to_tags",
     "get_batch_analyze_status",
     "cancel_batch_analyze",
+    "cleanup_unused_categories",
     "clear_all_emoji",
     "clear_category",
     "delete_category",
