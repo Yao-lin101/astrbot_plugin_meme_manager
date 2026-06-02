@@ -461,6 +461,12 @@ async def run_batch_analyze_task(
     from ...db.database import get_db_conn
     from .common import trigger_tag_vectorization
 
+    # 单次 LLM 调用的超时与重试控制。
+    # 图片打标本应很快，但底层 provider 的默认 HTTP 超时往往长达数分钟，
+    # 因此这里用 asyncio.wait_for 主动收紧，并对失败（含超时）做有限次重试。
+    ANALYZE_TIMEOUT = 30  # 单次请求超时（秒）
+    MAX_ATTEMPTS = 3      # 最多尝试次数（首次 + 重试 2 次）
+
     # 在一开始，先将所有文件状态置为等待中
     batch_analyze_status["results"] = [
         {
@@ -599,48 +605,88 @@ async def run_batch_analyze_task(
                     "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
                 )
 
-                llm_resp = await sender.context.llm_generate(
-                    chat_provider_id=provider_id,
-                    prompt=prompt,
-                    image_urls=[image_data_uri],
-                )
-
-                if not llm_resp or not llm_resp.completion_text:
-                    raise ValueError("模型返回内容为空")
-
-                raw_text = llm_resp.completion_text.strip()
-                data = None
-                try:
-                    data = json.loads(raw_text)
-                except Exception:
-                    match = re.search(r"\{[\s\S]*\}", raw_text)
-                    if match:
-                        try:
-                            data = json.loads(match.group(0))
-                        except Exception:
-                            pass
-
-                if not isinstance(data, dict):
-                    raise ValueError(f"无法解析模型返回的结果: {raw_text}")
-
+                # 调用模型 + 解析 + 字段校验，整段纳入有限次重试。
+                # 超时（asyncio.wait_for）、空返回、JSON 解析失败、缺字段都会触发重试。
                 parsed_tags = []
                 parsed_desc = ""
+                last_error = None
 
-                if analyze_tags:
-                    if "tags" in data:
-                        parsed_tags = [
-                            str(x).strip()
-                            for x in data["tags"]
-                            if str(x).strip() and len(str(x).strip()) <= 20
-                        ]
-                    else:
-                        raise ValueError("模型返回中缺少 tags 字段")
+                for attempt in range(1, MAX_ATTEMPTS + 1):
+                    try:
+                        llm_resp = await asyncio.wait_for(
+                            sender.context.llm_generate(
+                                chat_provider_id=provider_id,
+                                prompt=prompt,
+                                image_urls=[image_data_uri],
+                            ),
+                            timeout=ANALYZE_TIMEOUT,
+                        )
 
-                if analyze_description:
-                    if "description" in data:
-                        parsed_desc = str(data["description"]).strip()
-                    else:
-                        raise ValueError("模型返回中缺少 description 字段")
+                        if not llm_resp or not llm_resp.completion_text:
+                            raise ValueError("模型返回内容为空")
+
+                        raw_text = llm_resp.completion_text.strip()
+                        data = None
+                        try:
+                            data = json.loads(raw_text)
+                        except Exception:
+                            match = re.search(r"\{[\s\S]*\}", raw_text)
+                            if match:
+                                try:
+                                    data = json.loads(match.group(0))
+                                except Exception:
+                                    pass
+
+                        if not isinstance(data, dict):
+                            raise ValueError(f"无法解析模型返回的结果: {raw_text}")
+
+                        parsed_tags = []
+                        parsed_desc = ""
+
+                        if analyze_tags:
+                            if "tags" in data:
+                                parsed_tags = [
+                                    str(x).strip()
+                                    for x in data["tags"]
+                                    if str(x).strip() and len(str(x).strip()) <= 20
+                                ]
+                            else:
+                                raise ValueError("模型返回中缺少 tags 字段")
+
+                        if analyze_description:
+                            if "description" in data:
+                                parsed_desc = str(data["description"]).strip()
+                            else:
+                                raise ValueError("模型返回中缺少 description 字段")
+
+                        # 本次尝试成功，跳出重试循环
+                        last_error = None
+                        break
+
+                    except asyncio.CancelledError:
+                        # 用户取消，必须放行，不重试
+                        raise
+                    except asyncio.TimeoutError:
+                        last_error = TimeoutError(
+                            f"模型分析超时（超过 {ANALYZE_TIMEOUT} 秒）"
+                        )
+                        logger.warning(
+                            f"分析表情包超时: {filename}（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
+                        )
+                    except Exception as e:
+                        last_error = e
+                        logger.warning(
+                            f"分析表情包失败: {filename}, 错误: {e}"
+                            f"（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
+                        )
+
+                    # 还有剩余尝试次数则指数退避后重试
+                    if attempt < MAX_ATTEMPTS:
+                        await asyncio.sleep(2 ** (attempt - 1))
+
+                # 所有尝试均失败，抛出由外层统一记为 error
+                if last_error is not None:
+                    raise last_error
 
                 # 更新数据库
                 conn = get_db_conn()
