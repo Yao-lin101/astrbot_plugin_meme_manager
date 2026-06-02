@@ -290,6 +290,9 @@
                   <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchConvertToGif(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
                     <i class="fas fa-file-image" style="width: 16px; color: var(--text-secondary);"></i> 转换为 GIF
                   </button>
+                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchRenameToTags(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                    <i class="fas fa-tags" style="width: 16px; color: var(--text-secondary);"></i> 更名为标签集合
+                  </button>
                 </div>
               </div>
             </div>

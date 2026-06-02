@@ -696,3 +696,137 @@ async def run_batch_analyze_task(
             await sender.reload_emotions()
         except Exception as e:
             logger.error(f"批量分析后重新加载表情配置失败: {e}")
+
+
+async def batch_rename_emojis_to_tags():
+    """批量根据标签为表情包文件更名"""
+    try:
+        data = await request.get_json()
+        filenames = data.get("filenames")
+
+        if not isinstance(filenames, list) or not filenames:
+            return jsonify({"message": "filenames 列表是必需的"}), 400
+
+        import re
+        import os
+        from pathlib import Path
+        from ....config import MEMES_DIR
+        from ...db.database import get_db_conn
+        from .common import trigger_tag_vectorization
+
+        def sanitize_filename(name: str) -> str:
+            name = re.sub(r'[\\/*?:"<>|]', "", name)
+            name = name.strip(" .")
+            return name or "emoji"
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+
+        renamed = []
+        skipped = []
+
+        for filename in filenames:
+            filename = os.path.basename(filename)
+            file_path = Path(MEMES_DIR) / filename
+            if not file_path.exists():
+                skipped.append({"filename": filename, "reason": "文件不存在"})
+                continue
+
+            cursor.execute("SELECT emotions FROM memes WHERE filename = ?", (filename,))
+            row = cursor.fetchone()
+            if not row or not row["emotions"]:
+                skipped.append({"filename": filename, "reason": "表情包无标签"})
+                continue
+
+            # Parse emotions
+            emotions = [e.strip() for e in row["emotions"].split(",") if e.strip()]
+            if not emotions:
+                skipped.append({"filename": filename, "reason": "标签解析为空"})
+                continue
+
+            stem = "_".join(emotions)
+            sanitized_stem = sanitize_filename(stem)
+            suffix = file_path.suffix
+
+            target_name = f"{sanitized_stem}{suffix}"
+            if target_name == filename:
+                # Already named correctly, no action needed
+                skipped.append({"filename": filename, "reason": "文件名已是标签集合"})
+                continue
+
+            # Handle duplicate conflicts
+            test_path = Path(MEMES_DIR) / target_name
+            cursor.execute("SELECT 1 FROM memes WHERE filename = ?", (target_name,))
+            db_exists = cursor.fetchone()
+
+            if test_path.exists() or db_exists:
+                idx = 1
+                while True:
+                    test_name = f"{sanitized_stem}_{idx}{suffix}"
+                    test_path_check = Path(MEMES_DIR) / test_name
+                    cursor.execute("SELECT 1 FROM memes WHERE filename = ?", (test_name,))
+                    if not test_path_check.exists() and not cursor.fetchone():
+                        target_name = test_name
+                        break
+                    idx += 1
+
+            # Perform physical rename
+            try:
+                os.rename(file_path, Path(MEMES_DIR) / target_name)
+            except Exception as e:
+                logger.error(f"物理重命名文件失败: {filename} -> {target_name}, 错误: {e}")
+                skipped.append({"filename": filename, "reason": f"重命名文件失败: {e}"})
+                continue
+
+            # Update database
+            try:
+                cursor.execute(
+                    "UPDATE memes SET filename = ? WHERE filename = ?",
+                    (target_name, filename),
+                )
+                cursor.execute(
+                    "UPDATE meme_similarity_features SET filename = ? WHERE filename = ?",
+                    (target_name, filename),
+                )
+                renamed.append({"original": filename, "new": target_name})
+            except Exception as e:
+                logger.error(f"更新数据库重命名记录失败 for {filename}: {e}")
+                # Try to rollback rename
+                try:
+                    os.rename(Path(MEMES_DIR) / target_name, file_path)
+                except Exception:
+                    pass
+                skipped.append({"filename": filename, "reason": f"更新数据库失败: {e}"})
+
+        conn.commit()
+        conn.close()
+
+        # Sync configurations
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        category_manager = plugin_config.get("category_manager")
+        if category_manager:
+            category_manager.sync_with_filesystem()
+
+        try:
+            trigger_tag_vectorization()
+        except Exception as e:
+            logger.error(f"重命名后触发向量化失败: {e}")
+
+        sender = plugin_config.get("sender")
+        if sender:
+            try:
+                await sender.reload_emotions()
+            except Exception as e:
+                logger.error(f"重命名后重新加载表情配置失败: {e}")
+
+        return jsonify({
+            "message": "批量重命名完成",
+            "renamed": renamed,
+            "skipped": skipped,
+            "renamed_count": len(renamed),
+            "skipped_count": len(skipped),
+        }), 200
+
+    except Exception as e:
+        logger.error(f"批量重命名标签失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
