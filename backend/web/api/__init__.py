@@ -8,6 +8,7 @@ from .batch import (
     batch_move_emoji,
     cancel_batch_analyze,
     get_batch_analyze_status,
+    get_prompt_template,
     get_providers,
     move_emoji,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "batch_move_emoji",
     "move_emoji",
     "get_providers",
+    "get_prompt_template",
     "batch_analyze_emojis",
     "get_batch_analyze_status",
     "cancel_batch_analyze",

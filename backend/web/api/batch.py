@@ -295,8 +295,81 @@ async def get_providers():
         return jsonify({"message": str(e)}), 500
 
 
+async def get_prompt_template():
+    """Get the meme analysis prompt template split into intro, tags, and desc."""
+    try:
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        sender = plugin_config.get("sender")
+        user_prompt = ""
+        if sender:
+            user_prompt = (
+                sender.config.get("multimodal_config", {})
+                .get("multimodal_tag_prompt", "")
+                .strip()
+            )
+
+        # Default prompt fallback if not configured
+        if not user_prompt:
+            user_prompt = (
+                "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
+                "标签策略（重点优化）：\n"
+                "- 标签数量：4-6个精选标签，避免冗余\n"
+                "- 标签优先级（从高到低）：\n"
+                '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
+                '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
+                '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
+                '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
+                '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
+                "- 标签质量：\n"
+                "  * 使用通俗易懂的词汇\n"
+                "  * 考虑用户搜索习惯与词汇偏好\n"
+                "  * 平衡具体性与通用性\n"
+                "  * 避免过于专业或生僻的术语\n\n"
+                "描述：\n根据画面和标签结果进行简洁描述。"
+            )
+
+        intro = "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。"
+        tags = (
+            "标签策略（重点优化）：\n"
+            "- 标签数量：4-6个精选标签，避免冗余\n"
+            "- 标签优先级（从高到低）：\n"
+            '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
+            '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
+            '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
+            '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
+            '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
+            "- 标签质量：\n"
+            "  * 使用通俗易懂的词汇\n"
+            "  * 考虑用户搜索习惯与词汇偏好\n"
+            "  * 平衡具体性与通用性\n"
+            "  * 避免过于专业或生僻的术语"
+        )
+        desc = "描述：\n根据画面和标签结果进行简洁描述。"
+
+        # Parse user prompt into three parts
+        tag_idx = user_prompt.find("标签策略")
+        desc_idx = user_prompt.find("描述")
+        if tag_idx != -1 and desc_idx != -1:
+            if tag_idx < desc_idx:
+                intro = user_prompt[:tag_idx].strip()
+                tags = user_prompt[tag_idx:desc_idx].strip()
+                desc = user_prompt[desc_idx:].strip()
+            else:
+                intro = user_prompt[:desc_idx].strip()
+                desc = user_prompt[desc_idx:tag_idx].strip()
+                tags = user_prompt[tag_idx:].strip()
+
+        return (
+            jsonify({"intro": intro, "tags": tags, "desc": desc}),
+            200,
+        )
+    except Exception as e:
+        logger.error(f"获取提示词模板失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
+
 async def batch_analyze_emojis():
-    """触发批量分析表情包任务"""
+    """Trigger the batch analysis task."""
     global batch_analyze_status, cancel_batch_analyze_flag
     if batch_analyze_status["status"] == "running":
         return jsonify({"message": "批量分析任务已在运行中"}), 400
@@ -306,6 +379,8 @@ async def batch_analyze_emojis():
     provider_id = data.get("provider_id")
     analyze_tags = data.get("analyze_tags", True)
     analyze_description = data.get("analyze_description", True)
+    pass_existing_tags_as_ref = data.get("pass_existing_tags_as_ref", False)
+    prompt_content = data.get("prompt_content", "")
 
     if not isinstance(filenames, list) or not filenames:
         return jsonify({"message": "filenames 列表是必需的"}), 400
@@ -326,13 +401,15 @@ async def batch_analyze_emojis():
         "results": [],
     }
 
-    # 启动后台任务
+    # Start the background task with prompt customizations
     current_app.add_background_task(
         run_batch_analyze_task,
         filenames,
         provider_id,
         analyze_tags,
         analyze_description,
+        pass_existing_tags_as_ref,
+        prompt_content,
         sender,
     )
 
@@ -355,7 +432,13 @@ async def cancel_batch_analyze():
 
 
 async def run_batch_analyze_task(
-    filenames, provider_id, analyze_tags, analyze_description, sender
+    filenames,
+    provider_id,
+    analyze_tags,
+    analyze_description,
+    pass_existing_tags_as_ref,
+    prompt_content,
+    sender,
 ):
     """后台批量分析执行函数"""
     global batch_analyze_status, cancel_batch_analyze_flag
@@ -425,24 +508,57 @@ async def run_batch_analyze_task(
             b64_data = base64.b64encode(content).decode("utf-8")
             image_data_uri = f"data:{mime_type};base64,{b64_data}"
 
-            guidelines = getattr(sender, "multimodal_tag_prompt", None)
+            # 查询现有数据，以便进行参考及后续的部分更新
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT emotions, description FROM memes WHERE filename = ?",
+                (filename,),
+            )
+            db_row = cursor.fetchone()
+            conn.close()
+
+            if db_row:
+                existing_emotions = db_row["emotions"] or ""
+                existing_desc = db_row["description"] or ""
+            else:
+                existing_emotions = ""
+                existing_desc = ""
+
+            guidelines = prompt_content
             if not guidelines:
+                config_prompt = ""
+                if hasattr(sender, "config"):
+                    config_prompt = (
+                        sender.config.get("multimodal_config", {})
+                        .get("multimodal_tag_prompt", "")
+                        .strip()
+                    )
+                guidelines = config_prompt if config_prompt else getattr(sender, "multimodal_tag_prompt", None)
+                if not guidelines:
+                    guidelines = (
+                        "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
+                        "标签策略（重点优化）：\n"
+                        "- 标签数量：4-6个精选标签，避免冗余\n"
+                        "- 标签优先级（从高到低）：\n"
+                        '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
+                        '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
+                        '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
+                        '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
+                        '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
+                        "- 标签质量：\n"
+                        "  * 使用通俗易懂的词汇\n"
+                        "  * 考虑用户搜索习惯与词汇偏好\n"
+                        "  * 平衡具体性与通用性\n"
+                        "  * 避免过于专业或生僻的术语\n\n"
+                        "描述：\n根据画面和标签结果进行简洁描述。"
+                    )
+
+            if pass_existing_tags_as_ref and not analyze_tags and existing_emotions:
                 guidelines = (
-                    "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
-                    "标签策略（重点优化）：\n"
-                    "- 标签数量：4-6个精选标签，避免冗余\n"
-                    "- 标签优先级（从高到低）：\n"
-                    '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
-                    '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
-                    '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
-                    '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
-                    '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
-                    "- 标签质量：\n"
-                    "  * 使用通俗易懂的词汇\n"
-                    "  * 考虑用户搜索习惯与词汇偏好\n"
-                    "  * 平衡具体性与通用性\n"
-                    "  * 避免过于专业或生僻的术语\n\n"
-                    "描述：\n根据画面和标签结果进行简洁描述。"
+                    f"{guidelines}\n\n"
+                    f"【该表情包当前已有的标签】：{existing_emotions}\n"
+                    f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
                 )
 
             # 根据勾选条件，优化模型提示词
@@ -522,19 +638,6 @@ async def run_batch_analyze_task(
             # 更新数据库
             conn = get_db_conn()
             cursor = conn.cursor()
-
-            # 查询现有数据，以便部分更新
-            cursor.execute(
-                "SELECT emotions, description FROM memes WHERE filename = ?",
-                (filename,),
-            )
-            db_row = cursor.fetchone()
-            if db_row:
-                existing_emotions = db_row["emotions"]
-                existing_desc = db_row["description"]
-            else:
-                existing_emotions = ""
-                existing_desc = ""
 
             final_emotions = (
                 ",".join(parsed_tags) if analyze_tags else existing_emotions
