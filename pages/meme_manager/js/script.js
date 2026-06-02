@@ -344,6 +344,7 @@ createApp({
       deleteEmoji: emojiActions.deleteEmoji,
       batchDeleteSelected: emojiActions.batchDeleteSelected,
       batchConvertToGif: emojiActions.batchConvertToGif,
+      batchRenameToTags: emojiActions.batchRenameToTags,
       saveBatchPersonas: emojiActions.saveBatchPersonas,
       handleMoveTarget: emojiActions.handleMoveTarget,
       clearAllEmojiFiles: emojiActions.clearAllEmojiFiles,

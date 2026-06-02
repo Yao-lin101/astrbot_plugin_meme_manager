@@ -11,6 +11,7 @@ from .batch import (
     get_prompt_template,
     get_providers,
     move_emoji,
+    batch_rename_emojis_to_tags,
 )
 from .category import (
     clear_all_emoji,
@@ -51,6 +52,7 @@ __all__ = [
     "get_providers",
     "get_prompt_template",
     "batch_analyze_emojis",
+    "batch_rename_emojis_to_tags",
     "get_batch_analyze_status",
     "cancel_batch_analyze",
     "clear_all_emoji",

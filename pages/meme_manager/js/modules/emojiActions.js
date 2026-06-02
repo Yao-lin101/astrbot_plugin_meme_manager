@@ -52,7 +52,7 @@ export function useEmojiActions({
     detailDrawerLoading.value = true;
 
     try {
-      const res = await fetch(`/api/emoji/info/${encodeURIComponent(emoji)}`);
+      const res = await fetch(`/api/emoji/info?filename=${encodeURIComponent(emoji)}`);
       if (!res.ok) throw new Error("获取属性失败");
       const metadata = await res.json();
 
@@ -290,6 +290,44 @@ export function useEmojiActions({
       }
     } catch (e) {
       showToast(e.message, "error", "转换失败");
+    }
+
+    selectedEmojis.value.clear();
+    await fetchEmojis();
+  };
+
+  const batchRenameToTags = async () => {
+    const items = Array.from(selectedEmojis.value.values());
+    if (items.length === 0) return;
+
+    const confirmed = await confirm(
+      "更名为标签集合",
+      `确认将选中的 ${items.length} 个表情包文件重命名为其标签集合吗？(无标签的表情将保持原文件名)`,
+      "确认更名",
+      "primary"
+    );
+    if (!confirmed) return;
+
+    const filenames = Array.from(new Set(items.map(item => item.emoji)));
+
+    try {
+      const res = await fetch("/api/emoji/batch_rename_to_tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filenames }),
+      });
+      if (res.ok) {
+        const result = await res.json();
+        showToast(
+          `成功更名 ${result.renamed_count} 个，跳过 ${result.skipped_count} 个。`,
+          "success",
+          "更名完成"
+        );
+      } else {
+        throw new Error("更名请求失败");
+      }
+    } catch (e) {
+      showToast(e.message, "error", "更名失败");
     }
 
     selectedEmojis.value.clear();
@@ -759,6 +797,7 @@ export function useEmojiActions({
     deleteEmoji,
     batchDeleteSelected,
     batchConvertToGif,
+    batchRenameToTags,
     saveBatchPersonas,
     handleMoveTarget,
     clearAllEmojiFiles,
