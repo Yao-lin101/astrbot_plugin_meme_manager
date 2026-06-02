@@ -1,4 +1,4 @@
-const { ref, reactive, nextTick } = window.Vue;
+const { ref, reactive, nextTick, watch } = window.Vue;
 
 export function useModals(showToast) {
   const confirmDialog = reactive({
@@ -56,6 +56,10 @@ export function useModals(showToast) {
     selectedProvider: "",
     analyzeTags: true,
     analyzeDescription: true,
+    passExistingTagsAsRef: false,
+    promptTemplate: { intro: "", tags: "", desc: "" },
+    promptContent: "",
+    isPromptManuallyEdited: false,
     pollTimer: null,
     status: {
       status: "idle",
@@ -65,6 +69,31 @@ export function useModals(showToast) {
       results: []
     }
   });
+
+  const updatePromptContent = () => {
+    let parts = [];
+    if (batchAnalyzeModal.promptTemplate.intro) {
+      parts.push(batchAnalyzeModal.promptTemplate.intro);
+    }
+    if (batchAnalyzeModal.analyzeTags && batchAnalyzeModal.promptTemplate.tags) {
+      parts.push(batchAnalyzeModal.promptTemplate.tags);
+    }
+    if (batchAnalyzeModal.analyzeDescription && batchAnalyzeModal.promptTemplate.desc) {
+      parts.push(batchAnalyzeModal.promptTemplate.desc);
+    }
+    batchAnalyzeModal.promptContent = parts.join("\n\n");
+    batchAnalyzeModal.isPromptManuallyEdited = false;
+  };
+
+  watch(
+    () => [batchAnalyzeModal.analyzeTags, batchAnalyzeModal.analyzeDescription],
+    () => {
+      updatePromptContent();
+      if (!(batchAnalyzeModal.analyzeDescription && !batchAnalyzeModal.analyzeTags)) {
+        batchAnalyzeModal.passExistingTagsAsRef = false;
+      }
+    }
+  );
 
   const confirm = (title, description, confirmLabel = "确认", confirmClass = "", imageUrl = "", localImageUrl = "") => {
     return new Promise((resolve) => {
@@ -219,6 +248,23 @@ export function useModals(showToast) {
     batchAnalyzeModal.selectedProvider = "";
     batchAnalyzeModal.analyzeTags = true;
     batchAnalyzeModal.analyzeDescription = true;
+    batchAnalyzeModal.passExistingTagsAsRef = false;
+    batchAnalyzeModal.isPromptManuallyEdited = false;
+
+    try {
+      const templateRes = await fetch("/api/prompt/template");
+      if (templateRes.ok) {
+        batchAnalyzeModal.promptTemplate = await templateRes.json();
+      } else {
+        throw new Error("获取提示词模板失败");
+      }
+    } catch (e) {
+      console.error("获取提示词模板失败", e);
+      batchAnalyzeModal.promptTemplate = { intro: "", tags: "", desc: "" };
+    }
+
+    updatePromptContent();
+
     batchAnalyzeModal.visible = true;
   };
 
@@ -244,7 +290,9 @@ export function useModals(showToast) {
           filenames: filenames,
           provider_id: batchAnalyzeModal.selectedProvider,
           analyze_tags: batchAnalyzeModal.analyzeTags,
-          analyze_description: batchAnalyzeModal.analyzeDescription
+          analyze_description: batchAnalyzeModal.analyzeDescription,
+          pass_existing_tags_as_ref: batchAnalyzeModal.passExistingTagsAsRef,
+          prompt_content: batchAnalyzeModal.promptContent
         })
       });
 
