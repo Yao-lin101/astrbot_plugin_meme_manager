@@ -175,6 +175,7 @@ def register_apis(sender):
         ("img_host/sync/check_process", check_sync_process, ["GET"]),
         ("personas", get_personas, ["GET"]),
         ("emoji/edit", edit_emoji, ["POST"]),
+        ("emoji/info", get_emoji_info, ["GET"]),
         ("emoji/info/<filename>", get_emoji_info, ["GET"]),
         ("emoji/batch_edit_personas", batch_edit_personas, ["POST"]),
         ("persona_tags", get_persona_tags, ["GET"]),

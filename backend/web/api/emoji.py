@@ -267,9 +267,12 @@ async def edit_emoji():
         return jsonify({"message": str(e)}), 500
 
 
-async def get_emoji_info(filename):
+async def get_emoji_info(filename=None):
     """获取特定表情包的信息"""
     try:
+        # 优先使用查询参数 filename（兼容中文文件名，避免路径段被双重 URL 编码）；
+        # 回退到路径参数以保持向后兼容。
+        filename = request.args.get("filename") or filename
         conn = get_db_conn()
         cursor = conn.cursor()
         cursor.execute(

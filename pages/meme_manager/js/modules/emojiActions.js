@@ -52,7 +52,7 @@ export function useEmojiActions({
     detailDrawerLoading.value = true;
 
     try {
-      const res = await fetch(`/api/emoji/info/${encodeURIComponent(emoji)}`);
+      const res = await fetch(`/api/emoji/info?filename=${encodeURIComponent(emoji)}`);
       if (!res.ok) throw new Error("获取属性失败");
       const metadata = await res.json();
 
