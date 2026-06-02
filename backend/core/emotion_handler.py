@@ -589,3 +589,155 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
     # 按分数降序排列，最多返回前 8 个
     scored_memes.sort(key=lambda x: x["score"], reverse=True)
     return scored_memes[:8]
+
+
+async def match_emotions_by_tags(
+    sender, event: AstrMessageEvent, raw_tags: list[str], valid_emoticons: set[str]
+) -> list[str]:
+    """根据原始标签列表，通过精确匹配 + 向量相似度匹配，返回命中的有效表情标签列表。
+
+    与 `_handle_resp_vector` 的核心匹配逻辑一致，但仅基于标签（不引入回复文本向量），
+    供 `<emotions>...</emotions>` 直接触发场景复用。
+    """
+    if not raw_tags or not valid_emoticons:
+        return []
+
+    # 1. 精确匹配（大小写不敏感）
+    found_exact = set()
+    tags_to_embed = []
+    for raw_tag in raw_tags:
+        matched = None
+        for valid in valid_emoticons:
+            if raw_tag.lower() == valid.lower():
+                matched = valid
+                break
+        if matched:
+            found_exact.add(matched)
+        else:
+            tags_to_embed.append(raw_tag)
+
+    if found_exact:
+        logger.info(
+            f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(found_exact)}"
+        )
+
+    # 2. 向量相似度匹配（仅对未精确命中的标签）
+    found_vector = set()
+    if tags_to_embed:
+        provider_id = get_config_value(sender.config, "embedding_provider_id", "")
+        embedding_provider = None
+        if provider_id:
+            embedding_provider = sender.context.get_provider_by_id(provider_id)
+        if not embedding_provider:
+            provs = sender.context.get_all_embedding_providers()
+            if provs:
+                embedding_provider = provs[0]
+
+        if embedding_provider:
+            from ..db.database import get_all_tag_embeddings
+
+            tag_embeddings = get_all_tag_embeddings()
+
+            # 若有效标签缺失向量，触发后台增量计算
+            import asyncio
+
+            missing_tags = [
+                tag for tag in valid_emoticons if tag not in tag_embeddings
+            ]
+            if missing_tags:
+                logger.info(
+                    f"[meme_manager] (直接触发) 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
+                )
+                asyncio.create_task(sync_tag_embeddings(sender))
+
+            raw_tags_vectors = []
+            for raw_tag in tags_to_embed:
+                try:
+                    vec = await embedding_provider.get_embedding(raw_tag)
+                    if vec:
+                        raw_tags_vectors.append(vec)
+                except Exception as e:
+                    logger.warning(
+                        f"[meme_manager] (直接触发) 获取标签 '{raw_tag}' 向量失败: {e}"
+                    )
+
+            if raw_tags_vectors and tag_embeddings:
+                similarity_threshold = get_config_value(
+                    sender.config, "embedding_similarity_threshold", 0.6
+                )
+                scores = {}
+                for valid_tag in valid_emoticons:
+                    if valid_tag in found_exact:
+                        continue
+                    tag_vec = tag_embeddings.get(valid_tag)
+                    if not tag_vec:
+                        continue
+                    sim = max(
+                        cosine_similarity(v, tag_vec) for v in raw_tags_vectors
+                    )
+                    if sim >= similarity_threshold:
+                        scores[valid_tag] = sim
+
+                if scores:
+                    sorted_tags = sorted(
+                        scores.items(), key=lambda x: x[1], reverse=True
+                    )
+                    logger.info(
+                        f"[meme_manager] (直接触发) 向量召回排序得分: {sorted_tags}"
+                    )
+                    max_limit = sender.max_emotions_per_message
+                    for t, _score in sorted_tags[:max_limit]:
+                        found_vector.add(t)
+        else:
+            logger.info(
+                "[meme_manager] (直接触发) 没有可用的 Embedding Provider，跳过向量匹配。"
+            )
+
+    return list(found_exact.union(found_vector))
+
+
+async def get_direct_trigger_memes(
+    sender, event: AstrMessageEvent, raw_tags: list[str]
+) -> list[str]:
+    """根据原始标签，匹配当前会话人格的有效表情，并按重合度优先级选出要发送的表情包文件列表。"""
+    persona_id = await get_persona_id(sender, event)
+
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+        (f"%,{persona_id},%",),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    valid_emoticons = set()
+    for row in rows:
+        if row["emotions"]:
+            for emo in row["emotions"].split(","):
+                emo = emo.strip()
+                if emo:
+                    valid_emoticons.add(emo)
+
+    # 追加当前人格的专属标签
+    from .helpers import load_persona_tags
+
+    p_tags = load_persona_tags()
+    dedicated_tag = p_tags.get(persona_id)
+    if dedicated_tag:
+        dedicated_tag = dedicated_tag.strip()
+        if dedicated_tag:
+            valid_emoticons.add(dedicated_tag)
+
+    matched_emotions = await match_emotions_by_tags(
+        sender, event, raw_tags, valid_emoticons
+    )
+    logger.info(
+        f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}"
+    )
+    if not matched_emotions:
+        return []
+
+    return await _select_memes_by_emotions_priority(
+        sender, matched_emotions, persona_id
+    )
