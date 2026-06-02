@@ -21,7 +21,7 @@ createApp({
     let pruneSelectionsRef = () => {};
     const api = useApi(showToast, () => pruneSelectionsRef());
 
-    const selection = useSelection(api.emojiData, api.allEmojisList);
+    const selection = useSelection(api.emojiData, api.allEmojisList, api.emojiDescriptions);
     pruneSelectionsRef = selection.pruneSelections;
 
     // 4. Sync
@@ -262,6 +262,7 @@ createApp({
       getVisibleSelectedCount: selection.getVisibleSelectedCount,
       isAllSelectedInCategory: selection.isAllSelectedInCategory,
       toggleCategorySelection: selection.toggleCategorySelection,
+      selectEmojisWithoutDescription: selection.selectEmojisWithoutDescription,
 
       // Modals
       confirmDialog: modals.confirmDialog,

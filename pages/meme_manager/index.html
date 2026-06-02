@@ -355,6 +355,11 @@
                   <button class="btn-secondary" @click="openImportModal">导入已存表情</button>
                   <button class="btn-secondary" 
                           :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
+                          @click="selectEmojisWithoutDescription(activeCategory, null)">
+                    勾选无描述
+                  </button>
+                  <button class="btn-secondary" 
+                          :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
                           @click="toggleCategorySelection(activeCategory, null)">
                     {{ isAllSelectedInCategory(activeCategory, null) ? '取消选择' : '全选' }}
                   </button>
@@ -363,6 +368,11 @@
                   </button>
                 </div>
                 <div class="category-actions" v-else>
+                  <button class="btn-secondary" 
+                          :disabled="activeCategoryEmojisList.length === 0"
+                          @click="selectEmojisWithoutDescription(activeCategory, activeCategoryEmojisList)">
+                    勾选无描述
+                  </button>
                   <button class="btn-secondary" 
                           :disabled="activeCategoryEmojisList.length === 0"
                           @click="toggleCategorySelection(activeCategory, activeCategoryEmojisList)">
