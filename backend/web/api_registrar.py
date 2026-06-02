@@ -111,12 +111,14 @@ def register_apis(sender):
     """Register all Quart web endpoints for Meme Manager plugin."""
     from .api import (
         add_emoji,
+        batch_analyze_emojis,
         batch_convert_emoji_gif,
         batch_copy_emoji,
         batch_delete_emoji,
         batch_edit_personas,
         batch_import_emojis,
         batch_move_emoji,
+        cancel_batch_analyze,
         check_duplicates,
         check_sync_process,
         clear_all_emoji,
@@ -125,6 +127,7 @@ def register_apis(sender):
         delete_emoji,
         edit_emoji,
         get_all_emojis,
+        get_batch_analyze_status,
         get_emoji_file_base64,
         get_emoji_info,
         get_emojis_by_category,
@@ -132,6 +135,7 @@ def register_apis(sender):
         get_img_host_sync_status,
         get_persona_tags,
         get_personas,
+        get_providers,
         get_sync_status,
         move_emoji,
         rename_category,
@@ -177,6 +181,10 @@ def register_apis(sender):
         ("emoji/dup/check", check_duplicates, ["GET"]),
         ("emoji/dup/resolve", resolve_duplicates, ["POST"]),
         ("emoji/<category>", get_emojis_by_category, ["GET"]),
+        ("providers", get_providers, ["GET"]),
+        ("emoji/batch_analyze", batch_analyze_emojis, ["POST"]),
+        ("emoji/batch_analyze/status", get_batch_analyze_status, ["GET"]),
+        ("emoji/batch_analyze/cancel", cancel_batch_analyze, ["POST"]),
     ]
 
     for route, handler, methods in apis:
