@@ -1,6 +1,6 @@
 const { ref, computed } = window.Vue;
 
-export function useSelection(emojiData, allEmojisList) {
+export function useSelection(emojiData, allEmojisList, emojiDescriptions) {
   const selectedEmojis = ref(new Map()); // Key: 'category:emoji' -> { category, emoji }
   const selectionEnabled = computed(() => selectedEmojis.value.size > 0);
 
@@ -66,6 +66,16 @@ export function useSelection(emojiData, allEmojisList) {
     }
   };
 
+  const selectEmojisWithoutDescription = (category, visibleList) => {
+    const list = visibleList || (category === 'all' ? allEmojisList.value : (emojiData.value[category] || []));
+    list.forEach((emoji) => {
+      const desc = emojiDescriptions.value[emoji] || "";
+      if (!desc.trim()) {
+        selectedEmojis.value.set(`${category}:${emoji}`, { category, emoji });
+      }
+    });
+  };
+
   return {
     selectedEmojis,
     selectionEnabled,
@@ -77,5 +87,6 @@ export function useSelection(emojiData, allEmojisList) {
     getVisibleSelectedCount,
     isAllSelectedInCategory,
     toggleCategorySelection,
+    selectEmojisWithoutDescription,
   };
 }

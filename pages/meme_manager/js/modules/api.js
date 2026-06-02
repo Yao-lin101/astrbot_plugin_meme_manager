@@ -3,6 +3,7 @@ const { ref, computed } = window.Vue;
 export function useApi(showToast, pruneSelections) {
   const emojiData = ref({});
   const emojiMtimes = ref({});
+  const emojiDescriptions = ref({});
   const tagDescriptions = ref({});
   const systemPersonas = ref([]);
   const personaTags = ref({});
@@ -38,6 +39,7 @@ export function useApi(showToast, pruneSelections) {
 
       emojiData.value = emojiRes.categories || {};
       emojiMtimes.value = emojiRes.mtimes || {};
+      emojiDescriptions.value = emojiRes.descriptions || {};
       tagDescriptions.value = tagRes;
 
       if (pruneSelections) pruneSelections();
@@ -244,6 +246,7 @@ export function useApi(showToast, pruneSelections) {
   return {
     emojiData,
     emojiMtimes,
+    emojiDescriptions,
     tagDescriptions,
     systemPersonas,
     personaTags,

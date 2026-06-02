@@ -30,20 +30,22 @@ async def get_all_emojis():
 
     if persona_id:
         cursor.execute(
-            "SELECT filename, emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+            "SELECT filename, emotions, description FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
             (f"%,{persona_id},%",),
         )
     else:
-        cursor.execute("SELECT filename, emotions FROM memes")
+        cursor.execute("SELECT filename, emotions, description FROM memes")
 
     rows = cursor.fetchall()
     conn.close()
 
     emoji_data = {}
     mtimes = {}
+    descriptions = {}
     for row in rows:
         filename = row["filename"]
         emotions = row["emotions"]
+        description = row["description"] or ""
 
         # Verify file exists
         full_path = os.path.join(MEMES_DIR, filename)
@@ -54,6 +56,8 @@ async def get_all_emojis():
             mtimes[filename] = int(os.path.getmtime(full_path))
         except Exception:
             mtimes[filename] = 0
+
+        descriptions[filename] = description
 
         if emotions:
             for emo in emotions.split(","):
@@ -69,7 +73,7 @@ async def get_all_emojis():
             if cat not in emoji_data:
                 emoji_data[cat] = []
 
-    return jsonify({"categories": emoji_data, "mtimes": mtimes})
+    return jsonify({"categories": emoji_data, "mtimes": mtimes, "descriptions": descriptions})
 
 
 async def get_emojis_by_category(category):
