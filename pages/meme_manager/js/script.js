@@ -313,7 +313,6 @@ createApp({
       imgHostStatus: sync.imgHostStatus,
       checkSyncStatus: sync.checkSyncStatus,
       syncConfig: sync.syncConfig,
-      restoreCategory: sync.restoreCategory,
       removeFromConfig: sync.removeFromConfig,
       checkImgHostSyncStatus: sync.checkImgHostSyncStatus,
       syncToRemote: sync.syncToRemote,
