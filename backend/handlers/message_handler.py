@@ -12,6 +12,7 @@ from ...config import MEMES_DIR
 from ..core.emotion_handler import (
     _select_memes_by_emotions_priority,
     _send_memes_streaming,
+    get_direct_trigger_memes,
 )
 from ..core.helpers import (
     convert_to_gif,
@@ -208,6 +209,75 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
     except Exception as e:
         logger.error(f"处理消息装饰失败: {str(e)}")
         logger.error(traceback.format_exc())
+
+
+async def handle_direct_meme_trigger(sender, event: AstrMessageEvent):
+    """监听形如 `<emotions>标签1, 标签2</emotions>` 的消息，直接匹配并发送表情包，绕过 LLM。
+
+    - 消息中不含 `<emotions>...</emotions>` 或标签为空时，不拦截事件，正常走后续流程。
+    - 命中标签语法时立即 `stop_event()` 终止传播以绕过 LLM，再进行精确/向量匹配并发送。
+    """
+    text = event.message_str or ""
+    if "<emotions>" not in text.lower():
+        return
+
+    # 提取所有 <emotions>...</emotions> 块内的标签
+    raw_tags = []
+    for match in re.finditer(
+        r"<emotions>(.*?)</emotions>", text, re.DOTALL | re.IGNORECASE
+    ):
+        inner_content = match.group(1)
+        for tag in re.split(r"[,，\s]+", inner_content):
+            tag = tag.strip()
+            if tag:
+                raw_tags.append(tag)
+
+    # 标签为空则忽略，不拦截事件
+    if not raw_tags:
+        return
+
+    logger.info(f"[meme_manager] (直接触发) 检测到标签语法，提取标签: {raw_tags}")
+
+    # 命中标签语法，立即终止事件传播以绕过 LLM
+    event.stop_event()
+
+    try:
+        selected_memes = await get_direct_trigger_memes(sender, event, raw_tags)
+    except Exception as e:
+        logger.error(f"[meme_manager] (直接触发) 匹配表情包失败: {e}")
+        logger.error(traceback.format_exc())
+        return
+
+    if not selected_memes:
+        logger.debug("[meme_manager] (直接触发) 未匹配到可发送的表情包。")
+        return
+
+    emotion_images = []
+    temp_files = []
+    for meme in selected_memes:
+        meme_file = os.path.join(MEMES_DIR, meme)
+        try:
+            final_meme_file = convert_to_gif(meme_file, sender)
+            if final_meme_file != meme_file:
+                temp_files.append(final_meme_file)
+            img = Image.fromFileSystem(final_meme_file)
+            object.__setattr__(img, "sub_type", 1)
+            emotion_images.append(img)
+        except Exception as e:
+            logger.error(f"[meme_manager] (直接触发) 添加表情图片失败: {e}")
+
+    if not emotion_images:
+        return
+
+    # 转换产生的临时 GIF 交由 after_message_sent 统一清理
+    if temp_files:
+        existing_temp_files = event.get_extra("meme_manager_temp_files") or []
+        event.set_extra("meme_manager_temp_files", existing_temp_files + temp_files)
+
+    logger.debug(
+        f"[meme_manager] (直接触发) 成功加载 {len(emotion_images)} 张表情图片，准备发送。"
+    )
+    yield event.chain_result(emotion_images)
 
 
 async def after_message_sent(sender, event: AstrMessageEvent):

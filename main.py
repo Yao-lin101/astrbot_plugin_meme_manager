@@ -253,6 +253,13 @@ class MemeSender(Star, MemeConfigMixin):
         async for res in EventHandlers.handle_upload_image(self, event):
             yield res
 
+    @filter.event_message_type(EventMessageType.ALL)
+    async def handle_direct_meme_trigger(self, event: AstrMessageEvent):
+        """监听 <emotions>标签</emotions> 直接触发表情包发送，绕过 LLM"""
+        await self.check_and_reload_if_changed()
+        async for res in EventHandlers.handle_direct_meme_trigger(self, event):
+            yield res
+
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def handle_group_message(self, event: AstrMessageEvent):
         """处理群聊消息以实现暗中自动偷表情包"""

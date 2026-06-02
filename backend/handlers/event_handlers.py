@@ -45,6 +45,13 @@ class EventHandlers:
             yield res
 
     @staticmethod
+    async def handle_direct_meme_trigger(sender, event: AstrMessageEvent):
+        from .message_handler import handle_direct_meme_trigger
+
+        async for res in handle_direct_meme_trigger(sender, event):
+            yield res
+
+    @staticmethod
     async def _check_meme_preference_match(
         sender,
         event: AstrMessageEvent,
