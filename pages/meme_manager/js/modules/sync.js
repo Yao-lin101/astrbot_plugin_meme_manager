@@ -67,22 +67,6 @@ export function useSync(showToast, fetchEmojis) {
     }
   };
 
-  const restoreCategory = async (category) => {
-    try {
-      const res = await fetch("/api/category/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, description: "请添加描述" }),
-      });
-      if (!res.ok) throw new Error("恢复标签文件夹失败");
-      showToast(`标签「${category}」对应文件夹已成功重建。`, "success", "恢复成功");
-      await fetchEmojis();
-      await checkSyncStatus(false);
-    } catch (e) {
-      showToast(e.message, "error", "恢复失败");
-    }
-  };
-
   const removeFromConfig = async (category) => {
     try {
       const res = await fetch("/api/category/remove", {
@@ -173,7 +157,6 @@ export function useSync(showToast, fetchEmojis) {
     formatBytes,
     checkSyncStatus,
     syncConfig,
-    restoreCategory,
     removeFromConfig,
     checkImgHostSyncStatus,
     syncToRemote,

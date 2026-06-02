@@ -27,6 +27,12 @@ async def batch_delete_emoji():
     if not result["category_exists"]:
         return jsonify({"message": "Category not found"}), 404
 
+    # 删除后可能产生空标签，同步清理配置
+    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+    category_manager = plugin_config.get("category_manager")
+    if category_manager:
+        category_manager.sync_with_filesystem()
+
     deleted_files = result["deleted_files"]
     missing_files = result["missing_files"]
     return jsonify(
@@ -81,6 +87,12 @@ async def move_emoji():
     if result["missing"]:
         return jsonify({"message": "Emoji not found"}), 404
 
+    # 移动后源标签可能变空，同步清理配置
+    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+    category_manager = plugin_config.get("category_manager")
+    if category_manager:
+        category_manager.sync_with_filesystem()
+
     return jsonify(
         {
             "message": "Emoji moved successfully",
@@ -119,6 +131,12 @@ async def batch_move_emoji():
     result = batch_move_emojis(source_category, image_files, target_category)
     if not result["source_category_exists"]:
         return jsonify({"message": "Source category not found"}), 404
+
+    # 移动后源标签可能变空，同步清理配置
+    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+    category_manager = plugin_config.get("category_manager")
+    if category_manager:
+        category_manager.sync_with_filesystem()
 
     moved_files = result["moved_files"]
     missing_files = result["missing_files"]

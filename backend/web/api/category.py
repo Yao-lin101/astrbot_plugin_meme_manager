@@ -1,9 +1,7 @@
 import logging
-import os
 
 from quart import current_app, jsonify, request
 
-from ....config import MEMES_DIR
 from ...db.models import clear_all_emojis, clear_category_emojis
 from .common import trigger_tag_vectorization
 
@@ -20,6 +18,12 @@ async def clear_category():
     result = clear_category_emojis(category)
     if not result["category_exists"]:
         return jsonify({"message": "Category not found"}), 404
+
+    # 清空后该标签已无表情引用，同步清理空标签配置
+    plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+    category_manager = plugin_config.get("category_manager")
+    if category_manager:
+        category_manager.sync_with_filesystem()
 
     deleted_files = result["deleted_files"]
     return jsonify(
@@ -71,7 +75,7 @@ async def delete_category():
 
 
 async def restore_category():
-    """恢复或创建新类别"""
+    """创建新标签（表情均存于同一层级，不再创建分类文件夹）"""
     try:
         data = await request.get_json()
 
@@ -85,10 +89,6 @@ async def restore_category():
 
         if not category_manager:
             return jsonify({"message": "Category manager not found"}), 404
-
-        # 创建类别目录
-        category_path = os.path.join(MEMES_DIR, category)
-        os.makedirs(category_path, exist_ok=True)
 
         # 添加分类
         if category_manager.add_category(category):
