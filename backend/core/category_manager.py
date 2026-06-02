@@ -150,18 +150,24 @@ class CategoryManager:
         return self.categories.copy()  # 返回副本
 
     def sync_with_filesystem(self) -> bool:
-        """同步文件系统和配置"""
+        """同步文件系统和配置
+
+        以数据库中实际被表情引用的标签为准：
+        - 补全本地新增的标签；
+        - 清理不再被任何表情引用的空标签（保持原有顺序）。
+        """
         try:
             local_categories = self.get_local_categories()
-            changed = False
 
-            # 为新类别添加默认描述
+            # 保留仍被引用的标签（维持原有顺序），剔除空标签
+            new_categories = [c for c in self.categories if c in local_categories]
+            # 追加本地新增、配置中尚未登记的标签
             for category in local_categories:
-                if category not in self.categories:
-                    self.categories.append(category)
-                    changed = True
+                if category not in new_categories:
+                    new_categories.append(category)
 
-            if changed:
+            if new_categories != self.categories:
+                self.categories = new_categories
                 return save_json(self.categories, MEMES_DATA_PATH)
             return True
         except Exception as e:

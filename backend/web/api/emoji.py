@@ -203,6 +203,12 @@ async def delete_emoji():
         return jsonify({"message": "Category and image file are required"}), 400
 
     if delete_emoji_from_category(category, image_file):
+        # 删除后可能产生空标签，同步清理配置
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        category_manager = plugin_config.get("category_manager")
+        if category_manager:
+            category_manager.sync_with_filesystem()
+
         return jsonify(
             {
                 "message": "Emoji deleted successfully",

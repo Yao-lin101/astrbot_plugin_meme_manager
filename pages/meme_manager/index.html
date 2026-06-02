@@ -171,7 +171,6 @@
                         <div v-for="cat in syncStatus.deletedCategories" :key="cat" class="deleted-item">
                           <span class="deleted-name">{{ cat }}</span>
                           <div class="deleted-actions">
-                            <button class="btn-sm" @click="restoreCategory(cat)">恢复文件夹</button>
                             <button class="btn-sm btn-danger" @click="removeFromConfig(cat)">删除配置</button>
                           </div>
                         </div>
