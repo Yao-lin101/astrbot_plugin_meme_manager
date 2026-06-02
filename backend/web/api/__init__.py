@@ -1,10 +1,14 @@
 from .batch import (
+    batch_analyze_emojis,
     batch_convert_emoji_gif,
     batch_copy_emoji,
     batch_delete_emoji,
     batch_edit_personas,
     batch_import_emojis,
     batch_move_emoji,
+    cancel_batch_analyze,
+    get_batch_analyze_status,
+    get_providers,
     move_emoji,
 )
 from .category import (
@@ -43,6 +47,10 @@ __all__ = [
     "batch_import_emojis",
     "batch_move_emoji",
     "move_emoji",
+    "get_providers",
+    "batch_analyze_emojis",
+    "get_batch_analyze_status",
+    "cancel_batch_analyze",
     "clear_all_emoji",
     "clear_category",
     "delete_category",
