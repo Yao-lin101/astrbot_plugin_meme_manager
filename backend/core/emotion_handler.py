@@ -301,28 +301,14 @@ async def _handle_resp_vector(
             except Exception as e:
                 logger.warning(f"[meme_manager] 获取标签 '{raw_tag}' 向量失败: {e}")
 
-        text_vector = None
-        text_weight = get_config_value(sender.config, "embedding_text_weight", 0.3)
-        if text_weight > 0 and clean_text.strip():
-            try:
-                text_vector = await embedding_provider.get_embedding(clean_text.strip())
-                if text_vector:
-                    logger.debug(
-                        f"[meme_manager] 获取回复文本 '{clean_text.strip()}' 向量成功：维度={len(text_vector)}, "
-                        f"前5位数据={text_vector[:5]}"
-                    )
-            except Exception as e:
-                logger.warning(f"[meme_manager] 获取回复文本向量失败: {e}")
-
         logger.debug(
-            f"[meme_manager] 提取标签向量 {len(raw_tags_vectors)} 个, 文本向量计算成功={text_vector is not None}, 缓存的标签向量总数={len(tag_embeddings)}"
+            f"[meme_manager] 提取标签向量 {len(raw_tags_vectors)} 个, 缓存的标签向量总数={len(tag_embeddings)}"
         )
 
-        if (raw_tags_vectors or text_vector) and tag_embeddings:
+        if raw_tags_vectors and tag_embeddings:
             similarity_threshold = get_config_value(
                 sender.config, "embedding_similarity_threshold", 0.6
             )
-            tag_weight = get_config_value(sender.config, "embedding_tag_weight", 0.7)
 
             scores = {}
             all_scores_debug = {}
@@ -335,32 +321,13 @@ async def _handle_resp_vector(
                     all_scores_debug[valid_tag] = "no_vec"
                     continue
 
-                sim_tag = 0.0
-                if raw_tags_vectors:
-                    sim_tag = max(
-                        cosine_similarity(v, tag_vec) for v in raw_tags_vectors
-                    )
-
-                sim_text = 0.0
-                if text_vector:
-                    sim_text = cosine_similarity(text_vector, tag_vec)
-
-                w_tag = tag_weight if raw_tags_vectors else 0.0
-                w_text = text_weight if text_vector else 0.0
-                total_weight = w_tag + w_text
-
-                if total_weight > 0:
-                    combined_score = (
-                        sim_tag * w_tag + sim_text * w_text
-                    ) / total_weight
-                else:
-                    combined_score = 0.0
-
-                all_scores_debug[valid_tag] = (
-                    f"sim_tag={sim_tag:.4f}, sim_text={sim_text:.4f}, combined={combined_score:.4f}"
+                sim_tag = max(
+                    cosine_similarity(v, tag_vec) for v in raw_tags_vectors
                 )
-                if combined_score >= similarity_threshold:
-                    scores[valid_tag] = combined_score
+
+                all_scores_debug[valid_tag] = f"sim_tag={sim_tag:.4f}"
+                if sim_tag >= similarity_threshold:
+                    scores[valid_tag] = sim_tag
 
             logger.debug(
                 f"[meme_manager] 所有候选表情标签匹配得分 (阈值={similarity_threshold}): {all_scores_debug}"
@@ -596,7 +563,7 @@ async def match_emotions_by_tags(
 ) -> list[str]:
     """根据原始标签列表，通过精确匹配 + 向量相似度匹配，返回命中的有效表情标签列表。
 
-    与 `_handle_resp_vector` 的核心匹配逻辑一致，但仅基于标签（不引入回复文本向量），
+    与 `_handle_resp_vector` 的核心匹配逻辑一致（均为仅基于标签的单通道检索），
     供 `<emotions>...</emotions>` 直接触发场景复用。
     """
     if not raw_tags or not valid_emoticons:
