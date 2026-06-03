@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403
@@ -260,6 +261,19 @@ class MemeSender(Star, MemeConfigMixin):
         async for res in EventHandlers.handle_direct_meme_trigger(self, event):
             yield res
 
+    @filter.event_message_type(EventMessageType.ALL)
+    async def cache_last_image(self, event: AstrMessageEvent):
+        """缓存各会话最近收到的图片，供 steal_meme 在当前消息/引用均无图时回退取图。"""
+        images = [c for c in event.message_obj.message if isinstance(c, Image)]
+        if not images:
+            return
+        if not hasattr(self, "_session_last_image"):
+            self._session_last_image = {}
+        self._session_last_image[event.unified_msg_origin] = {
+            "url": images[-1].url,
+            "ts": time.time(),
+        }
+
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def handle_group_message(self, event: AstrMessageEvent):
         """处理群聊消息以实现暗中自动偷表情包"""
@@ -320,7 +334,9 @@ class MemeSender(Star, MemeConfigMixin):
         category: str | None = None,
         description: str | None = None,
     ):
-        """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
+        """保存并收录最近聊天中发送的表情包到当前人格的表情包库中。
+
+        取图优先级：当前消息直发的图片 > 你引用/回复的图片 > 本会话最近收到的图片（约 5 分钟内）。因此当你想收录前面某条消息里的表情包时，可直接调用本工具；若那张图已超出有效期或会话无图，请提示用户重新发送或引用该图。
 
         Args:
             categories(list): 表情包所属的类别列表，如 ["happy", "sad"] 等。注意：只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时才传入此参数；如果用户只是说“偷图/收录”或未明确指定，请保持此参数为 None，严禁自行推测或生成分类。

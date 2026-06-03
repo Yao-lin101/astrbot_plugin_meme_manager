@@ -17,6 +17,9 @@ from ..core.helpers import get_persona_id, get_persona_prompt
 from ..db.database import get_db_conn, get_steal_attempt, save_steal_attempt
 from ..db.models import save_and_register_meme
 
+# 会话最近图片缓存的有效期：超过该时长的缓存图片不再用于 steal_meme 回退取图
+LAST_IMAGE_CACHE_TTL = 300
+
 
 async def _check_meme_preference_match(
     sender,
@@ -158,8 +161,19 @@ async def steal_meme(
         if images:
             last_image_url = images[-1].url
 
+    # C. 回退：当前消息与引用均无图时，使用本会话最近收到且仍在有效期内的图片
     if not last_image_url and image_content is None:
-        return "没有在当前消息或引用的回复中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
+        cache = getattr(sender, "_session_last_image", {}).get(
+            event.unified_msg_origin
+        )
+        if cache and (time.time() - cache.get("ts", 0)) <= LAST_IMAGE_CACHE_TTL:
+            last_image_url = cache.get("url")
+            logger.info(
+                "[meme_manager] steal_meme 当前消息无图，回退使用本会话最近缓存的图片。"
+            )
+
+    if not last_image_url and image_content is None:
+        return "没有在最近的聊天中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
 
     # 3. 检查分类是否合法（如果未启用多模态判定，且 categories 为空，则报错）
     if not getattr(sender, "multimodal_llm_enabled", False) and not categories:
