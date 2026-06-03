@@ -13,7 +13,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Reply
 
 from ...utils import get_config_value
-from ..core.helpers import get_persona_id, get_persona_prompt
+from ..core.helpers import get_persona_id, get_persona_setting
 from ..db.database import get_db_conn, get_steal_attempt, save_steal_attempt
 from ..db.models import save_and_register_meme
 
@@ -110,30 +110,29 @@ async def _check_meme_preference_match(
 async def resolve_persona_preference(
     sender, event: AstrMessageEvent
 ) -> tuple[str, str | None, str | None]:
-    """解析当前会话的人格 ID 及其表情包收集偏好（<meme_preference>）。
+    """解析当前会话的人格 ID 及其表情包收集偏好。
+
+    偏好直接读取插件内维护的人格偏好配置（persona_settings），不再依赖解析
+    人格系统提示词中的 <meme_preference> 标签。
 
     Returns:
         (persona_id, preference_text|None, error_message|None)
     """
     persona_id = await get_persona_id(sender, event)
-    persona_prompt = await get_persona_prompt(sender, event)
+    preference_text = get_persona_setting(
+        sender.config, persona_id, "meme_preference"
+    ).strip()
     logger.debug(
-        f"[meme_manager] 当前解析的人格 ID: {persona_id}, 提示词长度: {len(persona_prompt)}, 提示词内容: {persona_prompt}"
+        f"[meme_manager] 当前解析的人格 ID: {persona_id}, 收集偏好: {preference_text!r}"
     )
 
-    pref_match = re.search(
-        r"<meme_preference>(.*?)</meme_preference>",
-        persona_prompt,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if not pref_match or not pref_match.group(1).strip():
+    if not preference_text:
         return (
             persona_id,
             None,
-            "当前人格未配置表情包收集偏好（需要使用 <meme_preference> 标签包裹偏好设置），拒绝收录。",
+            "当前人格未配置表情包收集偏好，已拒绝收录。请在插件的人格偏好配置中为该人格设置收集偏好后再试。",
         )
 
-    preference_text = pref_match.group(1).strip()
     logger.info(f"[meme_manager] 人格 {persona_id} 的表情包收集偏好: {preference_text}")
     return persona_id, preference_text, None
 
