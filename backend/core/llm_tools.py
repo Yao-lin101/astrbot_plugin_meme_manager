@@ -11,17 +11,8 @@ from .emotion_handler import search_memes_for_llm
 from .helpers import convert_to_gif, get_persona_id
 
 
-async def send_meme(
-    sender, event: AstrMessageEvent, query: str, index: int | None = None
-) -> str:
-    """Search and send a meme based on query and index selection."""
-    persona_id = await get_persona_id(sender, event)
-    candidates = await search_memes_for_llm(sender, query, persona_id)
-
-    if not candidates:
-        return f"未找到与标签 '{query}' 相关的表情包，请尝试其他的关键词检索。"
-
-    # Group candidates to avoid duplicates and implement selection logic.
+def _build_display_groups(candidates: list[dict]) -> list[dict]:
+    """Group candidates by description / tags to dedupe identical entries for selection."""
     display_groups = []
     desc_lookup = {}
     tags_lookup = {}
@@ -54,11 +45,45 @@ async def send_meme(
                 display_groups.append(group)
                 tags_lookup[key] = group
 
+    return display_groups
+
+
+async def send_meme(
+    sender,
+    event: AstrMessageEvent,
+    query: str | None = None,
+    index: int | None = None,
+) -> str:
+    """Search and send a meme based on query and index selection."""
+    persona_id = await get_persona_id(sender, event)
+    session_key = event.unified_msg_origin
+
+    if not hasattr(sender, "_meme_tool_candidates"):
+        sender._meme_tool_candidates = {}
+
+    # A fresh query re-searches and refreshes this session's candidate cache;
+    # otherwise fall back to the candidates cached from a previous call so the
+    # follow-up selection call only needs `index`.
+    if query and query.strip():
+        candidates = await search_memes_for_llm(sender, query, persona_id)
+        if not candidates:
+            sender._meme_tool_candidates.pop(session_key, None)
+            return f"未找到与标签 '{query}' 相关的表情包，请尝试其他的关键词检索。"
+        display_groups = _build_display_groups(candidates)
+        sender._meme_tool_candidates[session_key] = display_groups
+    else:
+        display_groups = sender._meme_tool_candidates.get(session_key)
+        if not display_groups:
+            return "请先传入 `query` 检索表情包候选列表，再传入 `index` 选择并发送。"
+
     if index is None:
-        response_text = f"已找到与标签 '{query}' 相关的表情包候选列表：\n"
+        response_text = "已找到相关的表情包候选列表：\n"
         for i, group in enumerate(display_groups, start=1):
             response_text += f"{i}. {group['display_text']}\n"
-        response_text += "请在上述候选中选择最合适的一个序号，并再次调用本工具传入 `index` 参数（如 index=1）来发送对应的表情包。"
+        response_text += (
+            "请从以上候选中选择最合适的一项，再次调用本工具并传入 `index` 参数"
+            "（如 index=1）即可发送，此时无需重复传入 query。"
+        )
         return response_text
 
     idx = int(index) - 1
@@ -92,6 +117,8 @@ async def send_meme(
                 os.remove(final_meme_file)
             except Exception:
                 pass
+
+        sender._meme_tool_candidates.pop(session_key, None)
 
         desc_info = (
             f"描述为 '{selected_meme['description']}'"

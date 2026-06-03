@@ -338,14 +338,14 @@ class MemeSender(Star, MemeConfigMixin):
     async def send_meme(
         self,
         event: AstrMessageEvent,
-        query: str,
+        query: str | None = None,
         index: int | None = None,
     ):
-        """搜索并发送表情包。
+        """搜索并发送表情包。两步流程：先用 query 检索候选列表，再用 index 选择发送。
 
         Args:
-            query(string): 检索表情包的标签。支持并鼓励传入多个由英文逗号分隔的标签（如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这也更容易精准匹配图库中的表情包。
-            index(number): 选中的表情包序号（从 1 开始）。如果首次调用或需要展示候选列表供选择，请不要进行传值；如果已获得候选列表，请传入选中的序号进行发送。
+            query(string): 检索表情包的标签。支持并鼓励传入多个由英文逗号分隔的标签（如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这也更容易精准匹配图库中的表情包。首次检索时必须传入；在已获得候选列表后再次调用发送时可省略（系统会沿用上次的候选列表）。
+            index(number): 选中的表情包序号（从 1 开始）。首次检索、需要展示候选列表时请勿传入；已获得候选列表后，传入选中的序号即可发送，此时无需再次传入 query。
         """
         await self.check_and_reload_if_changed()
         from .backend import send_meme
