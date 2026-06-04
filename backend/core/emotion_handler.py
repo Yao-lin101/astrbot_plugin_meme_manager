@@ -322,9 +322,7 @@ async def _handle_resp_vector(
                     all_scores_debug[valid_tag] = "no_vec"
                     continue
 
-                sim_tag = max(
-                    cosine_similarity(v, tag_vec) for v in raw_tags_vectors
-                )
+                sim_tag = max(cosine_similarity(v, tag_vec) for v in raw_tags_vectors)
 
                 all_scores_debug[valid_tag] = f"sim_tag={sim_tag:.4f}"
                 if sim_tag >= similarity_threshold:
@@ -590,9 +588,7 @@ async def match_emotions_by_tags(
             tags_to_embed.append(raw_tag)
 
     if found_exact:
-        logger.info(
-            f"[meme_manager] (直接触发) 精确匹配到的表情标签: {found_exact}"
-        )
+        logger.info(f"[meme_manager] (直接触发) 精确匹配到的表情标签: {found_exact}")
 
     # 2. 向量相似度匹配（仅对未精确命中的标签）
     found_vector = []
@@ -614,9 +610,7 @@ async def match_emotions_by_tags(
             # 若有效标签缺失向量，触发后台增量计算
             import asyncio
 
-            missing_tags = [
-                tag for tag in valid_emoticons if tag not in tag_embeddings
-            ]
+            missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
             if missing_tags:
                 logger.info(
                     f"[meme_manager] (直接触发) 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
@@ -645,9 +639,7 @@ async def match_emotions_by_tags(
                     tag_vec = tag_embeddings.get(valid_tag)
                     if not tag_vec:
                         continue
-                    sim = max(
-                        cosine_similarity(v, tag_vec) for v in raw_tags_vectors
-                    )
+                    sim = max(cosine_similarity(v, tag_vec) for v in raw_tags_vectors)
                     if sim >= similarity_threshold:
                         scores[valid_tag] = sim
 
@@ -707,9 +699,7 @@ async def get_direct_trigger_memes(
     matched_emotions = await match_emotions_by_tags(
         sender, event, raw_tags, valid_emoticons
     )
-    logger.info(
-        f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}"
-    )
+    logger.info(f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}")
     if not matched_emotions:
         return []
 
