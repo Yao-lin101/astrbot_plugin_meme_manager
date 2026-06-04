@@ -122,18 +122,17 @@ async def resolve_persona_preference(
     preference_text = get_persona_setting(
         sender.config, persona_id, "meme_preference"
     ).strip()
-    logger.debug(
-        f"[meme_manager] 当前解析的人格 ID: {persona_id}, 收集偏好: {preference_text!r}"
-    )
 
     if not preference_text:
+        logger.debug(f"[meme_manager] 当前解析的人格 ID: {persona_id}, 未配置收集偏好")
         return (
             persona_id,
             None,
             "当前人格未配置表情包收集偏好，已拒绝收录。请在插件的人格偏好配置中为该人格设置收集偏好后再试。",
         )
 
-    logger.info(f"[meme_manager] 人格 {persona_id} 的表情包收集偏好: {preference_text}")
+    preview = preference_text[:30] + ("…" if len(preference_text) > 30 else "")
+    logger.info(f"[meme_manager] 人格 {persona_id} 的表情包收集偏好: {preview}")
     return persona_id, preference_text, None
 
 
