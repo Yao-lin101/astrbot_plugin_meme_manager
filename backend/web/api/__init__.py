@@ -6,12 +6,12 @@ from .batch import (
     batch_edit_personas,
     batch_import_emojis,
     batch_move_emoji,
+    batch_rename_emojis_to_tags,
     cancel_batch_analyze,
     get_batch_analyze_status,
     get_prompt_template,
     get_providers,
     move_emoji,
-    batch_rename_emojis_to_tags,
 )
 from .category import (
     clear_all_emoji,

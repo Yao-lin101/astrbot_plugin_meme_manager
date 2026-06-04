@@ -13,9 +13,12 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Reply
 
 from ...utils import get_config_value
-from ..core.helpers import get_persona_id, get_persona_prompt
+from ..core.helpers import get_persona_id, get_persona_setting
 from ..db.database import get_db_conn, get_steal_attempt, save_steal_attempt
 from ..db.models import save_and_register_meme
+
+# 会话最近图片缓存的有效期：超过该时长的缓存图片不再用于 steal_meme 回退取图
+LAST_IMAGE_CACHE_TTL = 300
 
 
 async def _check_meme_preference_match(
@@ -104,158 +107,180 @@ async def _check_meme_preference_match(
         return False, f"调用多模态模型出错: {str(e)}"
 
 
-async def steal_meme(
-    sender,
-    event: AstrMessageEvent,
-    categories: list[str] | None = None,
-    image_content: bytes | None = None,
-    image_hash: str | None = None,
-    image_type: str | None = None,
-    description: str | None = None,
-):
-    """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
+async def resolve_persona_preference(
+    sender, event: AstrMessageEvent
+) -> tuple[str, str | None, str | None]:
+    """解析当前会话的人格 ID 及其表情包收集偏好。
 
-    Args:
-        categories(list): 对应的表情包类别/情绪分类名称列表（如 ["happy", "sad"] 等）
+    偏好直接读取插件内维护的人格偏好配置（persona_settings），不再依赖解析
+    人格系统提示词中的 <meme_preference> 标签。
+
+    Returns:
+        (persona_id, preference_text|None, error_message|None)
     """
-    # 1. 获取当前会话的人格 ID (persona_id) 和人格提示词，并检查表情包收集偏好配置
     persona_id = await get_persona_id(sender, event)
-    persona_prompt = await get_persona_prompt(sender, event)
-    logger.debug(
-        f"[meme_manager] 当前解析的人格 ID: {persona_id}, 提示词长度: {len(persona_prompt)}, 提示词内容: {persona_prompt}"
-    )
+    preference_text = get_persona_setting(
+        sender.config, persona_id, "meme_preference"
+    ).strip()
 
-    pref_match = re.search(
-        r"<meme_preference>(.*?)</meme_preference>",
-        persona_prompt,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if not pref_match:
-        return "当前人格未配置表情包收集偏好（需要使用 <meme_preference> 标签包裹偏好设置），拒绝收录。"
-    preference_text = pref_match.group(1).strip()
     if not preference_text:
-        return "当前人格未配置表情包收集偏好（需要使用 <meme_preference> 标签包裹偏好设置），拒绝收录。"
+        logger.debug(f"[meme_manager] 当前解析的人格 ID: {persona_id}, 未配置收集偏好")
+        return (
+            persona_id,
+            None,
+            "当前人格未配置表情包收集偏好，已拒绝收录。请在插件的人格偏好配置中为该人格设置收集偏好后再试。",
+        )
 
-    logger.info(f"[meme_manager] 人格 {persona_id} 的表情包收集偏好: {preference_text}")
+    preview = preference_text[:30] + ("…" if len(preference_text) > 30 else "")
+    logger.info(f"[meme_manager] 人格 {persona_id} 的表情包收集偏好: {preview}")
+    return persona_id, preference_text, None
 
-    # 2. 从当前事件消息中提取图片（优先支持引用/回复图片，其次支持同消息内直发图片）
-    last_image_url = None
-    description_str = description or ""
 
-    # A. 检测当前事件是否引用了图片
+def extract_event_image_url(event: AstrMessageEvent) -> str | None:
+    """从当前消息事件提取图片 URL：优先引用/回复中的图片，其次同消息内直发的图片。"""
+    # A. 引用/回复的图片
     for comp in event.message_obj.message:
         if isinstance(comp, Reply) and comp.chain:
             for sub_comp in comp.chain:
                 if isinstance(sub_comp, Image):
-                    last_image_url = sub_comp.url
-                    break
-            if last_image_url:
-                break
+                    return sub_comp.url
 
-    # B. 检测当前事件是否直发了图片
-    if not last_image_url:
-        images = [c for c in event.message_obj.message if isinstance(c, Image)]
-        if images:
-            last_image_url = images[-1].url
+    # B. 同消息内直发的图片
+    images = [c for c in event.message_obj.message if isinstance(c, Image)]
+    if images:
+        return images[-1].url
 
-    if not last_image_url and image_content is None:
-        return "没有在当前消息或引用的回复中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
+    return None
 
-    # 3. 检查分类是否合法（如果未启用多模态判定，且 categories 为空，则报错）
-    if not getattr(sender, "multimodal_llm_enabled", False) and not categories:
-        return "请输入至少一个有效的标签/分类名称。"
 
-    # 4. 下载图片
-    content = image_content
-    file_type = image_type
-    raw_hash = image_hash
-
-    if content is None or file_type is None or raw_hash is None:
-        ssl_context = ssl.create_default_context()
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-
-        try:
-            if "multimedia.nt.qq.com.cn" in last_image_url:
-                insecure_url = last_image_url.replace("https://", "http://", 1)
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(insecure_url) as resp:
-                        content = await resp.read()
-            else:
-                async with aiohttp.ClientSession(
-                    connector=aiohttp.TCPConnector(ssl=ssl_context)
-                ) as session:
-                    async with session.get(last_image_url) as resp:
-                        content = await resp.read()
-
-            if not content:
-                return "下载图片失败，文件内容为空。"
-
-            # 检测图片类型
-            try:
-                with PILImage.open(io.BytesIO(content)) as img_obj:
-                    file_type = img_obj.format.lower()
-            except Exception as e:
-                logger.error(f"图片格式检测失败: {str(e)}")
-                file_type = "unknown"
-
-            # 5. 保存前哈希计算
-            raw_hash = hashlib.sha256(content).hexdigest()
-
-        except Exception as e:
-            logger.error(f"下载图片或检测格式失败: {e}", exc_info=True)
-            return f"下载/解析图片失败：{str(e)}"
-
-    # 5.5. 相似度去重判定 (Pillow dHash + Histogram)
-    enable_similarity = get_config_value(sender.config, "enable_similarity_dedup", True)
-    if enable_similarity:
-        from ..db.similarity import check_image_similarity
-
-        similarity_threshold = get_config_value(
-            sender.config, "similarity_dedup_threshold", 0.85
+def get_cached_image_url(sender, event: AstrMessageEvent) -> str | None:
+    """回退取图：返回本会话最近收到且仍在有效期内的图片 URL。"""
+    cache = getattr(sender, "_session_last_image", {}).get(event.unified_msg_origin)
+    if cache and (time.time() - cache.get("ts", 0)) <= LAST_IMAGE_CACHE_TTL:
+        logger.info(
+            "[meme_manager] steal_meme 当前消息无图，回退使用本会话最近缓存的图片。"
         )
-        sim_match = check_image_similarity(content, similarity_threshold)
-        if sim_match:
-            matched_filename, score = sim_match
-            logger.info(
-                f"[meme_manager] 手动偷图被相似度检测拦截: 与 {matched_filename} 相似度 {score:.4f}"
-            )
+        return cache.get("url")
+    return None
 
-            # Query the existing similar meme to check its personas
-            conn = get_db_conn()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT personas FROM memes WHERE filename = ?",
-                (matched_filename,),
-            )
-            row = cursor.fetchone()
-            if row:
-                existing_personas = (
-                    set(row["personas"].split(",")) if row["personas"] else set()
-                )
-                if "*" in existing_personas or persona_id in existing_personas:
-                    conn.close()
-                    return f"该表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），且当前人格已拥有该表情包使用权限，拒绝重复收录。"
 
-                # Append persona_id to existing_personas
-                if persona_id != "*":
-                    existing_personas.add(persona_id)
-                else:
-                    existing_personas = {"*"}
+async def download_image(
+    url: str,
+) -> tuple[bytes | None, str | None, str | None, str | None]:
+    """下载图片并检测类型、计算哈希。
 
-                cursor.execute(
-                    "UPDATE memes SET personas = ? WHERE filename = ?",
-                    (",".join(existing_personas), matched_filename),
-                )
-                conn.commit()
-                conn.close()
-                await sender.reload_emotions()
-                return f"此表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），已自动为您追加当前人格【{persona_id}】的使用权限。"
-            else:
-                conn.close()
-                return f"该表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），拒绝重复收录。"
+    Returns:
+        (content|None, file_type|None, raw_hash|None, error_message|None)
+    """
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
 
-    # 6. 表情包收集偏好判定
+    try:
+        if "multimedia.nt.qq.com.cn" in url:
+            insecure_url = url.replace("https://", "http://", 1)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(insecure_url) as resp:
+                    content = await resp.read()
+        else:
+            async with aiohttp.ClientSession(
+                connector=aiohttp.TCPConnector(ssl=ssl_context)
+            ) as session:
+                async with session.get(url) as resp:
+                    content = await resp.read()
+
+        if not content:
+            return None, None, None, "下载图片失败，文件内容为空。"
+
+        # 检测图片类型
+        try:
+            with PILImage.open(io.BytesIO(content)) as img_obj:
+                file_type = img_obj.format.lower()
+        except Exception as e:
+            logger.error(f"图片格式检测失败: {str(e)}")
+            file_type = "unknown"
+
+        raw_hash = hashlib.sha256(content).hexdigest()
+        return content, file_type, raw_hash, None
+
+    except Exception as e:
+        logger.error(f"下载图片或检测格式失败: {e}", exc_info=True)
+        return None, None, None, f"下载/解析图片失败：{str(e)}"
+
+
+async def _check_similarity_dedup(
+    sender, persona_id: str, content: bytes
+) -> str | None:
+    """相似度去重判定 (Pillow dHash + Histogram)。
+
+    命中相似表情时返回应回复给用户的消息（追加权限/拒绝收录）；未命中则返回 None。
+    """
+    enable_similarity = get_config_value(sender.config, "enable_similarity_dedup", True)
+    if not enable_similarity:
+        return None
+
+    from ..db.similarity import check_image_similarity
+
+    similarity_threshold = get_config_value(
+        sender.config, "similarity_dedup_threshold", 0.85
+    )
+    sim_match = check_image_similarity(content, similarity_threshold)
+    if not sim_match:
+        return None
+
+    matched_filename, score = sim_match
+    logger.info(
+        f"[meme_manager] 手动偷图被相似度检测拦截: 与 {matched_filename} 相似度 {score:.4f}"
+    )
+
+    # Query the existing similar meme to check its personas
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT personas FROM memes WHERE filename = ?",
+        (matched_filename,),
+    )
+    row = cursor.fetchone()
+    if row:
+        existing_personas = (
+            set(row["personas"].split(",")) if row["personas"] else set()
+        )
+        if "*" in existing_personas or persona_id in existing_personas:
+            conn.close()
+            return f"该表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），且当前人格已拥有该表情包使用权限，拒绝重复收录。"
+
+        # Append persona_id to existing_personas
+        if persona_id != "*":
+            existing_personas.add(persona_id)
+        else:
+            existing_personas = {"*"}
+
+        cursor.execute(
+            "UPDATE memes SET personas = ? WHERE filename = ?",
+            (",".join(existing_personas), matched_filename),
+        )
+        conn.commit()
+        conn.close()
+        await sender.reload_emotions()
+        return f"此表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），已自动为您追加当前人格【{persona_id}】的使用权限。"
+    else:
+        conn.close()
+        return f"该表情包已存在相似度极高的版本（文件名：{matched_filename}，相似度：{score:.2%}），拒绝重复收录。"
+
+
+async def _check_preference(
+    sender,
+    event: AstrMessageEvent,
+    persona_id: str,
+    raw_hash: str,
+    content: bytes,
+    file_type: str,
+    preference_text: str,
+) -> str | None:
+    """表情包收集偏好判定（含历史尝试缓存）。
+
+    不符合偏好时返回拒绝消息；符合（或可继续）则返回 None。
+    """
     attempt = get_steal_attempt(raw_hash, persona_id)
     if attempt:
         is_matched = bool(attempt["is_matched"])
@@ -272,6 +297,7 @@ async def steal_meme(
                 return f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {reason}"
             else:
                 return "该图片不符合当前人格的表情包收集偏好，拒绝收录。"
+        return None
     else:
         is_matched, match_reason = await _check_meme_preference_match(
             sender, event, content, file_type, preference_text
@@ -290,148 +316,205 @@ async def steal_meme(
                 except Exception as ex:
                     logger.warning(f"保存尝试记录失败: {ex}")
                 return f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {match_reason}"
+        return None
 
-    # 7. 标签/分类解析与判定
-    resolved_categories = []
-    invalid_categories = []
+
+async def _classify_with_multimodal(
+    sender, event: AstrMessageEvent, content: bytes, file_type: str
+) -> tuple[list[str], str, bool, bool]:
+    """调用多模态模型对图片自动分类并生成描述。
+
+    Returns:
+        (parsed_tags, description, called, failed)
+        called=是否实际调用了模型（有可用 provider）；failed=调用过程中是否异常。
+    """
+    provider_id = getattr(sender, "multimodal_llm_provider_id", "")
+    if not provider_id:
+        provider_id = await sender.context.get_current_chat_provider_id(
+            umo=event.unified_msg_origin
+        )
+    if not provider_id:
+        return [], "", False, False
+
+    import base64
+
+    mime_type = "image/jpeg"
+    if file_type == "png":
+        mime_type = "image/png"
+    elif file_type == "gif":
+        mime_type = "image/gif"
+    elif file_type == "webp":
+        mime_type = "image/webp"
+
+    b64_data = base64.b64encode(content).decode("utf-8")
+    image_data_uri = f"data:{mime_type};base64,{b64_data}"
+
+    guidelines = getattr(sender, "multimodal_tag_prompt", None)
+    if not guidelines:
+        guidelines = (
+            "请对这张表情包图片进行深度的视觉与语义分析，并从以下几个社交使用维度中提炼出最契合该图的 2-5 个中文分类标签：\n\n"
+            "1. 意图与社交功能维度（使用者想用它达到什么社交目的？）：\n"
+            "   - 如：破冰、开场、敷衍、话题终结（呵呵/递茶）、赞同、反对、索求（抱抱/摸头/红包）等行为补偿。\n"
+            "2. 情绪与心理映射维度（传达的原生或复合情绪是什么？）：\n"
+            "   - 如：开心、委屈、得意、尴尬、强颜欢笑、开摆、自嘲、暴躁、发疯、吃惊、无语。\n"
+            "3. 符号与画面主体维度（画面的主角和主要动作是什么？）：\n"
+            "   - 如：猫猫、柴犬、熊猫头、二次元少女、电脑、睡觉、指点、吃瓜。\n"
+            "4. 社交关系、风格与态度维度（表达了怎样的对话语气或关系态度？）：\n"
+            "   - 如：职场发疯、向下示弱、阴阳怪气、沙雕、高糊、二次元、玩梗、土味、治愈。\n\n"
+            "【标签规则】：\n"
+            "- 标签应当使用简短、高频的中文词汇（如：贴贴、无语、猫猫、开摆、敷衍、职场）。\n"
+            "- 请结合图片内容和上述维度，选择最具有代表性的 2-5 个标签，不需要每个维度都覆盖。"
+        )
+
+    prompt = (
+        f"{guidelines}\n\n"
+        "【输出格式要求（极其重要）】：\n"
+        "- 请仅以 JSON 格式的字典对象返回，其中必须包含两个字段：\n"
+        '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
+        '  2. `description` (字符串，对这张表情包画面的简洁描述，如 "一只猫猫摊在地上露出无语的表情")\n'
+        "例如：\n"
+        "{\n"
+        '  "tags": ["敷衍", "猫猫"],\n'
+        '  "description": "一只摊在地上表情无语的猫猫"\n'
+        "}\n"
+        "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
+    )
+
+    try:
+        logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类与描述...")
+        llm_resp = await sender.context.llm_generate(
+            chat_provider_id=provider_id,
+            prompt=prompt,
+            image_urls=[image_data_uri],
+        )
+        parsed_categories: list[str] = []
+        description = ""
+        if llm_resp and llm_resp.completion_text:
+            raw_text = llm_resp.completion_text.strip()
+            logger.debug(f"多模态模型返回内容: {raw_text}")
+            data = None
+            try:
+                data = json.loads(raw_text)
+            except Exception:
+                match = re.search(r"\{[\s\S]*\}", raw_text)
+                if match:
+                    try:
+                        data = json.loads(match.group(0))
+                    except Exception:
+                        pass
+
+            if isinstance(data, dict):
+                parsed_categories = [str(x) for x in data.get("tags", [])]
+                description = str(data.get("description", "")).strip()
+            elif isinstance(data, list):
+                parsed_categories = [str(x) for x in data]
+            else:
+                valid_categories = set(sender.category_manager.get_categories())
+                for cat in valid_categories:
+                    if cat in raw_text:
+                        parsed_categories.append(cat)
+
+        return parsed_categories, description, True, False
+    except Exception as e:
+        logger.error(f"多模态模型分析图片分类失败: {e}", exc_info=True)
+        return [], "", True, True
+
+
+async def _resolve_categories(
+    sender,
+    event: AstrMessageEvent,
+    content: bytes,
+    file_type: str,
+    categories: list[str] | None,
+    description_str: str,
+) -> tuple[list[str], list[str], str, str | None]:
+    """解析最终分类标签：显式传入优先，否则在启用多模态时自动分类。
+
+    Returns:
+        (resolved_categories, invalid_categories, description_str, error_message|None)
+    """
+    resolved_categories: list[str] = []
+    invalid_categories: list[str] = []
     valid_categories = set(sender.category_manager.get_categories())
 
-    # A. 首先尝试解析显式传入的 categories 参数
-    if categories:
-        for category in categories:
-            category = category.strip()
-            if not category:
+    def _sort_tags(tags: list[str]) -> None:
+        for cat in tags:
+            cat = cat.strip()
+            if not cat:
                 continue
-            if category in valid_categories:
-                resolved_categories.append(category)
+            if cat in valid_categories:
+                resolved_categories.append(cat)
             else:
                 # 允许作为自定义的新标签
-                clean_cat = category.lower()
+                clean_cat = cat.lower()
                 if len(clean_cat) <= 20:
                     resolved_categories.append(clean_cat)
                 else:
-                    invalid_categories.append(category)
+                    invalid_categories.append(cat)
+
+    # A. 首先尝试解析显式传入的 categories 参数
+    if categories:
+        _sort_tags(categories)
 
     # B. 如果解析后没有得到任何分类，且启用了多模态，则调用多模态模型自动分类
     multimodal_called = False
     multimodal_failed = False
     if not resolved_categories and getattr(sender, "multimodal_llm_enabled", False):
-        provider_id = getattr(sender, "multimodal_llm_provider_id", "")
-        if not provider_id:
-            provider_id = await sender.context.get_current_chat_provider_id(
-                umo=event.unified_msg_origin
-            )
-        if provider_id:
-            multimodal_called = True
-            import base64
-
-            mime_type = "image/jpeg"
-            if file_type == "png":
-                mime_type = "image/png"
-            elif file_type == "gif":
-                mime_type = "image/gif"
-            elif file_type == "webp":
-                mime_type = "image/webp"
-
-            b64_data = base64.b64encode(content).decode("utf-8")
-            image_data_uri = f"data:{mime_type};base64,{b64_data}"
-
-            guidelines = getattr(sender, "multimodal_tag_prompt", None)
-            if not guidelines:
-                guidelines = (
-                    "请对这张表情包图片进行深度的视觉与语义分析，并从以下几个社交使用维度中提炼出最契合该图的 2-5 个中文分类标签：\n\n"
-                    "1. 意图与社交功能维度（使用者想用它达到什么社交目的？）：\n"
-                    "   - 如：破冰、开场、敷衍、话题终结（呵呵/递茶）、赞同、反对、索求（抱抱/摸头/红包）等行为补偿。\n"
-                    "2. 情绪与心理映射维度（传达的原生或复合情绪是什么？）：\n"
-                    "   - 如：开心、委屈、得意、尴尬、强颜欢笑、开摆、自嘲、暴躁、发疯、吃惊、无语。\n"
-                    "3. 符号与画面主体维度（画面的主角和主要动作是什么？）：\n"
-                    "   - 如：猫猫、柴犬、熊猫头、二次元少女、电脑、睡觉、指点、吃瓜。\n"
-                    "4. 社交关系、风格与态度维度（表达了怎样的对话语气或关系态度？）：\n"
-                    "   - 如：职场发疯、向下示弱、阴阳怪气、沙雕、高糊、二次元、玩梗、土味、治愈。\n\n"
-                    "【标签规则】：\n"
-                    "- 标签应当使用简短、高频的中文词汇（如：贴贴、无语、猫猫、开摆、敷衍、职场）。\n"
-                    "- 请结合图片内容和上述维度，选择最具有代表性的 2-5 个标签，不需要每个维度都覆盖。"
+        (
+            parsed,
+            desc,
+            multimodal_called,
+            classify_failed,
+        ) = await _classify_with_multimodal(sender, event, content, file_type)
+        if multimodal_called:
+            if not description_str:
+                description_str = desc
+            if parsed:
+                logger.debug(
+                    f"多模态模型判定表情分类为: {parsed}, 描述为: {description_str}"
                 )
-
-            prompt = (
-                f"{guidelines}\n\n"
-                "【输出格式要求（极其重要）】：\n"
-                "- 请仅以 JSON 格式的字典对象返回，其中必须包含两个字段：\n"
-                '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
-                '  2. `description` (字符串，对这张表情包画面的简洁描述，如 "一只猫猫摊在地上露出无语的表情")\n'
-                "例如：\n"
-                "{\n"
-                '  "tags": ["敷衍", "猫猫"],\n'
-                '  "description": "一只摊在地上表情无语的猫猫"\n'
-                "}\n"
-                "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
-            )
-
-            try:
-                logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类与描述...")
-                llm_resp = await sender.context.llm_generate(
-                    chat_provider_id=provider_id,
-                    prompt=prompt,
-                    image_urls=[image_data_uri],
-                )
-                if llm_resp and llm_resp.completion_text:
-                    raw_text = llm_resp.completion_text.strip()
-                    logger.debug(f"多模态模型返回内容: {raw_text}")
-                    data = None
-                    try:
-                        data = json.loads(raw_text)
-                    except Exception:
-                        match = re.search(r"\{[\s\S]*\}", raw_text)
-                        if match:
-                            try:
-                                data = json.loads(match.group(0))
-                            except Exception:
-                                pass
-
-                    parsed_categories = []
-                    if isinstance(data, dict):
-                        parsed_categories = [str(x) for x in data.get("tags", [])]
-                        if not description_str:
-                            description_str = str(data.get("description", "")).strip()
-                    else:
-                        if isinstance(data, list):
-                            parsed_categories = [str(x) for x in data]
-                        else:
-                            for cat in valid_categories:
-                                if cat in raw_text:
-                                    parsed_categories.append(cat)
-
-                    if parsed_categories:
-                        logger.debug(
-                            f"多模态模型判定表情分类为: {parsed_categories}, 描述为: {description_str}"
-                        )
-                        for cat in parsed_categories:
-                            cat = cat.strip()
-                            if cat in valid_categories:
-                                resolved_categories.append(cat)
-                            else:
-                                # 允许作为自定义的新标签
-                                clean_cat = cat.lower()
-                                if len(clean_cat) <= 20:
-                                    resolved_categories.append(clean_cat)
-                                else:
-                                    invalid_categories.append(cat)
-                if not resolved_categories:
-                    multimodal_failed = True
-            except Exception as e:
+                _sort_tags(parsed)
+            if classify_failed or not resolved_categories:
                 multimodal_failed = True
-                logger.error(f"多模态模型分析图片分类失败: {e}", exc_info=True)
 
     # C. 最终校验
     if not resolved_categories:
         if multimodal_called and multimodal_failed:
-            return "多模态模型判定表情分类失败，且未提供有效的分类名称。"
+            return (
+                [],
+                invalid_categories,
+                description_str,
+                "多模态模型判定表情分类失败，且未提供有效的分类名称。",
+            )
         elif invalid_categories:
-            return f"无效的表情包分类 {invalid_categories}，当前可用的分类有：{', '.join(valid_categories)}"
+            return (
+                [],
+                invalid_categories,
+                description_str,
+                f"无效的表情包分类 {invalid_categories}，当前可用的分类有：{', '.join(valid_categories)}",
+            )
         else:
-            return "请输入至少一个有效的标签/分类名称。"
+            return (
+                [],
+                invalid_categories,
+                description_str,
+                "请输入至少一个有效的标签/分类名称。",
+            )
 
-    # 8. 数据库排重及记录更新
+    return resolved_categories, invalid_categories, description_str, None
+
+
+async def _persist_stolen_meme(
+    sender,
+    persona_id: str,
+    content: bytes,
+    file_type: str,
+    raw_hash: str,
+    resolved_categories: list[str],
+    invalid_categories: list[str],
+    description_str: str,
+) -> str:
+    """将表情包写入数据库：已存在则合并分类/人格，否则保存并注册新表情。"""
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -538,77 +621,77 @@ async def steal_meme(
         raise e
 
 
+async def process_stolen_image(
+    sender,
+    event: AstrMessageEvent,
+    persona_id: str,
+    preference_text: str,
+    content: bytes,
+    file_type: str,
+    raw_hash: str,
+    categories: list[str] | None,
+    description_str: str,
+) -> str:
+    """图片下载完成后的统一收录流水线：相似度去重 → 偏好判定 → 分类解析 → 入库。
+
+    手动 steal_meme 与被动 auto_steal_meme 共用此流程，返回值为应回复/记录的消息。
+    """
+    # 1. 相似度去重判定
+    dedup_msg = await _check_similarity_dedup(sender, persona_id, content)
+    if dedup_msg is not None:
+        return dedup_msg
+
+    # 2. 表情包收集偏好判定
+    pref_msg = await _check_preference(
+        sender, event, persona_id, raw_hash, content, file_type, preference_text
+    )
+    if pref_msg is not None:
+        return pref_msg
+
+    # 3. 标签/分类解析与判定
+    (
+        resolved_categories,
+        invalid_categories,
+        description_str,
+        cat_err,
+    ) = await _resolve_categories(
+        sender, event, content, file_type, categories, description_str
+    )
+    if cat_err is not None:
+        return cat_err
+
+    # 4. 数据库排重及记录更新
+    return await _persist_stolen_meme(
+        sender,
+        persona_id,
+        content,
+        file_type,
+        raw_hash,
+        resolved_categories,
+        invalid_categories,
+        description_str,
+    )
+
+
 async def auto_steal_meme(sender, event: AstrMessageEvent):
     """暗中自动偷表情包功能（被动监听群聊消息）"""
     # 1. 获取当前会话的人格 ID，并检查偏好设置
-    persona_id = await get_persona_id(sender, event)
-    persona_prompt = await get_persona_prompt(sender, event)
-
-    pref_match = re.search(
-        r"<meme_preference>(.*?)</meme_preference>",
-        persona_prompt,
-        re.DOTALL | re.IGNORECASE,
-    )
-    if not pref_match or not pref_match.group(1).strip():
+    persona_id, preference_text, _ = await resolve_persona_preference(sender, event)
+    if not preference_text:
         logger.debug(
             f"[meme_manager] 当前人格 {persona_id} 未配置表情包收集偏好，跳过自动偷表情。"
         )
         return
 
     # 2. 从消息中提取图片 URL
-    last_image_url = None
-    for comp in event.message_obj.message:
-        if isinstance(comp, Reply) and comp.chain:
-            for sub_comp in comp.chain:
-                if isinstance(sub_comp, Image):
-                    last_image_url = sub_comp.url
-                    break
-            if last_image_url:
-                break
-
-    if not last_image_url:
-        images = [c for c in event.message_obj.message if isinstance(c, Image)]
-        if images:
-            last_image_url = images[-1].url
-
+    last_image_url = extract_event_image_url(event)
     if not last_image_url:
         return
 
     # 3. 下载图片并计算 hash
-    ssl_context = ssl.create_default_context()
-    ssl_context.check_hostname = False
-    ssl_context.verify_mode = ssl.CERT_NONE
-
-    try:
-        if "multimedia.nt.qq.com.cn" in last_image_url:
-            insecure_url = last_image_url.replace("https://", "http://", 1)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(insecure_url) as resp:
-                    content = await resp.read()
-        else:
-            async with aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=ssl_context)
-            ) as session:
-                async with session.get(last_image_url) as resp:
-                    content = await resp.read()
-
-        if not content:
-            logger.warning("[meme_manager] 自动偷表情失败：下载图片内容为空")
-            return
-
-        try:
-            with PILImage.open(io.BytesIO(content)) as img_obj:
-                file_type = img_obj.format.lower()
-        except Exception as e:
-            logger.error(f"[meme_manager] 自动偷表情：图片格式检测失败: {str(e)}")
-            file_type = "unknown"
-
-        raw_hash = hashlib.sha256(content).hexdigest()
-
-    except Exception as e:
-        logger.error(
-            f"[meme_manager] 自动偷表情：下载图片或解析格式失败: {e}", exc_info=True
-        )
+    content, file_type, raw_hash, dl_err = await download_image(last_image_url)
+    if dl_err or not content:
+        logger.warning(f"[meme_manager] 自动偷表情：{dl_err or '下载图片内容为空'}")
         return
 
     # 4. 判断是否被当前人格使用工具盗取/尝试过
@@ -705,18 +788,21 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
         )
         return
 
-    # 5. 调用原本的 steal_meme 工具流程进行盗取
+    # 5. 进入与手动收录一致的处理流水线（去重/偏好/分类/入库）
     logger.info(
         f"[meme_manager] 自动偷表情：开始对图片 {raw_hash} 进行暗中收录判定 (已看见 {seen_count} 次)..."
     )
     try:
-        result = await steal_meme(
-            sender=sender,
-            event=event,
-            categories=None,
-            image_content=content,
-            image_hash=raw_hash,
-            image_type=file_type,
+        result = await process_stolen_image(
+            sender,
+            event,
+            persona_id,
+            preference_text,
+            content,
+            file_type,
+            raw_hash,
+            None,
+            "",
         )
         logger.info(f"[meme_manager] 自动偷表情执行结果: {result}")
     except Exception as e:

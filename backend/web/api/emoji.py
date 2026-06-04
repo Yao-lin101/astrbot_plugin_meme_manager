@@ -73,7 +73,9 @@ async def get_all_emojis():
             if cat not in emoji_data:
                 emoji_data[cat] = []
 
-    return jsonify({"categories": emoji_data, "mtimes": mtimes, "descriptions": descriptions})
+    return jsonify(
+        {"categories": emoji_data, "mtimes": mtimes, "descriptions": descriptions}
+    )
 
 
 async def get_emojis_by_category(category):
