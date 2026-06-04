@@ -1,5 +1,6 @@
 import asyncio
 import os
+import time
 
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403
@@ -27,7 +28,10 @@ from .init import init_plugin
 
 
 @register(
-    "meme_manager", "anka", "anka - 表情包管理器 - 支持表情包发送及表情包上传", "3.20"
+    "meme_manager",
+    "anka & e.e.",
+    "表情包管理器 - 支持表情包发送及表情包上传",
+    "4.8.1",
 )
 class MemeSender(Star, MemeConfigMixin):
     context: Context
@@ -260,6 +264,19 @@ class MemeSender(Star, MemeConfigMixin):
         async for res in EventHandlers.handle_direct_meme_trigger(self, event):
             yield res
 
+    @filter.event_message_type(EventMessageType.ALL)
+    async def cache_last_image(self, event: AstrMessageEvent):
+        """缓存各会话最近收到的图片，供 steal_meme 在当前消息/引用均无图时回退取图。"""
+        images = [c for c in event.message_obj.message if isinstance(c, Image)]
+        if not images:
+            return
+        if not hasattr(self, "_session_last_image"):
+            self._session_last_image = {}
+        self._session_last_image[event.unified_msg_origin] = {
+            "url": images[-1].url,
+            "ts": time.time(),
+        }
+
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def handle_group_message(self, event: AstrMessageEvent):
         """处理群聊消息以实现暗中自动偷表情包"""
@@ -320,7 +337,9 @@ class MemeSender(Star, MemeConfigMixin):
         category: str | None = None,
         description: str | None = None,
     ):
-        """保存并收录上一条聊天记录中发送的表情包到当前人格的表情包库中。
+        """保存并收录最近聊天中发送的表情包到当前人格的表情包库中。
+
+        取图优先级：当前消息直发的图片 > 你引用/回复的图片 > 本会话最近收到的图片（约 5 分钟内）。因此当你想收录前面某条消息里的表情包时，可直接调用本工具；若那张图已超出有效期或会话无图，请提示用户重新发送或引用该图。
 
         Args:
             categories(list): 表情包所属的类别列表，如 ["happy", "sad"] 等。注意：只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时才传入此参数；如果用户只是说“偷图/收录”或未明确指定，请保持此参数为 None，严禁自行推测或生成分类。
@@ -338,14 +357,14 @@ class MemeSender(Star, MemeConfigMixin):
     async def send_meme(
         self,
         event: AstrMessageEvent,
-        query: str,
+        query: str | None = None,
         index: int | None = None,
     ):
-        """搜索并发送表情包。
+        """搜索并发送表情包。两步流程：先用 query 检索候选列表，再用 index 选择发送。
 
         Args:
-            query(string): 检索表情包的标签。支持并鼓励传入多个由英文逗号分隔的标签（如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这也更容易精准匹配图库中的表情包。
-            index(number): 选中的表情包序号（从 1 开始）。如果首次调用或需要展示候选列表供选择，请不要进行传值；如果已获得候选列表，请传入选中的序号进行发送。
+            query(string): 检索表情包的标签。支持并鼓励传入多个由英文逗号分隔的标签（如 '猫猫, 开心, 撒娇'）以进行多标签精准检索，这也更容易精准匹配图库中的表情包。首次检索时必须传入；在已获得候选列表后再次调用发送时可省略（系统会沿用上次的候选列表）。
+            index(number): 选中的表情包序号（从 1 开始）。首次检索、需要展示候选列表时请勿传入；已获得候选列表后，传入选中的序号即可发送，此时无需再次传入 query。
         """
         await self.check_and_reload_if_changed()
         from .backend import send_meme

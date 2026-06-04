@@ -422,6 +422,7 @@ async def batch_analyze_emojis():
 
     # Start the background task as an asyncio.Task to support instant cancellation
     import asyncio
+
     loop = asyncio.get_running_loop()
     active_analyze_task = loop.create_task(
         run_batch_analyze_task(
@@ -483,7 +484,7 @@ async def run_batch_analyze_task(
     # 图片打标本应很快，但底层 provider 的默认 HTTP 超时往往长达数分钟，
     # 因此这里用 asyncio.wait_for 主动收紧，并对失败（含超时）做有限次重试。
     ANALYZE_TIMEOUT = 30  # 单次请求超时（秒）
-    MAX_ATTEMPTS = 3      # 最多尝试次数（首次 + 重试 2 次）
+    MAX_ATTEMPTS = 3  # 最多尝试次数（首次 + 重试 2 次）
 
     # 在一开始，先将所有文件状态置为等待中
     batch_analyze_status["results"] = [
@@ -565,7 +566,11 @@ async def run_batch_analyze_task(
                             .get("multimodal_tag_prompt", "")
                             .strip()
                         )
-                    guidelines = config_prompt if config_prompt else getattr(sender, "multimodal_tag_prompt", None)
+                    guidelines = (
+                        config_prompt
+                        if config_prompt
+                        else getattr(sender, "multimodal_tag_prompt", None)
+                    )
                     if not guidelines:
                         guidelines = (
                             "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
@@ -597,7 +602,9 @@ async def run_batch_analyze_task(
                 if analyze_tags:
                     target_str.append("tags (数组，表情包对应的标签列表)")
                 if analyze_description:
-                    target_str.append("description (字符串，对这张表情包画面的简洁描述)")
+                    target_str.append(
+                        "description (字符串，对这张表情包画面的简洁描述)"
+                    )
 
                 prompt = (
                     f"{guidelines}\n\n"
@@ -605,9 +612,7 @@ async def run_batch_analyze_task(
                     f"- 请仅以 JSON 格式的字典对象返回，其中必须包含以下字段：\n"
                 )
                 if analyze_tags:
-                    prompt += (
-                        '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
-                    )
+                    prompt += '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
                 if analyze_description:
                     prompt += '  2. `description` (字符串，对这张表情包画面的简洁描述，如 "一只猫猫摊在地上露出无语的表情")\n'
 
@@ -771,9 +776,10 @@ async def batch_rename_emojis_to_tags():
         if not isinstance(filenames, list) or not filenames:
             return jsonify({"message": "filenames 列表是必需的"}), 400
 
-        import re
         import os
+        import re
         from pathlib import Path
+
         from ....config import MEMES_DIR
         from ...db.database import get_db_conn
         from .common import trigger_tag_vectorization
@@ -828,7 +834,9 @@ async def batch_rename_emojis_to_tags():
                 while True:
                     test_name = f"{sanitized_stem}_{idx}{suffix}"
                     test_path_check = Path(MEMES_DIR) / test_name
-                    cursor.execute("SELECT 1 FROM memes WHERE filename = ?", (test_name,))
+                    cursor.execute(
+                        "SELECT 1 FROM memes WHERE filename = ?", (test_name,)
+                    )
                     if not test_path_check.exists() and not cursor.fetchone():
                         target_name = test_name
                         break
@@ -838,7 +846,9 @@ async def batch_rename_emojis_to_tags():
             try:
                 os.rename(file_path, Path(MEMES_DIR) / target_name)
             except Exception as e:
-                logger.error(f"物理重命名文件失败: {filename} -> {target_name}, 错误: {e}")
+                logger.error(
+                    f"物理重命名文件失败: {filename} -> {target_name}, 错误: {e}"
+                )
                 skipped.append({"filename": filename, "reason": f"重命名文件失败: {e}"})
                 continue
 
@@ -883,13 +893,15 @@ async def batch_rename_emojis_to_tags():
             except Exception as e:
                 logger.error(f"重命名后重新加载表情配置失败: {e}")
 
-        return jsonify({
-            "message": "批量重命名完成",
-            "renamed": renamed,
-            "skipped": skipped,
-            "renamed_count": len(renamed),
-            "skipped_count": len(skipped),
-        }), 200
+        return jsonify(
+            {
+                "message": "批量重命名完成",
+                "renamed": renamed,
+                "skipped": skipped,
+                "renamed_count": len(renamed),
+                "skipped_count": len(skipped),
+            }
+        ), 200
 
     except Exception as e:
         logger.error(f"批量重命名标签失败: {e}", exc_info=True)

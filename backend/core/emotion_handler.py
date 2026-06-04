@@ -236,8 +236,8 @@ async def _handle_resp_vector(
         f"[meme_manager] _handle_resp_vector: valid_emoticons={list(valid_emoticons)}"
     )
 
-    # 3. 精确匹配校验与筛选
-    found_exact = set()
+    # 3. 精确匹配校验与筛选（保持 LLM 输出的标签顺序，顺序会影响下游优先级评分）
+    found_exact = []
     tags_to_embed = []
 
     for raw_tag in raw_tags:
@@ -247,12 +247,13 @@ async def _handle_resp_vector(
                 matched = valid
                 break
         if matched:
-            found_exact.add(matched)
+            if matched not in found_exact:
+                found_exact.append(matched)
         else:
             tags_to_embed.append(raw_tag)
 
     if found_exact:
-        logger.info(f"[meme_manager] 精确匹配到的表情标签: {list(found_exact)}")
+        logger.info(f"[meme_manager] 精确匹配到的表情标签: {found_exact}")
 
     # 4. 获取 Embedding Provider
     provider_id = get_config_value(sender.config, "embedding_provider_id", "")
@@ -272,7 +273,7 @@ async def _handle_resp_vector(
         logger.info("[meme_manager] 没有可用的 Embedding Provider 节点")
 
     # 5. 计算相似度匹配
-    found_vector = set()
+    found_vector = []
     if embedding_provider:
         from ..db.database import get_all_tag_embeddings
 
@@ -301,28 +302,14 @@ async def _handle_resp_vector(
             except Exception as e:
                 logger.warning(f"[meme_manager] 获取标签 '{raw_tag}' 向量失败: {e}")
 
-        text_vector = None
-        text_weight = get_config_value(sender.config, "embedding_text_weight", 0.3)
-        if text_weight > 0 and clean_text.strip():
-            try:
-                text_vector = await embedding_provider.get_embedding(clean_text.strip())
-                if text_vector:
-                    logger.debug(
-                        f"[meme_manager] 获取回复文本 '{clean_text.strip()}' 向量成功：维度={len(text_vector)}, "
-                        f"前5位数据={text_vector[:5]}"
-                    )
-            except Exception as e:
-                logger.warning(f"[meme_manager] 获取回复文本向量失败: {e}")
-
         logger.debug(
-            f"[meme_manager] 提取标签向量 {len(raw_tags_vectors)} 个, 文本向量计算成功={text_vector is not None}, 缓存的标签向量总数={len(tag_embeddings)}"
+            f"[meme_manager] 提取标签向量 {len(raw_tags_vectors)} 个, 缓存的标签向量总数={len(tag_embeddings)}"
         )
 
-        if (raw_tags_vectors or text_vector) and tag_embeddings:
+        if raw_tags_vectors and tag_embeddings:
             similarity_threshold = get_config_value(
                 sender.config, "embedding_similarity_threshold", 0.6
             )
-            tag_weight = get_config_value(sender.config, "embedding_tag_weight", 0.7)
 
             scores = {}
             all_scores_debug = {}
@@ -335,32 +322,11 @@ async def _handle_resp_vector(
                     all_scores_debug[valid_tag] = "no_vec"
                     continue
 
-                sim_tag = 0.0
-                if raw_tags_vectors:
-                    sim_tag = max(
-                        cosine_similarity(v, tag_vec) for v in raw_tags_vectors
-                    )
+                sim_tag = max(cosine_similarity(v, tag_vec) for v in raw_tags_vectors)
 
-                sim_text = 0.0
-                if text_vector:
-                    sim_text = cosine_similarity(text_vector, tag_vec)
-
-                w_tag = tag_weight if raw_tags_vectors else 0.0
-                w_text = text_weight if text_vector else 0.0
-                total_weight = w_tag + w_text
-
-                if total_weight > 0:
-                    combined_score = (
-                        sim_tag * w_tag + sim_text * w_text
-                    ) / total_weight
-                else:
-                    combined_score = 0.0
-
-                all_scores_debug[valid_tag] = (
-                    f"sim_tag={sim_tag:.4f}, sim_text={sim_text:.4f}, combined={combined_score:.4f}"
-                )
-                if combined_score >= similarity_threshold:
-                    scores[valid_tag] = combined_score
+                all_scores_debug[valid_tag] = f"sim_tag={sim_tag:.4f}"
+                if sim_tag >= similarity_threshold:
+                    scores[valid_tag] = sim_tag
 
             logger.debug(
                 f"[meme_manager] 所有候选表情标签匹配得分 (阈值={similarity_threshold}): {all_scores_debug}"
@@ -371,13 +337,17 @@ async def _handle_resp_vector(
                 logger.info(f"[meme_manager] 向量召回排序得分: {sorted_tags}")
                 max_limit = sender.max_emotions_per_message
                 for t, score in sorted_tags[:max_limit]:
-                    found_vector.add(t)
+                    if t not in found_vector:
+                        found_vector.append(t)
     else:
         logger.warning(
             "[meme_manager] 未配置或未找到可用的 Embedding 模型，无法进行向量召回。"
         )
 
-    sender.found_emotions = list(found_exact.union(found_vector))
+    # 精确匹配（按 LLM 输出顺序）在前，向量召回（按相似度得分）在后
+    sender.found_emotions = found_exact + [
+        t for t in found_vector if t not in found_exact
+    ]
 
     # 追加专属表情判定（跟原逻辑保持一致）
     if sender.found_emotions:
@@ -596,14 +566,14 @@ async def match_emotions_by_tags(
 ) -> list[str]:
     """根据原始标签列表，通过精确匹配 + 向量相似度匹配，返回命中的有效表情标签列表。
 
-    与 `_handle_resp_vector` 的核心匹配逻辑一致，但仅基于标签（不引入回复文本向量），
+    与 `_handle_resp_vector` 的核心匹配逻辑一致（均为仅基于标签的单通道检索），
     供 `<emotions>...</emotions>` 直接触发场景复用。
     """
     if not raw_tags or not valid_emoticons:
         return []
 
-    # 1. 精确匹配（大小写不敏感）
-    found_exact = set()
+    # 1. 精确匹配（大小写不敏感，保持 LLM 输出顺序，顺序会影响下游优先级评分）
+    found_exact = []
     tags_to_embed = []
     for raw_tag in raw_tags:
         matched = None
@@ -612,17 +582,16 @@ async def match_emotions_by_tags(
                 matched = valid
                 break
         if matched:
-            found_exact.add(matched)
+            if matched not in found_exact:
+                found_exact.append(matched)
         else:
             tags_to_embed.append(raw_tag)
 
     if found_exact:
-        logger.info(
-            f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(found_exact)}"
-        )
+        logger.info(f"[meme_manager] (直接触发) 精确匹配到的表情标签: {found_exact}")
 
     # 2. 向量相似度匹配（仅对未精确命中的标签）
-    found_vector = set()
+    found_vector = []
     if tags_to_embed:
         provider_id = get_config_value(sender.config, "embedding_provider_id", "")
         embedding_provider = None
@@ -641,9 +610,7 @@ async def match_emotions_by_tags(
             # 若有效标签缺失向量，触发后台增量计算
             import asyncio
 
-            missing_tags = [
-                tag for tag in valid_emoticons if tag not in tag_embeddings
-            ]
+            missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
             if missing_tags:
                 logger.info(
                     f"[meme_manager] (直接触发) 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
@@ -672,9 +639,7 @@ async def match_emotions_by_tags(
                     tag_vec = tag_embeddings.get(valid_tag)
                     if not tag_vec:
                         continue
-                    sim = max(
-                        cosine_similarity(v, tag_vec) for v in raw_tags_vectors
-                    )
+                    sim = max(cosine_similarity(v, tag_vec) for v in raw_tags_vectors)
                     if sim >= similarity_threshold:
                         scores[valid_tag] = sim
 
@@ -687,13 +652,15 @@ async def match_emotions_by_tags(
                     )
                     max_limit = sender.max_emotions_per_message
                     for t, _score in sorted_tags[:max_limit]:
-                        found_vector.add(t)
+                        if t not in found_vector:
+                            found_vector.append(t)
         else:
             logger.info(
                 "[meme_manager] (直接触发) 没有可用的 Embedding Provider，跳过向量匹配。"
             )
 
-    return list(found_exact.union(found_vector))
+    # 精确匹配（按 LLM 输出顺序）在前，向量召回（按相似度得分）在后
+    return found_exact + [t for t in found_vector if t not in found_exact]
 
 
 async def get_direct_trigger_memes(
@@ -732,9 +699,7 @@ async def get_direct_trigger_memes(
     matched_emotions = await match_emotions_by_tags(
         sender, event, raw_tags, valid_emoticons
     )
-    logger.info(
-        f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}"
-    )
+    logger.info(f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}")
     if not matched_emotions:
         return []
 
