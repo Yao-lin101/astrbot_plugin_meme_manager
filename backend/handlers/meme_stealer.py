@@ -460,9 +460,12 @@ async def _resolve_categories(
     multimodal_called = False
     multimodal_failed = False
     if not resolved_categories and getattr(sender, "multimodal_llm_enabled", False):
-        parsed, desc, multimodal_called, classify_failed = (
-            await _classify_with_multimodal(sender, event, content, file_type)
-        )
+        (
+            parsed,
+            desc,
+            multimodal_called,
+            classify_failed,
+        ) = await _classify_with_multimodal(sender, event, content, file_type)
         if multimodal_called:
             if not description_str:
                 description_str = desc
@@ -646,10 +649,13 @@ async def process_stolen_image(
         return pref_msg
 
     # 3. 标签/分类解析与判定
-    resolved_categories, invalid_categories, description_str, cat_err = (
-        await _resolve_categories(
-            sender, event, content, file_type, categories, description_str
-        )
+    (
+        resolved_categories,
+        invalid_categories,
+        description_str,
+        cat_err,
+    ) = await _resolve_categories(
+        sender, event, content, file_type, categories, description_str
     )
     if cat_err is not None:
         return cat_err
@@ -685,9 +691,7 @@ async def auto_steal_meme(sender, event: AstrMessageEvent):
     # 3. 下载图片并计算 hash
     content, file_type, raw_hash, dl_err = await download_image(last_image_url)
     if dl_err or not content:
-        logger.warning(
-            f"[meme_manager] 自动偷表情：{dl_err or '下载图片内容为空'}"
-        )
+        logger.warning(f"[meme_manager] 自动偷表情：{dl_err or '下载图片内容为空'}")
         return
 
     # 4. 判断是否被当前人格使用工具盗取/尝试过
