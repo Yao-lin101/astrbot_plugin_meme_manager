@@ -420,6 +420,88 @@ async def _classify_with_multimodal(
         return [], "", True, True
 
 
+async def _snap_new_tags_to_existing(
+    sender,
+    new_tags: list[str],
+    existing_tags: set[str],
+) -> list[str]:
+    """将新标签按向量相似度自动吸附到已有标签，从源头减少标签碎片化。
+
+    仅当配置的 auto_tag_merge_threshold > 0 且存在可用 Embedding 提供商时生效。
+    新标签会与已缓存向量的已有标签逐一比较，若最高相似度 >= 阈值则替换为该已有标签；
+    否则保持新标签原样（作为全新标签收录）。整个过程为尽力而为：缺少向量、无 Provider
+    或计算失败时静默跳过该标签，不影响收录主流程。
+    """
+    threshold = float(get_config_value(sender.config, "auto_tag_merge_threshold", 0))
+    if threshold <= 0 or not new_tags:
+        return new_tags
+
+    # 只把"已有标签"中尚未出现在本次结果里的作为吸附目标
+    candidate_targets = [t for t in existing_tags if t]
+    if not candidate_targets:
+        return new_tags
+
+    from ..core.emotion_handler import cosine_similarity
+    from ..db.database import get_all_tag_embeddings
+
+    tag_embeddings = get_all_tag_embeddings()
+    if not tag_embeddings:
+        return new_tags
+
+    provider_id = get_config_value(sender.config, "embedding_provider_id", "")
+    embedding_provider = None
+    if provider_id:
+        embedding_provider = sender.context.get_provider_by_id(provider_id)
+    if not embedding_provider:
+        provs = sender.context.get_all_embedding_providers()
+        if provs:
+            embedding_provider = provs[0]
+    if not embedding_provider:
+        return new_tags
+
+    snapped: list[str] = []
+    seen: set[str] = set()
+    for tag in new_tags:
+        # 已经是已有标签的，无需吸附
+        if tag in existing_tags:
+            if tag not in seen:
+                seen.add(tag)
+                snapped.append(tag)
+            continue
+
+        try:
+            tag_vec = await embedding_provider.get_embedding(tag)
+        except Exception as e:
+            logger.warning(f"[meme_manager] 自动合并：获取新标签 '{tag}' 向量失败: {e}")
+            tag_vec = None
+
+        best_tag = None
+        best_sim = 0.0
+        if tag_vec:
+            for target in candidate_targets:
+                target_vec = tag_embeddings.get(target)
+                if not target_vec:
+                    continue
+                sim = cosine_similarity(tag_vec, target_vec)
+                if sim >= threshold and sim > best_sim:
+                    best_sim = sim
+                    best_tag = target
+
+        final_tag = tag
+        if best_tag is not None:
+            logger.info(
+                f"[meme_manager] 自动合并：新标签 '{tag}' 已吸附到已有标签 "
+                f"'{best_tag}' (相似度={best_sim:.4f}, 阈值={threshold})"
+            )
+            final_tag = best_tag
+
+        if final_tag not in seen:
+            seen.add(final_tag)
+            snapped.append(final_tag)
+
+    return snapped
+
+
 async def _resolve_categories(
     sender,
     event: AstrMessageEvent,
@@ -500,6 +582,11 @@ async def _resolve_categories(
                 description_str,
                 "请输入至少一个有效的标签/分类名称。",
             )
+
+    # D. 新标签自动吸附到语义相近的已有标签（从源头减少碎片化）
+    resolved_categories = await _snap_new_tags_to_existing(
+        sender, resolved_categories, valid_categories
+    )
 
     return resolved_categories, invalid_categories, description_str, None
 
