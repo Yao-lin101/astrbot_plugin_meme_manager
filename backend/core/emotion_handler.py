@@ -406,6 +406,82 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
         if dedicated_tag:
             valid_emoticons.add(dedicated_tag)
 
+    if getattr(sender, "enable_emotion_llm", False):
+        try:
+            import random
+
+            random_value = random.randint(1, 100)
+            threshold = sender.emotions_probability
+            logger.info(
+                f"[meme_manager] 启用情感模型判定。触发表情概率判断。设定概率: {threshold}%, 本次随机数: {random_value}"
+            )
+            if random_value > threshold:
+                logger.info(
+                    "[meme_manager] 情感模型判定：未命中触发概率，跳过表情包匹配。"
+                )
+                event.set_extra("meme_probability_checked", True)
+                return
+
+            event.set_extra("meme_probability_checked", True)
+
+            provider_id = getattr(sender, "emotion_llm_provider_id", "")
+            if not provider_id:
+                try:
+                    provider_id = await sender.context.get_current_chat_provider_id(
+                        umo=event.unified_msg_origin
+                    )
+                except Exception as e:
+                    logger.warning(f"[meme_manager] 获取当前聊天提供商失败: {e}")
+
+            if not provider_id:
+                logger.warning(
+                    "[meme_manager] 情感模型判定：未找到可用的模型提供商，跳过。"
+                )
+                return
+
+            max_emotions = getattr(sender, "max_emotions_per_message", 2)
+            user_input = event.message_str or ""
+            bot_response = response.completion_text
+
+            from .helpers import get_persona_setting
+
+            pref = get_persona_setting(sender.config, persona_id, "meme_preference")
+            pref_str = (
+                f"【当前人格的表情包收集与使用偏好】:\n{pref}\n\n" if pref else ""
+            )
+
+            base_prompt = getattr(sender, "emotion_llm_prompt", "")
+            prompt = (
+                f"{base_prompt}\n\n"
+                f"{pref_str}"
+                f"【对话背景】:\n"
+                f"用户发送: {user_input}\n"
+                f"助手回复: {bot_response}\n\n"
+                f"【输出格式要求】:\n"
+                f"1. 请根据对话背景和助手回复，自由输出 1 到 {max_emotions} 个最符合当前回复语气、画面主体或情感的表情包标签（可从意图、画面主体、风格态度等社交维度自由选择，如：得意, 摸头, 猫猫, 委屈，多个标签用英文逗号分隔）。多标签更容易匹配到合适的表情包。\n"
+                f"2. 如果不需要发送表情包，请直接返回空。\n"
+                f"3. 必须输出以 `<emotions>标签1, 标签2</emotions>` 格式包裹的标签，不要包含任何其他说明文字、markdown标记或标点符号。\n"
+                f"例如：`<emotions>得意, 摸头</emotions>`\n"
+                f"如果不需要表情，则直接返回空内容。"
+            )
+
+            logger.info(
+                f"[meme_manager] 正在调用情感模型 {provider_id} 判定表情标签..."
+            )
+            llm_resp = await sender.context.llm_generate(
+                chat_provider_id=provider_id,
+                prompt=prompt,
+            )
+            if llm_resp and llm_resp.completion_text:
+                raw_text = llm_resp.completion_text.strip()
+                logger.info(f"[meme_manager] 情感模型返回内容: {raw_text}")
+                if raw_text:
+                    if "<emotions>" not in raw_text.lower():
+                        raw_text = f"<emotions>{raw_text}</emotions>"
+                    response.completion_text = f"{response.completion_text}\n{raw_text}"
+        except Exception as e:
+            logger.error(f"[meme_manager] 调用情感模型失败: {e}", exc_info=True)
+
     try:
         await _handle_resp_vector(
             sender, event, response, valid_emoticons, dedicated_tag
@@ -423,9 +499,10 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
         return
 
     try:
-        random_value = random.randint(1, 100)
-        if random_value > sender.emotions_probability:
-            return
+        if not getattr(sender, "enable_emotion_llm", False):
+            random_value = random.randint(1, 100)
+            if random_value > sender.emotions_probability:
+                return
 
         persona_id = await get_persona_id(sender, event)
         selected_memes = await _select_memes_by_emotions_priority(

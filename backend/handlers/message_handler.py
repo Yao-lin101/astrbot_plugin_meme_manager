@@ -92,13 +92,20 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                         cleaned_components.append(component)
 
         if sender.found_emotions:
-            random_value = random.randint(1, 100)
-            threshold = sender.emotions_probability
-            logger.debug(
-                f"[meme_manager] 触发表情概率判断。设定概率: {threshold}%, 本次随机数: {random_value}"
-            )
+            should_send = True
+            if not getattr(sender, "enable_emotion_llm", False):
+                random_value = random.randint(1, 100)
+                threshold = sender.emotions_probability
+                logger.debug(
+                    f"[meme_manager] 触发表情概率判断。设定概率: {threshold}%, 本次随机数: {random_value}"
+                )
+                should_send = random_value <= threshold
+            else:
+                logger.info(
+                    "[meme_manager] 启用情感模型判定，概率已在之前阶段判定，跳过重复判断。"
+                )
 
-            if random_value <= threshold:
+            if should_send:
                 # 获取当前人格 ID
                 persona_id = await get_persona_id(sender, event)
                 logger.debug(f"[meme_manager] 当前会话人格 ID: '{persona_id}'")
