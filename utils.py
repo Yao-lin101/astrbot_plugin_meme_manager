@@ -375,6 +375,10 @@ def get_config_value(config: dict, key: str, default: Any = None) -> Any:
         # similarity_dedup_config
         "enable_similarity_dedup": "similarity_dedup_config",
         "similarity_dedup_threshold": "similarity_dedup_config",
+        # emotion_llm_config
+        "enable_emotion_llm": "emotion_llm_config",
+        "emotion_llm_provider_id": "emotion_llm_config",
+        "emotion_llm_prompt": "emotion_llm_config",
     }
 
     if key in mapping:

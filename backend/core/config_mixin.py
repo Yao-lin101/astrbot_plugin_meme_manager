@@ -102,3 +102,16 @@ class MemeConfigMixin:
         elif val is False:
             return "tag"
         return val
+
+    @property
+    def enable_emotion_llm(self) -> bool:
+        return get_config_value(self.config, "enable_emotion_llm", False)
+
+    @property
+    def emotion_llm_provider_id(self) -> str:
+        return get_config_value(self.config, "emotion_llm_provider_id", "")
+
+    @property
+    def emotion_llm_prompt(self) -> str:
+        default_prompt = "根据以下对话背景，分析助手回复的语气和情感，自由输出符合回复语气、画面主体或情感的表情包标签。"
+        return get_config_value(self.config, "emotion_llm_prompt", default_prompt)

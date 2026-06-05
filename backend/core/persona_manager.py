@@ -77,6 +77,8 @@ def reload_personas(sender):
             persona["prompt"] = injected_prompt + tool_instruction
         elif sender.enable_llm_tool == "hybrid":
             persona["prompt"] = injected_prompt + hybrid_instruction
+        elif getattr(sender, "enable_emotion_llm", False):
+            persona["prompt"] = injected_prompt
         else:
             behavior_prompt = f"\n\n<meme_behavior_instructions>\n{sender.meme_prompt}\n</meme_behavior_instructions>"
             persona["prompt"] = injected_prompt + behavior_prompt + format_instruction
