@@ -418,6 +418,12 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
             valid_emoticons.add(dedicated_tag)
 
     if getattr(sender, "enable_emotion_llm", False):
+        if event.get_extra("meme_tool_executed"):
+            logger.info(
+                "[meme_manager] 检测到本次对话已成功调用 send_meme 工具发送表情包，跳过情感分析模型。"
+            )
+            return
+
         try:
             import random
 
@@ -509,6 +515,12 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
         return
 
     try:
+        if event.get_extra("meme_tool_executed"):
+            logger.info(
+                "[meme_manager] 检测到已使用 send_meme 工具发送表情包，流式发送阶段跳过情绪表情。"
+            )
+            return
+
         if not getattr(sender, "enable_emotion_llm", False):
             random_value = random.randint(1, 100)
             if random_value > sender.emotions_probability:

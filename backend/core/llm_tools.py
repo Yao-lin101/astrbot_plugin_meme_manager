@@ -112,6 +112,8 @@ async def send_meme(
                 MessageChain([img]),
             )
 
+        event.set_extra("meme_tool_executed", True)
+
         if final_meme_file != meme_file and os.path.exists(final_meme_file):
             try:
                 os.remove(final_meme_file)

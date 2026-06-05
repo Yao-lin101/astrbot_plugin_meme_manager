@@ -93,7 +93,12 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
 
         if sender.found_emotions:
             should_send = True
-            if not getattr(sender, "enable_emotion_llm", False):
+            if event.get_extra("meme_tool_executed"):
+                logger.info(
+                    "[meme_manager] 检测到本次对话已成功调用 send_meme 工具发送表情包，不再发送标签表情包。"
+                )
+                should_send = False
+            elif not getattr(sender, "enable_emotion_llm", False):
                 random_value = random.randint(1, 100)
                 threshold = sender.emotions_probability
                 logger.debug(
