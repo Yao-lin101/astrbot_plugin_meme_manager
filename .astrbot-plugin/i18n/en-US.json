@@ -4,7 +4,8 @@
   },
   "pages": {
     "meme_manager": {
-      "title": "Meme Manager"
+      "title": "Meme Manager",
+      "icon": "mdi-emoticon-outline"
     }
   }
 }

@@ -1,7 +1,7 @@
 /* Inline drawer attributes editor */
 .emoji-detail-drawer {
   grid-column: 1 / -1;
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -36,7 +36,7 @@
 }
 
 .drawer-close-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--bg-hover);
 }
 
 .drawer-content {
@@ -68,7 +68,7 @@
   flex-wrap: wrap;
   gap: 6px;
   padding: 8px;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bg-app);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   max-height: 250px;
@@ -80,7 +80,7 @@
   flex-direction: column;
   gap: 6px;
   padding: 8px;
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bg-app);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   max-height: 250px;
@@ -91,7 +91,7 @@
   padding: 3px 8px;
   border-radius: 10px;
   border: 1px solid var(--border-color);
-  background: #ffffff;
+  background: var(--bg-element);
   color: var(--text-secondary);
   font-size: 11px;
   cursor: pointer;
@@ -99,7 +99,7 @@
 }
 
 .picker-tag-pill:hover {
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--bg-hover);
 }
 
 .picker-tag-pill.active {
@@ -154,7 +154,7 @@
 .danger-modal-card,
 .move-target-modal-card,
 .category-edit-modal-card {
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 20px 24px;
@@ -167,7 +167,7 @@
 
 .emoji-detail-modal-card {
   position: relative;
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -197,7 +197,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.015);
+  background: var(--bg-app);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 16px;
@@ -232,7 +232,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.75);
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -371,7 +371,7 @@
   text-align: left;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: var(--transition);
@@ -420,7 +420,7 @@
   max-width: 130px;
   max-height: 130px;
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--bg-app);
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
   object-fit: contain;

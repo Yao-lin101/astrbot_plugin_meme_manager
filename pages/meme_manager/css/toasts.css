@@ -10,7 +10,7 @@
 }
 
 .toast {
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
