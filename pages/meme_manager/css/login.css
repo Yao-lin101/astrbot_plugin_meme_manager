@@ -7,6 +7,10 @@
   background: radial-gradient(circle at center, #f8fafc, #e2e8f0);
 }
 
+html[data-theme="dark"] .login-page {
+  background: radial-gradient(circle at center, #242424, #1a1a1a);
+}
+
 .login-shell {
   width: 100%;
   max-width: 400px;
@@ -52,7 +56,7 @@
 .login-input {
   width: 100%;
   padding: 10px 14px;
-  background: #ffffff;
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);

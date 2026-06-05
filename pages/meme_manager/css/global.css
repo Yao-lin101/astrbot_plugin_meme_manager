@@ -2,6 +2,7 @@
 :root {
   --bg-app: #f8fafc;
   --bg-card: rgba(255, 255, 255, 0.85);
+  --bg-element: #ffffff;
   --bg-hover: rgba(59, 130, 246, 0.05);
   --border-color: rgba(0, 0, 0, 0.08);
   --text-primary: #0f172a;
@@ -20,6 +21,34 @@
   --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.06);
   --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   --font-sans: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --body-bg-gradient: radial-gradient(circle at 10% 20%, #f1f5f9 0%, #f8fafc 90%);
+  --btn-default-bg: rgba(0, 0, 0, 0.04);
+  --btn-default-hover: rgba(0, 0, 0, 0.08);
+  --input-bg: #ffffff;
+  --scrollbar-thumb: rgba(0, 0, 0, 0.1);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.2);
+  --tag-pill-bg: rgba(0, 0, 0, 0.04);
+  --bg-secondary: #f1f5f9;
+}
+
+html[data-theme="dark"] {
+  --bg-app: #1a1a1a;
+  --bg-card: rgba(36, 36, 36, 0.85);
+  --bg-element: #242424;
+  --bg-hover: rgba(59, 130, 246, 0.1);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --text-primary: #e8eaed;
+  --text-secondary: #a0a0a0;
+  --body-bg-gradient: radial-gradient(circle at 10% 20%, #242424 0%, #1a1a1a 90%);
+  --btn-default-bg: rgba(255, 255, 255, 0.08);
+  --btn-default-hover: rgba(255, 255, 255, 0.15);
+  --input-bg: #242424;
+  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+  --tag-pill-bg: rgba(255, 255, 255, 0.06);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --bg-secondary: #1e293b;
 }
 
 /* Reset & Base styling */
@@ -36,7 +65,7 @@ body {
   min-height: 100vh;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  background-image: radial-gradient(circle at 10% 20%, #f1f5f9 0%, #f8fafc 90%);
+  background-image: var(--body-bg-gradient);
 }
 
 [v-cloak] {
@@ -52,11 +81,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--scrollbar-thumb-hover);
 }
 
 /* App container */
@@ -116,11 +145,11 @@ button {
   gap: 8px;
   color: var(--text-primary);
   transition: var(--transition);
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--btn-default-bg);
 }
 
 button:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--btn-default-hover);
 }
 
 button:disabled {
@@ -138,12 +167,12 @@ button:disabled {
 }
 
 .btn-secondary {
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
 }
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: rgba(0, 0, 0, 0.15);
+  border-color: rgba(59, 130, 246, 0.2);
 }
 .btn-secondary.active {
   background: rgba(59, 130, 246, 0.08);
@@ -196,7 +225,7 @@ button:disabled {
 .form-control {
   width: 100%;
   padding: 8px 12px;
-  background: #ffffff;
+  background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   color: var(--text-primary);

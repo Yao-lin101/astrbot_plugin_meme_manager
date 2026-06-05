@@ -1,7 +1,6 @@
-/* Floating context menu */
 .batch-context-menu {
   position: fixed;
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
@@ -13,7 +12,7 @@
 .batch-context-menu-header {
   padding: 8px 12px;
   border-bottom: 1px solid var(--border-color);
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--bg-app);
 }
 
 .batch-context-menu-header p {
@@ -39,7 +38,7 @@
 }
 
 .batch-context-menu-actions button:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--bg-hover);
 }
 
 .batch-context-menu-actions button.danger {
