@@ -85,7 +85,11 @@ def reload_personas(sender):
         if sender.enable_llm_tool == "tool":
             persona["prompt"] = injected_prompt + tool_instruction
         elif sender.enable_llm_tool == "hybrid":
-            persona["prompt"] = injected_prompt + hybrid_instruction
+            if getattr(sender, "enable_emotion_llm", False):
+                # If emotion LLM is enabled, only inject tool_instruction so the main LLM doesn't output tags.
+                persona["prompt"] = injected_prompt + tool_instruction
+            else:
+                persona["prompt"] = injected_prompt + hybrid_instruction
         elif getattr(sender, "enable_emotion_llm", False):
             persona["prompt"] = injected_prompt
         else:
