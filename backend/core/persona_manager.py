@@ -82,16 +82,18 @@ def reload_personas(sender):
         if pref_prompt:
             injected_prompt += "\n\n" + pref_prompt
 
-        if sender.enable_llm_tool == "tool":
-            persona["prompt"] = injected_prompt + tool_instruction
-        elif sender.enable_llm_tool == "hybrid":
-            if getattr(sender, "enable_emotion_llm", False):
-                # If emotion LLM is enabled, only inject tool_instruction so the main LLM doesn't output tags.
+        is_emotion_llm = getattr(sender, "enable_emotion_llm", False)
+
+        if is_emotion_llm:
+            if sender.enable_llm_tool in ("tool", "hybrid"):
                 persona["prompt"] = injected_prompt + tool_instruction
             else:
-                persona["prompt"] = injected_prompt + hybrid_instruction
-        elif getattr(sender, "enable_emotion_llm", False):
-            persona["prompt"] = injected_prompt
+                persona["prompt"] = injected_prompt
         else:
-            behavior_prompt = f"\n\n<meme_behavior_instructions>\n{sender.meme_prompt}\n</meme_behavior_instructions>"
-            persona["prompt"] = injected_prompt + behavior_prompt + format_instruction
+            if sender.enable_llm_tool == "tool":
+                persona["prompt"] = injected_prompt + tool_instruction
+            elif sender.enable_llm_tool == "hybrid":
+                persona["prompt"] = injected_prompt + hybrid_instruction
+            else:
+                behavior_prompt = f"\n\n<meme_behavior_instructions>\n{sender.meme_prompt}\n</meme_behavior_instructions>"
+                persona["prompt"] = injected_prompt + behavior_prompt + format_instruction
