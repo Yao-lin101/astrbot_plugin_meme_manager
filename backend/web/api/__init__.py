@@ -40,6 +40,7 @@ from .sync import (
     sync_from_remote,
     sync_to_remote,
 )
+from .tag_merge import merge_tags, scan_similar_tags
 
 __all__ = [
     "batch_convert_emoji_gif",
@@ -79,4 +80,6 @@ __all__ = [
     "sync_config",
     "sync_from_remote",
     "sync_to_remote",
+    "scan_similar_tags",
+    "merge_tags",
 ]

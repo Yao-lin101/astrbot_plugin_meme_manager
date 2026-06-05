@@ -31,7 +31,7 @@ from .init import init_plugin
     "meme_manager",
     "anka & e.e.",
     "表情包管理器 - 支持表情包发送及表情包上传",
-    "4.8.2",
+    "4.8.4",
 )
 class MemeSender(Star, MemeConfigMixin):
     context: Context

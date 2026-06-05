@@ -1,0 +1,77 @@
+/* Tag merge / cleanup modal styles */
+.tag-merge-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: #ffffff;
+  overflow: hidden;
+  transition: var(--transition);
+}
+
+.tag-merge-pill-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tag-merge-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-family: monospace;
+}
+
+.tag-merge-pill-toggle {
+  border: none;
+  border-left: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 8px;
+  align-self: stretch;
+  cursor: pointer;
+  font-size: 11px;
+  transition: var(--transition);
+}
+
+.tag-merge-pill-toggle:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--danger-color);
+}
+
+/* Representative (merge target) */
+.tag-merge-pill.representative {
+  border-color: var(--primary-color);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.tag-merge-pill.representative .tag-merge-pill-label {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.tag-merge-pill.representative .tag-merge-pill-count {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--primary-color);
+}
+
+/* Disabled (excluded from merge) */
+.tag-merge-pill.disabled {
+  opacity: 0.5;
+}
+
+.tag-merge-pill.disabled .tag-merge-pill-label {
+  text-decoration: line-through;
+}
