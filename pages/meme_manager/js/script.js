@@ -6,6 +6,7 @@ import { useSync } from './modules/sync.js';
 import { useCategories } from './modules/categories.js';
 import { useEmojiActions } from './modules/emojiActions.js';
 import { useDedup } from './modules/dedup.js';
+import { useTagMerge } from './modules/tagMerge.js';
 
 const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
@@ -63,6 +64,9 @@ createApp({
 
     // 7. Dedup
     const dedup = useDedup(showToast, api.fetchEmojis);
+
+    // 8. Tag Merge
+    const tagMerge = useTagMerge(showToast, api.fetchEmojis, modals.confirm);
 
     // Local UI states
     const syncDrawerVisible = ref(false);
@@ -377,6 +381,20 @@ createApp({
       toggleMemeAction: dedup.toggleMemeAction,
       resolveDuplicates: dedup.resolveDuplicates,
       totalDeletesCount: dedup.totalDeletesCount,
+
+      // Tag Merge
+      tagMergeModal: tagMerge.tagMergeModal,
+      tagMergeSimilarityThreshold: tagMerge.tagMergeSimilarityThreshold,
+      tagMergeGroups: tagMerge.tagMergeGroups,
+      tagMergeTotalTags: tagMerge.tagMergeTotalTags,
+      tagMergeTagsWithoutVector: tagMerge.tagMergeTagsWithoutVector,
+      openTagMergeModal: tagMerge.openTagMergeModal,
+      closeTagMergeModal: tagMerge.closeTagMergeModal,
+      scanSimilarTags: tagMerge.scanSimilarTags,
+      setRepresentativeTag: tagMerge.setRepresentativeTag,
+      toggleTagInGroup: tagMerge.toggleTagInGroup,
+      mergeSelectedGroups: tagMerge.mergeSelectedGroups,
+      totalMergeCount: tagMerge.totalMergeCount,
     };
   },
 }).mount("#app");
