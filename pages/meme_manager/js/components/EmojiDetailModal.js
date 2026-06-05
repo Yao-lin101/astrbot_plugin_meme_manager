@@ -136,7 +136,7 @@ export const EmojiDetailModal = {
                        v-model="localSearchQuery" 
                        @focus="isDrawerInputFocused = true"
                        @blur="isDrawerInputFocused = false"
-                       @keydown.backspace="$emit('backspace')"
+                       @keydown.backspace="$emit('backspace', $event)"
                        @keyup.enter="$emit('create-tag')" 
                        placeholder="搜索或输入后回车新建标签..." 
                        style="flex: 1; min-width: 120px; border: none; outline: none; background: transparent; height: 26px; font-size: 12px; padding: 0; color: var(--text-primary);" />
