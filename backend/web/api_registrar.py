@@ -139,11 +139,13 @@ def register_apis(sender):
         get_prompt_template,
         get_providers,
         get_sync_status,
+        merge_tags,
         move_emoji,
         rename_category,
         resolve_duplicates,
         restore_category,
         save_persona_tag,
+        scan_similar_tags,
         sync_config,
         sync_from_remote,
         sync_to_remote,
@@ -190,6 +192,8 @@ def register_apis(sender):
         ("emoji/batch_analyze", batch_analyze_emojis, ["POST"]),
         ("emoji/batch_analyze/status", get_batch_analyze_status, ["GET"]),
         ("emoji/batch_analyze/cancel", cancel_batch_analyze, ["POST"]),
+        ("tag_merge/scan", scan_similar_tags, ["GET"]),
+        ("tag_merge/merge", merge_tags, ["POST"]),
     ]
 
     for route, handler, methods in apis:
