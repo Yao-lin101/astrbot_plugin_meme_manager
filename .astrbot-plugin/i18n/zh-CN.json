@@ -4,7 +4,8 @@
   },
   "pages": {
     "meme_manager": {
-      "title": "表情包管理"
+      "title": "表情包管理",
+      "icon": "mdi-emoticon-outline"
     }
   }
 }

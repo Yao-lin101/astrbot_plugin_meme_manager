@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AstrBot 表情包管理系统</title>
+    <script>
+      (function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const theme = urlParams.get('theme');
+        if (theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+        } else if (theme === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
 
     <script>
       // Mock window.fetch to communicate through the AstrBotPluginPage message bridge
@@ -229,7 +240,7 @@
                 </span>
                 
                 <div style="position: relative; display: inline-flex; align-items: center;">
-                  <button @click.stop="showUsePreferenceDropdown = !showUsePreferenceDropdown" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; padding: 0 4px; display: inline-flex; align-items: center; font-size: 12px; outline: none; height: 24px; width: 24px; justify-content: center; border-radius: 50%; transition: background 0.2s;" onmouseover="this.style.background='rgba(0,0,0,0.05)'" onmouseout="this.style.background='transparent'">
+                  <button @click.stop="showUsePreferenceDropdown = !showUsePreferenceDropdown" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; padding: 0 4px; display: inline-flex; align-items: center; font-size: 12px; outline: none; height: 24px; width: 24px; justify-content: center; border-radius: 50%; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
                     <i class="fas fa-plus"></i>
                   </button>
                   <div v-show="showUsePreferenceDropdown" class="dropdown-menu" style="position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 1000; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); max-height: 240px; overflow-y: auto; min-width: 180px; padding: 6px 0; display: flex; flex-direction: column; gap: 2px;">
@@ -338,7 +349,7 @@
               <div v-for="group in activeCategoryTimeGroups" :key="group.title" class="time-group-section" style="margin-bottom: 24px;">
                 <h3 class="time-group-header" style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
                   <i class="far fa-clock"></i> {{ group.title }}
-                  <span class="group-count" style="font-size: 10px; padding: 2px 6px; background: rgba(0,0,0,0.05); border-radius: 10px; color: var(--text-secondary);">
+                  <span class="group-count" style="font-size: 10px; padding: 2px 6px; background: var(--tag-pill-bg); border-radius: 10px; color: var(--text-secondary);">
                     {{ group.list.length }}
                   </span>
                 </h3>
