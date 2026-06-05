@@ -8,9 +8,36 @@ import { useEmojiActions } from './modules/emojiActions.js';
 import { useDedup } from './modules/dedup.js';
 import { useTagMerge } from './modules/tagMerge.js';
 
+import { SyncDrawer } from './components/SyncDrawer.js';
+import { ConfirmDialog } from './components/ConfirmDialog.js';
+import { DangerConfirmDialog } from './components/DangerConfirmDialog.js';
+import { CategoryRenameModal } from './components/CategoryRenameModal.js';
+import { AddCategoryModal } from './components/AddCategoryModal.js';
+import { BatchPersonaModal } from './components/BatchPersonaModal.js';
+import { ImportModal } from './components/ImportModal.js';
+import { ContextMenu } from './components/ContextMenu.js';
+import { DuplicateModal } from './components/DuplicateModal.js';
+import { TagMergeModal } from './components/TagMergeModal.js';
+import { BatchAnalyzeModal } from './components/BatchAnalyzeModal.js';
+import { EmojiDetailModal } from './components/EmojiDetailModal.js';
+
 const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
 createApp({
+  components: {
+    SyncDrawer,
+    ConfirmDialog,
+    DangerConfirmDialog,
+    CategoryRenameModal,
+    AddCategoryModal,
+    BatchPersonaModal,
+    ImportModal,
+    ContextMenu,
+    DuplicateModal,
+    TagMergeModal,
+    BatchAnalyzeModal,
+    EmojiDetailModal
+  },
   setup() {
     // 1. Toasts
     const { toasts, showToast, removeToast } = useToasts();

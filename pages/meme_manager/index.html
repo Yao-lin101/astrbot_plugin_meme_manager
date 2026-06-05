@@ -136,108 +136,19 @@
       <!-- 主要工作区 (通栏大气的仪表盘布局) -->
       <main class="main-content">
         <!-- 同步控制中心抽屉 (折叠显示) -->
-        <div class="sync-drawer" v-show="syncDrawerVisible">
-          <div class="sync-grid">
-            <!-- 本地配置同步卡片 -->
-            <div class="sync-card">
-              <div class="sync-card-header">
-                <div class="sync-title">
-                  <i class="fas fa-arrows-spin header-icon"></i>
-                  <h3>配置与本地同步</h3>
-                </div>
-                <button class="btn-text" @click="checkSyncStatus(true)" :disabled="syncChecking">
-                  <i class="fas fa-sync" :class="{ 'fa-spin': syncChecking }"></i> 检查状态
-                </button>
-              </div>
-              <div class="sync-card-body">
-                <div v-if="syncChecking" class="loading-state">
-                  <i class="fas fa-circle-notch fa-spin"></i> 正在检查配置状态...
-                </div>
-                <div v-else>
-                  <div v-if="syncStatus.inSync" class="sync-status-ok">
-                    <i class="fas fa-circle-check"></i> 配置与文件夹结构一致！
-                  </div>
-                  <div v-else class="sync-status-warn">
-                    <div v-if="syncStatus.missingInConfig.length > 0" class="sync-diff-group">
-                      <h4>未注册的本地分类:</h4>
-                      <div class="diff-tags">
-                        <span v-for="cat in syncStatus.missingInConfig" :key="cat" class="diff-tag">
-                          {{ cat }}
-                        </span>
-                      </div>
-                    </div>
-                    <div v-if="syncStatus.deletedCategories.length > 0" class="sync-diff-group">
-                      <h4>已删除的类别（配置残留）：</h4>
-                      <div class="deleted-list">
-                        <div v-for="cat in syncStatus.deletedCategories" :key="cat" class="deleted-item">
-                          <span class="deleted-name">{{ cat }}</span>
-                          <div class="deleted-actions">
-                            <button class="btn-sm btn-danger" @click="removeFromConfig(cat)">删除配置</button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div class="sync-card-footer">
-                <button class="btn-primary w-100" @click="syncConfig" :disabled="syncChecking || syncStatus.inSync">
-                  <i class="fas fa-arrows-rotate"></i> 同步所有配置到本地
-                </button>
-              </div>
-            </div>
-
-            <!-- 云端图床同步卡片 -->
-            <div class="sync-card">
-              <div class="sync-card-header">
-                <div class="sync-title">
-                  <i class="fas fa-cloud header-icon"></i>
-                  <h3>图床云端同步</h3>
-                </div>
-                <button class="btn-text" @click="checkImgHostSyncStatus(true)" :disabled="imgHostSyncing">
-                  <i class="fas fa-rotate" :class="{ 'fa-spin': imgHostSyncing }"></i> 刷新图床
-                </button>
-              </div>
-              <div class="sync-card-body">
-                <div class="img-host-details">
-                  <div class="detail-row">
-                    <span class="label">图床服务商</span>
-                    <span class="value">{{ imgHostStatus.provider }}</span>
-                  </div>
-                  <div class="detail-row">
-                    <span class="label">云端文件</span>
-                    <span class="value font-num">
-                      {{ imgHostStatus.remoteImageCount }} 张 ({{ imgHostStatus.remoteStorageSize }})
-                    </span>
-                  </div>
-                  <div class="detail-row highlight" v-if="imgHostStatus.uploadCount > 0 || imgHostStatus.downloadCount > 0">
-                    <span class="label">待同步数量</span>
-                    <span class="value sync-badges">
-                      <span v-if="imgHostStatus.uploadCount > 0" class="badge upload-badge">
-                        <i class="fas fa-arrow-up"></i> {{ imgHostStatus.uploadCount }} 待上传
-                      </span>
-                      <span v-if="imgHostStatus.downloadCount > 0" class="badge download-badge">
-                        <i class="fas fa-arrow-down"></i> {{ imgHostStatus.downloadCount }} 待下载
-                      </span>
-                    </span>
-                  </div>
-                  <div class="detail-row" v-else>
-                    <span class="label">状态</span>
-                    <span class="value text-ok"><i class="fas fa-circle-check"></i> 云端已同步</span>
-                  </div>
-                </div>
-              </div>
-              <div class="sync-card-footer split-buttons">
-                <button class="btn-primary" @click="syncToRemote" :disabled="imgHostStatus.uploadCount === 0 || imgHostSyncing">
-                  <i class="fas fa-cloud-arrow-up"></i> 上传到云端
-                </button>
-                <button class="btn-primary" @click="syncFromRemote" :disabled="imgHostStatus.downloadCount === 0 || imgHostSyncing">
-                  <i class="fas fa-cloud-arrow-down"></i> 从云端下载
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <sync-drawer
+          :visible="syncDrawerVisible"
+          :checking="syncChecking"
+          :status="syncStatus"
+          :img-host-syncing="imgHostSyncing"
+          :img-host-status="imgHostStatus"
+          @check-status="checkSyncStatus"
+          @sync-config="syncConfig"
+          @remove-config="removeFromConfig"
+          @refresh-img-host="checkImgHostSyncStatus"
+          @sync-to-remote="syncToRemote"
+          @sync-from-remote="syncFromRemote"
+        ></sync-drawer>
 
         <!-- 批量操作与工具栏 -->
         <div class="page-toolbar">
@@ -515,698 +426,129 @@
       </main>
 
       <!-- 检查重复表情模态框 -->
-      <div v-if="duplicateModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeDuplicateModal">
-        <div class="emoji-detail-modal-card" style="max-width: 900px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
-          
-          <div class="drawer-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
-            <span class="drawer-title" style="font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <i class="fas fa-clone" style="color: var(--primary-color);"></i>
-              检查重复/相似表情包
-            </span>
-            <button class="drawer-close-btn" @click="closeDuplicateModal">&times;</button>
-          </div>
-
-          <!-- 控制面板 (控制阈值、开始扫描) -->
-          <div class="dedup-control-panel" style="padding: 16px 20px; background: rgba(0, 0, 0, 0.01); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; flex-shrink: 0;">
-            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
-              <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">
-                相似度阈值: <span style="color: var(--primary-color); font-family: monospace; font-size: 14px;">{{ similarityThreshold }}%</span>
-              </label>
-              <input type="range" min="50" max="100" step="1" v-model="similarityThreshold" style="flex: 1; cursor: pointer;" :disabled="duplicateModal.scanning || duplicateModal.resolving" />
-              <span style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;">(推荐 85% - 90%)</span>
-            </div>
-            
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <button class="btn-primary" @click="scanDuplicates" :disabled="duplicateModal.scanning || duplicateModal.resolving">
-                <i class="fas" :class="duplicateModal.scanning ? 'fa-spinner fa-spin' : 'fa-search'"></i>
-                {{ duplicateModal.scanning ? '正在扫描...' : '开始扫描' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- 扫描结果列表 -->
-          <div style="flex: 1; overflow-y: auto; padding: 20px; min-height: 200px;">
-            <!-- Loading state -->
-            <div v-if="duplicateModal.scanning" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); gap: 12px;">
-              <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary-color);"></i>
-              <p style="font-size: 14px;">正在全库比对表情特征，这可能需要数秒钟...</p>
-            </div>
-
-            <!-- Empty state (Initial or No duplicates) -->
-            <div v-else-if="duplicateGroups.length === 0" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); text-align: center; gap: 12px;">
-              <i class="far fa-copy" style="font-size: 40px; color: var(--border-color);"></i>
-              <p style="font-size: 14px; max-width: 320px;">
-                {{ duplicateModal.scanning ? '' : '选择合适的相似度阈值，然后点击“开始扫描”来寻找相似表情包' }}
-              </p>
-            </div>
-
-            <!-- Duplicate Groups List -->
-            <div v-else style="display: flex; flex-direction: column; gap: 24px;">
-              <div v-for="(group, gIdx) in duplicateGroups" :key="group.id" class="dedup-group-card" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff; overflow: hidden; box-shadow: var(--shadow-sm);">
-                
-                <div class="dedup-group-header" style="padding: 10px 16px; background: rgba(0, 0, 0, 0.02); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">
-                    相似组 #{{ gIdx + 1 }}
-                  </span>
-                  <span style="font-size: 11px; background: rgba(59, 130, 246, 0.08); color: var(--primary-color); padding: 2px 8px; border-radius: 10px; font-weight: 500;">
-                    共 {{ group.memes.length }} 张相似图片
-                  </span>
-                </div>
-
-                <div class="dedup-group-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; padding: 16px;">
-                  <div v-for="meme in group.memes" :key="meme.filename" class="dedup-meme-card" :class="meme.action" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; display: flex; gap: 12px; transition: var(--transition); background: #ffffff; position: relative;">
-                    
-                    <!-- Thumbnail with overlay for action -->
-                    <div style="width: 80px; height: 80px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.02); border-radius: 4px; border: 1px solid var(--border-color);" :style="{ backgroundImage: 'url(' + getImageUrl(meme.filename) + ')' }"></div>
-                    
-                    <!-- Info & Action -->
-                    <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0;">
-                      <div style="margin-bottom: 4px;">
-                        <div style="font-size: 12px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" :title="meme.filename">
-                          {{ meme.filename }}
-                        </div>
-                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
-                          <span style="font-family: monospace;">{{ meme.width }}x{{ meme.height }}</span>
-                          <span>&bull;</span>
-                          <span>{{ formatBytes(meme.size_bytes) }}</span>
-                          <span v-if="meme.similarity < 1.0" style="color: var(--primary-color); font-weight: 600;">
-                            &bull; 相似度 {{ Math.round(meme.similarity * 100) }}%
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style="display: flex; gap: 6px; margin-top: 8px;">
-                        <button type="button" class="btn-sm" :class="meme.action === 'keep' ? 'btn-primary' : 'btn-secondary'" style="padding: 3px 10px; font-size: 11px;" @click="toggleMemeAction(group, meme, 'keep')">
-                          <i class="fas fa-check"></i> 保留
-                        </button>
-                        <button type="button" class="btn-sm" :class="meme.action === 'delete' ? 'btn-danger' : 'btn-secondary'" style="padding: 3px 10px; font-size: 11px;" @click="toggleMemeAction(group, meme, 'delete')">
-                          <i class="fas fa-trash-can"></i> 删除
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Bottom Actions -->
-          <div class="drawer-actions" style="padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0, 0, 0, 0.01); flex-shrink: 0;">
-            <div style="font-size: 13px; color: var(--text-secondary);">
-              <span v-if="duplicateGroups.length > 0">
-                已选择删除 <strong style="color: var(--danger-color); font-size: 14px;">{{ totalDeletesCount }}</strong> 张重复表情
-              </span>
-            </div>
-            
-            <div style="display: flex; gap: 8px;">
-              <button class="btn-secondary" @click="closeDuplicateModal" :disabled="duplicateModal.resolving">取消</button>
-              <button class="btn-primary" @click="resolveDuplicates" :disabled="duplicateModal.resolving || totalDeletesCount === 0 || duplicateGroups.length === 0">
-                <i class="fas" :class="duplicateModal.resolving ? 'fa-spinner fa-spin' : 'fa-trash-can'"></i>
-                确认清理 (删除 {{ totalDeletesCount }} 张)
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </div>
+      <duplicate-modal
+        :dialog="duplicateModal"
+        :similarity-threshold="similarityThreshold"
+        @update:similarity-threshold="val => similarityThreshold = val"
+        :duplicate-groups="duplicateGroups"
+        :total-deletes-count="totalDeletesCount"
+        :get-image-url="getImageUrl"
+        :format-bytes="formatBytes"
+        @scan="scanDuplicates"
+        @toggle-action="toggleMemeAction"
+        @resolve="resolveDuplicates"
+        @close="closeDuplicateModal"
+      ></duplicate-modal>
 
       <!-- 标签合并/清理模态框 -->
-      <div v-if="tagMergeModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeTagMergeModal">
-        <div class="emoji-detail-modal-card" style="max-width: 900px; width: 95%; max-height: 90vh; display: flex; flex-direction: column;">
-
-          <div class="drawer-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
-            <span class="drawer-title" style="font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <i class="fas fa-object-group" style="color: var(--primary-color);"></i>
-              标签合并 / 清理
-            </span>
-            <button class="drawer-close-btn" @click="closeTagMergeModal">&times;</button>
-          </div>
-
-          <!-- 控制面板 (阈值 + 扫描) -->
-          <div class="tag-merge-control-panel" style="padding: 16px 20px; background: rgba(0, 0, 0, 0.01); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; flex-shrink: 0;">
-            <div style="display: flex; align-items: center; gap: 12px; flex: 1; min-width: 250px;">
-              <label style="font-size: 13px; font-weight: 600; color: var(--text-secondary); white-space: nowrap;">
-                相似度阈值: <span style="color: var(--primary-color); font-family: monospace; font-size: 14px;">{{ tagMergeSimilarityThreshold }}%</span>
-              </label>
-              <input type="range" min="50" max="95" step="1" v-model="tagMergeSimilarityThreshold" style="flex: 1; cursor: pointer;" :disabled="tagMergeModal.scanning || tagMergeModal.merging" />
-              <span style="font-size: 11px; color: var(--text-secondary); white-space: nowrap;">(推荐 78% - 85%)</span>
-            </div>
-
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <button class="btn-primary" @click="scanSimilarTags" :disabled="tagMergeModal.scanning || tagMergeModal.merging">
-                <i class="fas" :class="tagMergeModal.scanning ? 'fa-spinner fa-spin' : 'fa-search'"></i>
-                {{ tagMergeModal.scanning ? '正在扫描...' : '开始扫描' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- 扫描结果 -->
-          <div style="flex: 1; overflow-y: auto; padding: 20px; min-height: 200px;">
-            <!-- Loading -->
-            <div v-if="tagMergeModal.scanning" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); gap: 12px;">
-              <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary-color);"></i>
-              <p style="font-size: 14px;">正在基于标签向量比对相似度...</p>
-            </div>
-
-            <!-- Empty -->
-            <div v-else-if="tagMergeGroups.length === 0" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); text-align: center; gap: 12px;">
-              <i class="fas fa-tags" style="font-size: 40px; color: var(--border-color);"></i>
-              <p style="font-size: 14px; max-width: 360px;">
-                {{ tagMergeModal.scanned ? '未发现可合并的相似标签组，可尝试降低相似度阈值。' : '选择相似度阈值，然后点击“开始扫描”来寻找语义相近的标签。' }}
-              </p>
-              <p v-if="tagMergeModal.scanned && tagMergeTagsWithoutVector > 0" style="font-size: 12px; color: var(--text-secondary);">
-                注意：共有 {{ tagMergeTagsWithoutVector }} 个标签尚未计算向量，未参与本次扫描。
-              </p>
-            </div>
-
-            <!-- Groups -->
-            <div v-else style="display: flex; flex-direction: column; gap: 20px;">
-              <div v-if="tagMergeTagsWithoutVector > 0" style="font-size: 12px; color: var(--text-secondary); background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: var(--radius-sm); padding: 8px 12px;">
-                <i class="fas fa-circle-info" style="color: #f59e0b;"></i>
-                共扫描 {{ tagMergeTotalTags }} 个标签，其中 {{ tagMergeTagsWithoutVector }} 个尚未计算向量，未参与本次扫描。
-              </div>
-
-              <div v-for="(group, gIdx) in tagMergeGroups" :key="group.id" class="tag-merge-group-card" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); background: #ffffff; overflow: hidden; box-shadow: var(--shadow-sm);">
-                <div class="tag-merge-group-header" style="padding: 10px 16px; background: rgba(0, 0, 0, 0.02); border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-                  <span style="font-size: 13px; font-weight: 600; color: var(--text-secondary);">
-                    相似组 #{{ gIdx + 1 }}
-                  </span>
-                  <span style="font-size: 11px; background: rgba(59, 130, 246, 0.08); color: var(--primary-color); padding: 2px 8px; border-radius: 10px; font-weight: 500;">
-                    平均相似度 {{ Math.round(group.avg_similarity * 100) }}%
-                  </span>
-                </div>
-
-                <div class="tag-merge-group-body" style="padding: 14px 16px;">
-                  <p style="font-size: 11px; color: var(--text-secondary); margin: 0 0 10px;">
-                    点击标签设为<strong style="color: var(--primary-color);">代表标签</strong>（合并目标）；点击右侧 &times; 可让该标签不参与本次合并。
-                  </p>
-                  <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                    <div
-                      v-for="tag in group.tags"
-                      :key="tag.name"
-                      class="tag-merge-pill"
-                      :class="{ representative: tag.is_representative, disabled: !tag.enabled }"
-                    >
-                      <span class="tag-merge-pill-label" @click="setRepresentativeTag(group, tag.name)">
-                        <i v-if="tag.is_representative" class="fas fa-star" style="font-size: 10px;"></i>
-                        {{ tag.name }}
-                        <span class="tag-merge-pill-count">{{ tag.meme_count }}</span>
-                      </span>
-                      <button
-                        v-if="!tag.is_representative"
-                        type="button"
-                        class="tag-merge-pill-toggle"
-                        :title="tag.enabled ? '不参与合并' : '恢复参与合并'"
-                        @click="toggleTagInGroup(group, tag.name)"
-                      >
-                        <i class="fas" :class="tag.enabled ? 'fa-xmark' : 'fa-rotate-left'"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Bottom Actions -->
-          <div class="drawer-actions" style="padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: rgba(0, 0, 0, 0.01); flex-shrink: 0;">
-            <div style="font-size: 13px; color: var(--text-secondary);">
-              <span v-if="tagMergeGroups.length > 0">
-                将合并 <strong style="color: var(--primary-color); font-size: 14px;">{{ totalMergeCount }}</strong> 个标签
-              </span>
-            </div>
-
-            <div style="display: flex; gap: 8px;">
-              <button class="btn-secondary" @click="closeTagMergeModal" :disabled="tagMergeModal.merging">取消</button>
-              <button class="btn-primary" @click="mergeSelectedGroups" :disabled="tagMergeModal.merging || totalMergeCount === 0">
-                <i class="fas" :class="tagMergeModal.merging ? 'fa-spinner fa-spin' : 'fa-object-group'"></i>
-                确认合并 ({{ totalMergeCount }} 个标签)
-              </button>
-            </div>
-          </div>
-
-        </div>
-      </div>
+      <tag-merge-modal
+        :dialog="tagMergeModal"
+        :similarity-threshold="tagMergeSimilarityThreshold"
+        @update:similarity-threshold="val => tagMergeSimilarityThreshold = val"
+        :tag-merge-groups="tagMergeGroups"
+        :tag-merge-total-tags="tagMergeTotalTags"
+        :tag-merge-tags-without-vector="tagMergeTagsWithoutVector"
+        :total-merge-count="totalMergeCount"
+        @scan="scanSimilarTags"
+        @set-representative="setRepresentativeTag"
+        @toggle-tag="toggleTagInGroup"
+        @merge="mergeSelectedGroups"
+        @close="closeTagMergeModal"
+      ></tag-merge-modal>
 
       <!-- 确认操作模态框 -->
-      <div v-if="confirmDialog.visible" class="confirm-modal" role="dialog" aria-modal="true">
-        <div class="confirm-modal-card">
-          <h2>{{ confirmDialog.title }}</h2>
-          <p>{{ confirmDialog.description }}</p>
-          <div v-if="confirmDialog.imageUrl || confirmDialog.localImageUrl" class="confirm-modal-comparison">
-            <div v-if="confirmDialog.localImageUrl" class="comparison-column">
-              <div class="comparison-label">新上传的图片</div>
-              <img :src = "confirmDialog.localImageUrl" alt="Uploading Meme" />
-            </div>
-            <div v-if="confirmDialog.imageUrl && confirmDialog.localImageUrl" class="comparison-separator">
-              <i class="fas fa-arrows-left-right"></i>
-            </div>
-            <div v-if="confirmDialog.imageUrl" class="comparison-column">
-              <div class="comparison-label">已有的相似表情</div>
-              <img :src = "confirmDialog.imageUrl" alt="Similar Meme" />
-            </div>
-          </div>
-          <div class="confirm-modal-actions">
-            <button class="btn-secondary" @click="handleConfirm(false)">取消</button>
-            <button :class="confirmDialog.confirmClass === 'danger' ? 'btn-danger' : 'btn-primary'" @click="handleConfirm(true)">
-              {{ confirmDialog.confirmLabel }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <confirm-dialog
+        :dialog="confirmDialog"
+        @confirm="handleConfirm"
+      ></confirm-dialog>
 
       <!-- 敏感操作确认模态框 -->
-      <div v-if="dangerConfirmDialog.visible" class="danger-modal" role="dialog" aria-modal="true">
-        <div class="danger-modal-card">
-          <h2>{{ dangerConfirmDialog.title }}</h2>
-          <p>{{ dangerConfirmDialog.description }}</p>
-
-          <div v-if="dangerConfirmDialog.stage === 'ack'" class="danger-modal-check">
-            <label>
-              <input type="checkbox" @change="startDangerCountdown" />
-              <span>我已了解此操作的风险和影响</span>
-            </label>
-          </div>
-          <div v-else-if="dangerConfirmDialog.stage === 'countdown'" class="danger-modal-stage-text">
-            请在 {{ dangerConfirmDialog.countdown }} 秒后确认操作
-          </div>
-          <div v-else-if="dangerConfirmDialog.stage === 'input'" class="danger-modal-check">
-            <p>请输入 <strong>CONFIRM</strong> 以确认此项敏感操作：</p>
-            <input type="text" id="danger-modal-ack" class="form-control text-center" @keyup.enter="handleDangerConfirm" />
-          </div>
-
-          <div class="danger-modal-actions">
-            <button class="btn-secondary" @click="cancelDangerConfirm">取消</button>
-            <button class="btn-danger" :disabled="dangerConfirmDialog.stage !== 'input'" @click="handleDangerConfirm">
-              {{ dangerConfirmDialog.actionLabel }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <danger-confirm-dialog
+        :dialog="dangerConfirmDialog"
+        @start-countdown="startDangerCountdown"
+        @confirm="handleDangerConfirm"
+        @cancel="cancelDangerConfirm"
+      ></danger-confirm-dialog>
 
       <!-- 批量修改允许人格限制模态框 -->
-      <div v-if="batchPersonaModal.visible" class="move-target-modal" role="dialog" aria-modal="true">
-        <div class="move-target-modal-card">
-          <p class="move-target-modal-eyebrow">批量设置</p>
-          <h2>允许的人格限制</h2>
-          <p>修改已选中的 {{ selectedEmojis.size }} 个表情的人格可用性限制（留空或勾选全部表示全局可用）。</p>
-          
-          <div class="drawer-personas-list" style="margin: 20px 0; text-align: left; max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
-            <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-              <input type="checkbox" value="*" :checked="batchPersonaModal.personas.includes('*')" @change="togglePersonaInBatch('*')" style="width: 14px; height: 14px;" />
-              <span>全局可用 (*)</span>
-            </label>
-            <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-              <input type="checkbox" :value="p.id" :checked="batchPersonaModal.personas.includes(p.id) && !batchPersonaModal.personas.includes('*')" @change="togglePersonaInBatch(p.id)" style="width: 14px; height: 14px;" />
-              <span>{{ p.name }} ({{ p.id }})</span>
-            </label>
-          </div>
-          
-          <div class="confirm-modal-actions" style="margin-top: 20px; display: flex; justify-content: flex-end; gap: 8px;">
-            <button class="btn-secondary" @click="closeBatchPersonaModal">取消</button>
-            <button class="btn-primary" @click="saveBatchPersonas">
-              保存修改
-            </button>
-          </div>
-        </div>
-      </div>
+      <batch-persona-modal
+        :dialog="batchPersonaModal"
+        :system-personas="systemPersonas"
+        :selected-count="selectedEmojis.size"
+        @toggle-persona="togglePersonaInBatch"
+        @close="closeBatchPersonaModal"
+        @save="saveBatchPersonas"
+      ></batch-persona-modal>
 
       <!-- 批量重新分析标签和描述模态框 -->
-      <div v-if="batchAnalyzeModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true">
-        <div class="emoji-detail-modal-card" style="max-width: 700px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
-          
-          <div class="drawer-header" style="padding: 16px 20px; border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
-            <span class="drawer-title" style="font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 8px;">
-              <i class="fas fa-brain" style="color: var(--primary-color);"></i>
-              批量重新分析表情包 (已选 {{ selectedEmojis.size }} 个)
-            </span>
-            <button class="drawer-close-btn" @click="closeBatchAnalyzeModal" :disabled="batchAnalyzeModal.step === 'progress' && batchAnalyzeModal.status.status === 'running'">&times;</button>
-          </div>
-
-          <!-- 阶段 1：配置界面 -->
-          <div v-if="batchAnalyzeModal.step === 'config'" class="drawer-content" style="padding: 20px; flex: 1; overflow-y: auto;">
-            <!-- 左侧：基础配置 -->
-            <div style="display: flex; flex-direction: column; gap: 20px;">
-              <div class="form-group" style="margin-bottom: 0;">
-                <label style="font-size: 14px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 8px;">选择多模态 AI 供应商</label>
-                <select class="form-control" v-model="batchAnalyzeModal.selectedProvider" style="width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary);">
-                  <option value="">-- 请选择供应商 --</option>
-                  <option v-for="prov in batchAnalyzeModal.providers" :key="prov.id" :value="prov.id">
-                    {{ prov.name }} ({{ prov.id }})
-                  </option>
-                </select>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">需要选择支持图片理解（多模态）的供应商实例，否则分析可能会失败。</p>
-              </div>
-
-              <div class="form-group" style="margin-bottom: 0;">
-                <label style="font-size: 14px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 8px;">分析内容选择</label>
-                <div style="display: flex; flex-direction: column; gap: 12px;">
-                  <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
-                    <input type="checkbox" v-model="batchAnalyzeModal.analyzeTags" style="width: 16px; height: 16px;" />
-                    <span>重新分析标签 (完全覆盖现有标签)</span>
-                  </label>
-                  <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
-                    <input type="checkbox" v-model="batchAnalyzeModal.analyzeDescription" style="width: 16px; height: 16px;" />
-                    <span>重新分析描述 (覆盖现有描述)</span>
-                  </label>
-                </div>
-              </div>
-
-              <div v-show="batchAnalyzeModal.analyzeDescription && !batchAnalyzeModal.analyzeTags" class="form-group" style="margin-bottom: 0; padding-left: 12px; border-left: 2px solid var(--primary-color, #3b82f6);">
-                <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
-                  <input type="checkbox" v-model="batchAnalyzeModal.passExistingTagsAsRef" style="width: 16px; height: 16px;" />
-                  <span>传入现有标签作为分析参考</span>
-                </label>
-              </div>
-            </div>
-
-            <!-- 右侧：提示词配置 -->
-            <div style="display: flex; flex-direction: column; height: 100%;">
-              <div class="form-group" style="display: flex; flex-direction: column; flex: 1; margin-bottom: 0;">
-                <label style="font-size: 14px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 8px;">自定义模型提示词 (Prompt)</label>
-                <textarea class="form-control" v-model="batchAnalyzeModal.promptContent" @input="batchAnalyzeModal.isPromptManuallyEdited = true" rows="6" style="width: 100%; flex: 1; min-height: 150px; padding: 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary); font-family: monospace; font-size: 12px; resize: vertical; box-sizing: border-box;"></textarea>
-                <p style="font-size: 12px; color: var(--text-warning, #d97706); margin-top: 6px;" v-if="batchAnalyzeModal.isPromptManuallyEdited">
-                  ⚠️ 您已手动修改过提示词。切换上面的“分析内容选择”会重新生成提示词并覆盖您的修改。
-                </p>
-                <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;" v-else>
-                  根据您勾选的分析内容，提示词模板会自动切换。您也可以在此处编辑本次运行的临时提示词。
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <!-- 阶段 2：执行进度与结果列表 -->
-          <div v-else class="drawer-content" style="padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; min-height: 300px;">
-            <!-- 顶部进度统计 -->
-            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--text-primary); font-weight: 600;">
-              <span>分析进度：{{ batchAnalyzeModal.status.current_index }} / {{ batchAnalyzeModal.status.total }}</span>
-              <span v-if="batchAnalyzeModal.status.status === 'running'" style="color: var(--primary-color);">
-                <i class="fas fa-spinner fa-spin"></i> 正在分析：{{ batchAnalyzeModal.status.current_file }}
-              </span>
-              <span v-else-if="batchAnalyzeModal.status.status === 'completed'" style="color: var(--text-ok);">
-                <i class="fas fa-check-circle"></i> 分析完成！
-              </span>
-              <span v-else style="color: var(--text-secondary);">已暂停/未开始</span>
-            </div>
-
-            <!-- 进度条 -->
-            <div style="width: 100%; height: 10px; background: var(--bg-secondary); border-radius: 5px; overflow: hidden; position: relative;">
-              <div :style="{ width: (batchAnalyzeModal.status.total > 0 ? (batchAnalyzeModal.status.current_index / batchAnalyzeModal.status.total * 100) : 0) + '%' }" 
-                   style="height: 100%; background: var(--primary-color); transition: width 0.3s ease-in-out;"></div>
-            </div>
-
-            <!-- 缩略图列表展示 -->
-            <div style="flex: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary); max-height: 40vh; padding: 10px;">
-              <div v-for="res in batchAnalyzeModal.status.results" :key="res.filename" 
-                   style="display: flex; gap: 12px; padding: 10px; border-bottom: 1px solid var(--border-color); background: #ffffff; border-radius: var(--radius-sm); margin-bottom: 8px;"
-                   :style="{ opacity: res.status === 'waiting' ? 0.6 : 1 }">
-                
-                <!-- 表情缩略图 -->
-                <div style="width: 60px; height: 60px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.02); border-radius: 4px; border: 1px solid var(--border-color);"
-                     :style="{ backgroundImage: 'url(' + getImageUrl(res.filename) + ')' }"></div>
-                
-                <!-- 分析状态与详情 -->
-                <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px;">
-                  <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-size: 12px; font-weight: 600; color: var(--text-primary); text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 250px;">{{ res.filename }}</span>
-                    <!-- 状态标签 -->
-                    <span v-if="res.status === 'success'" style="font-size: 11px; background: rgba(16, 185, 129, 0.1); color: var(--text-ok); padding: 2px 6px; border-radius: 10px; font-weight: 500;">
-                      <i class="fas fa-check"></i> 成功
-                    </span>
-                    <span v-else-if="res.status === 'running'" style="font-size: 11px; background: rgba(59, 130, 246, 0.1); color: var(--primary-color); padding: 2px 6px; border-radius: 10px; font-weight: 500;">
-                      <i class="fas fa-spinner fa-spin"></i> 分析中
-                    </span>
-                    <span v-else-if="res.status === 'waiting'" style="font-size: 11px; background: var(--bg-secondary); color: var(--text-secondary); padding: 2px 6px; border-radius: 10px; font-weight: 500;">
-                      等待中
-                    </span>
-                    <span v-else style="font-size: 11px; background: rgba(239, 68, 68, 0.1); color: var(--danger-color); padding: 2px 6px; border-radius: 10px; font-weight: 500;">
-                      <i class="fas fa-exclamation-circle"></i> 失败
-                    </span>
-                  </div>
-
-                  <!-- 结果详情 -->
-                  <div v-if="res.status === 'success'" style="font-size: 11px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 2px;">
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center;">
-                      <strong style="color: var(--text-primary);">标签:</strong>
-                      <span v-for="tag in res.tags" :key="tag" class="tag-pill" style="font-size: 10px; padding: 1px 4px;">{{ tag }}</span>
-                      <span v-if="res.tags.length === 0" style="color: var(--text-secondary); font-style: italic;">无标签</span>
-                    </div>
-                    <div style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;" :title="res.description">
-                      <strong style="color: var(--text-primary);">描述:</strong> {{ res.description || '(空)' }}
-                    </div>
-                  </div>
-                  <div v-else-if="res.status === 'error'" style="font-size: 11px; color: var(--danger-color);">
-                    <strong>错误:</strong> {{ res.error }}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 底部操作按钮 -->
-          <div class="drawer-actions" style="padding: 16px 20px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 8px; background: rgba(0, 0, 0, 0.01); flex-shrink: 0;">
-            <template v-if="batchAnalyzeModal.step === 'config'">
-              <button class="btn-secondary" @click="closeBatchAnalyzeModal">取消</button>
-              <button class="btn-primary" @click="startBatchAnalyze" :disabled="!batchAnalyzeModal.selectedProvider || (!batchAnalyzeModal.analyzeTags && !batchAnalyzeModal.analyzeDescription)">
-                开始重新分析
-              </button>
-            </template>
-            <template v-else>
-              <button class="btn-secondary" @click="closeBatchAnalyzeModal" :disabled="batchAnalyzeModal.status.status === 'running'">
-                关闭
-              </button>
-              <button class="btn-danger" @click="cancelBatchAnalyze" :disabled="batchAnalyzeModal.status.status !== 'running'">
-                取消分析
-              </button>
-            </template>
-          </div>
-
-        </div>
-      </div>
+      <batch-analyze-modal
+        :dialog="batchAnalyzeModal"
+        :selected-count="selectedEmojis.size"
+        :get-image-url="getImageUrl"
+        @close="closeBatchAnalyzeModal"
+        @start="startBatchAnalyze"
+        @cancel="cancelBatchAnalyze"
+      ></batch-analyze-modal>
 
       <!-- 类别重命名模态框 -->
-      <div v-if="renameCategoryModal.visible" class="category-edit-modal" role="dialog" aria-modal="true">
-        <div class="category-edit-modal-card">
-          <p class="category-edit-modal-eyebrow">标签管理</p>
-          <h2>重命名标签</h2>
-          <p>重命名标签 「{{ renameCategoryModal.originalCategory }}」 及其关联 of 表情包。</p>
-          <div class="category-edit-form-panel">
-            <label>新标签名称</label>
-            <input type="text" v-model="renameCategoryModal.category" class="form-control" placeholder="请输入新标签名称" />
-          </div>
-          <div class="category-edit-modal-actions">
-            <button class="btn-secondary" @click="renameCategoryModal.visible = false">取消</button>
-            <button class="btn-primary" @click="saveRenameCategory">
-              保存修改
-            </button>
-          </div>
-        </div>
-      </div>
+      <category-rename-modal
+        :dialog="renameCategoryModal"
+        @close="renameCategoryModal.visible = false"
+        @save="saveRenameCategory"
+      ></category-rename-modal>
 
       <!-- 添加类别模态框 -->
-      <div v-if="addCategoryForm.visible" class="category-edit-modal" role="dialog" aria-modal="true">
-        <div class="category-edit-modal-card">
-          <p class="category-edit-modal-eyebrow">标签管理</p>
-          <h2>添加新标签</h2>
-          <div class="category-edit-form-panel">
-            <label>标签名称</label>
-            <input type="text" v-model="addCategoryForm.name" placeholder="标签名称" class="form-control" />
-          </div>
-          <div class="category-edit-modal-actions">
-            <button class="btn-secondary" @click="addCategoryForm.visible = false">取消</button>
-            <button class="btn-primary" @click="saveNewCategory">
-              保存标签
-            </button>
-          </div>
-        </div>
-      </div>
+      <add-category-modal
+        :form="addCategoryForm"
+        @close="addCategoryForm.visible = false"
+        @save="saveNewCategory"
+      ></add-category-modal>
 
       <!-- 表情包编辑属性模态框 -->
-      <div v-if="activeDetailEmoji" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeDetailDrawer">
-        <div class="emoji-detail-modal-card" :class="{ loading: detailDrawerLoading }">
-          <!-- Loading Overlay -->
-          <div v-if="detailDrawerLoading" class="loading-overlay">
-            <i class="fas fa-circle-notch fa-spin fa-2x"></i>
-          </div>
-
-          <div class="drawer-header">
-            <span class="drawer-title">编辑属性: {{ activeDetailEmoji }}</span>
-            <button class="drawer-close-btn" @click="closeDetailDrawer">&times;</button>
-          </div>
-          <div class="drawer-body-layout">
-            <!-- 左侧大图预览 -->
-            <div class="drawer-preview-column">
-              <img :src = "getImageUrl(activeDetailEmoji)" :alt="activeDetailEmoji" />
-            </div>
-
-            <!-- 右侧编辑区域 -->
-            <div class="drawer-edit-column">
-              <!-- 标签多选 -->
-              <div class="drawer-section">
-                <label>分类标签 (点击进行选择/取消选择)</label>
-                <div class="search-wrapper" 
-                     @click="$refs.drawerTagInput.focus()"
-                     :style="{ 
-                       marginBottom: '8px', 
-                       padding: '4px 8px', 
-                       border: '1px solid ' + (isDrawerInputFocused ? 'var(--primary-color)' : 'var(--border-color)'), 
-                       borderRadius: 'var(--radius-sm)', 
-                       background: '#ffffff', 
-                       display: 'flex', 
-                       flexWrap: 'wrap', 
-                       alignItems: 'center', 
-                       gap: '6px', 
-                       minHeight: '34px', 
-                       cursor: 'text',
-                       boxShadow: isDrawerInputFocused ? '0 0 0 2px rgba(59, 130, 246, 0.1)' : 'none',
-                       transition: 'border-color 0.2s, box-shadow 0.2s'
-                     }">
-                  <span v-for="cat in selectedEmotions" 
-                        :key="cat" 
-                        class="active-tag-pill" 
-                        style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: #2563eb; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500;">
-                    {{ cat }}
-                    <span @click.stop="toggleTagInDrawer(cat)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #2563eb; line-height: 1; padding: 0 2px; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#2563eb'">&times;</span>
-                  </span>
-                  <input type="text" 
-                         ref="drawerTagInput"
-                         v-model="drawerTagSearchQuery" 
-                         @focus="isDrawerInputFocused = true"
-                         @blur="isDrawerInputFocused = false"
-                         @keydown.backspace="handleBackspace"
-                         @keyup.enter="handleCreateTagInDrawer" 
-                         placeholder="搜索或输入后回车新建标签..." 
-                         style="flex: 1; min-width: 120px; border: none; outline: none; background: transparent; height: 26px; font-size: 12px; padding: 0; color: var(--text-primary);" />
-                  <button v-if="drawerTagSearchQuery" 
-                          @click.stop="drawerTagSearchQuery = ''" 
-                          style="background: transparent; border: none; color: var(--text-secondary); font-size: 14px; cursor: pointer; padding: 0 4px; display: flex; align-items: center; margin-left: auto;">&times;</button>
-                </div>
-                <div class="drawer-tags-picker">
-                  <span v-for="cat in filteredDrawerTags" 
-                        :key="cat" 
-                        class="picker-tag-pill" 
-                        :class="{ active: selectedEmotions.includes(cat) }" 
-                        @click="toggleTagInDrawer(cat)">
-                    {{ cat }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- 表情包描述 -->
-              <div class="drawer-section">
-                <label for="drawer-description-input">表情描述</label>
-                <textarea id="drawer-description-input" 
-                          v-model="detailEmojiDescription" 
-                          class="form-control" 
-                          style="width: 100%; height: 60px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: #ffffff; color: var(--text-primary); resize: vertical; font-family: inherit; font-size: 13px;" 
-                          placeholder="请输入表情包的简短描述..."></textarea>
-              </div>
-
-              <!-- 人格可用性多选 -->
-              <div class="drawer-section">
-                <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
-                <div class="drawer-personas-list">
-                  <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                    <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="togglePersonaInDrawer('*')" style="width: 14px; height: 14px;" />
-                    <span>全局可用 (*)</span>
-                  </label>
-                  <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                    <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="togglePersonaInDrawer(p.id)" style="width: 14px; height: 14px;" />
-                    <span>{{ p.name }} ({{ p.id }})</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="drawer-actions">
-            <div class="navigation-group">
-              <button class="btn-secondary icon-only-btn" 
-                      :disabled="!hasPreviousEmoji" 
-                      @click="navigateToSiblingEmoji(-1)"
-                      title="上一张">
-                <i class="fas fa-chevron-left"></i>
-              </button>
-              <button class="btn-secondary icon-only-btn" 
-                      :disabled="!hasNextEmoji" 
-                      @click="navigateToSiblingEmoji(1)"
-                      title="下一张">
-                <i class="fas fa-chevron-right"></i>
-              </button>
-              <button class="btn-secondary" 
-                      @click="saveEmojiAttributes(false)">
-                保存修改
-              </button>
-            </div>
-            <div class="action-group">
-              <button class="btn-secondary" @click="closeDetailDrawer">取消</button>
-              <button class="btn-primary" @click="saveEmojiAttributes(true)">保存并关闭</button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <emoji-detail-modal
+        :active-emoji="activeDetailEmoji"
+        :metadata="detailMetadata"
+        :description="detailEmojiDescription"
+        @update:description="val => detailEmojiDescription = val"
+        :loading="detailDrawerLoading"
+        :selected-emotions="selectedEmotions"
+        :selected-personas="selectedPersonas"
+        :system-personas="systemPersonas"
+        :drawer-tag-search-query="drawerTagSearchQuery"
+        @update:drawer-tag-search-query="val => drawerTagSearchQuery = val"
+        :filtered-drawer-tags="filteredDrawerTags"
+        :has-previous-emoji="hasPreviousEmoji"
+        :has-next-emoji="hasNextEmoji"
+        :get-image-url="getImageUrl"
+        @close="closeDetailDrawer"
+        @toggle-tag="toggleTagInDrawer"
+        @toggle-persona="togglePersonaInDrawer"
+        @backspace="handleBackspace"
+        @create-tag="handleCreateTagInDrawer"
+        @navigate="navigateToSiblingEmoji"
+        @save="saveEmojiAttributes"
+      ></emoji-detail-modal>
 
       <!-- 批量导入已有表情包模态框 -->
-      <div v-if="importModal.visible" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="closeImportModal">
-        <div class="emoji-detail-modal-card" style="max-width: 800px; width: 90%;">
-          <div class="drawer-header">
-            <span class="drawer-title">导入已存表情到标签「{{ activeCategory }}」</span>
-            <button class="drawer-close-btn" @click="closeImportModal">&times;</button>
-          </div>
-          <div class="drawer-content" style="max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
-            <p style="margin-bottom: 15px; color: var(--text-secondary);">请选择要追加到当前分类的表情包（已选中 {{ importModal.selectedEmojis.size }} 个）：</p>
-            <div v-if="importableEmojisList.length === 0" style="padding: 40px; text-align: center; color: var(--text-secondary);">
-              没有可导入的其他表情包。
-            </div>
-            <div v-else class="emoji-grid" style="grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px;">
-              <div v-for="emoji in importableEmojisList" 
-                   :key="emoji" 
-                   class="emoji-card" 
-                   :class="{ active: importModal.selectedEmojis.has(emoji) }"
-                   style="margin: 0;">
-                <div class="emoji-item" 
-                     :class="{ selected: importModal.selectedEmojis.has(emoji), 'selection-mode': true }"
-                     :style="{ backgroundImage: 'url(' + getImageUrl(emoji) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
-                     @click="toggleImportEmoji(emoji)">
-                  <button type="button" class="selection-indicator" aria-label="选择表情包"></button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="drawer-actions" style="margin-top: 20px;">
-            <button class="btn-secondary" @click="closeImportModal">取消</button>
-            <button class="btn-primary" :disabled="importModal.selectedEmojis.size === 0" @click="submitImport">确认导入</button>
-          </div>
-        </div>
-      </div>
+      <import-modal
+        :dialog="importModal"
+        :active-category="activeCategory"
+        :importable-emojis-list="importableEmojisList"
+        :get-image-url="getImageUrl"
+        @toggle-emoji="toggleImportEmoji"
+        @close="closeImportModal"
+        @submit="submitImport"
+      ></import-modal>
 
       <!-- 右键/长按批量快捷菜单 -->
-      <div v-if="contextMenu.visible" 
-           class="batch-context-menu" 
-           :style="{ left: contextMenu.x + 'px', top: contextMenu.y + 'px' }"
-           @click.stop>
-        <div class="batch-context-menu-header">
-          <p>
-            批量管理 ({{ contextMenu.targetItems.length }} 个文件)
-          </p>
-        </div>
-        <div class="batch-context-menu-actions">
-          <button class="danger" @click="contextMenuDelete">
-            <i class="fas fa-trash-can icon"></i>删除文件
-          </button>
-          <button class="secondary" @click="contextMenuMove">
-            <i class="fas fa-right-left icon"></i>移动文件
-          </button>
-          <button class="secondary" @click="contextMenuCopy">
-            <i class="fas fa-copy icon"></i>复制文件
-          </button>
-          <button class="secondary" @click="contextMenuConvertToGif">
-            <i class="fas fa-file-image icon"></i>转换为 GIF
-          </button>
-          <button :disabled="contextMenu.pasteableItems.length === 0" @click="contextMenuPaste">
-            <i class="fas fa-paste icon"></i>粘贴文件 ({{ contextMenu.pasteableItems.length }})
-          </button>
-        </div>
-      </div>
+      <context-menu
+        :menu="contextMenu"
+        @delete="contextMenuDelete"
+        @move="contextMenuMove"
+        @copy="contextMenuCopy"
+        @convert-gif="contextMenuConvertToGif"
+        @paste="contextMenuPaste"
+      ></context-menu>
 
       <!-- 吐司通知容器 -->
       <div class="toast-container">
