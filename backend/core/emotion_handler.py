@@ -83,6 +83,10 @@ async def _select_memes_by_emotions_priority(
                 emotions_to_match.append(item)
 
     # 评分并筛选出本地确实存在的文件
+    last_tag_score = 1000
+    if len(emotions_to_match) > 1:
+        last_tag_score = max(1, 400 // (2 ** (len(emotions_to_match) - 2)))
+
     valid_memes = []
     memes_scoring_details = {}
     for row in rows:
@@ -96,34 +100,42 @@ async def _select_memes_by_emotions_priority(
                 else []
             )
 
-            # 计算匹配到的意图/输入标签重合数（matched_count）与位置分
+            # 计算匹配到的意图/输入标签重合数（matched_count）与位置权重分
             matched_count = 0
-            position_bonus = 0
+            matched_score = 0
             matched_details = []
             for idx, item in enumerate(emotions_to_match):
+                if idx == 0:
+                    tag_weight = 1000
+                else:
+                    tag_weight = max(1, 400 // (2 ** (idx - 1)))
+
                 if isinstance(item, tuple):
                     raw_tag, candidates = item
                     hit_candidates = [c for c in candidates if c in meme_emotions]
                     if hit_candidates:
                         matched_count += 1
-                        position_bonus += max(0, 100 - idx)
-                        matched_details.append(f"{raw_tag}->{hit_candidates}")
+                        matched_score += tag_weight
+                        matched_details.append(
+                            f"{raw_tag}->{hit_candidates}(+{tag_weight})"
+                        )
                 else:
                     if item in meme_emotions:
                         matched_count += 1
-                        position_bonus += max(0, 100 - idx)
-                        matched_details.append(f"{item}")
+                        matched_score += tag_weight
+                        matched_details.append(f"{item}(+{tag_weight})")
 
-            # 专属标签额外加分（每个匹配到的专属标签加 500 分）
+            # 专属标签额外加分（只有第一个是专属标签，其余偏好标签不参与计算。加分设定最高 10 分且必须低于最后一个标签的分数）
             dedicated_bonus = 0
             matched_dedicated = []
             if dedicated_tags:
-                for d_tag in dedicated_tags:
-                    if d_tag in meme_emotions:
-                        dedicated_bonus += 500
-                        matched_dedicated.append(d_tag)
+                primary_dedicated = dedicated_tags[0]
+                if primary_dedicated in meme_emotions:
+                    dedicated_bonus = min(10, max(0, (last_tag_score + 1) // 2 - 1))
+                    if dedicated_bonus > 0:
+                        matched_dedicated.append(primary_dedicated)
 
-            score = matched_count * 1000 + position_bonus + dedicated_bonus
+            score = matched_score + dedicated_bonus
             valid_memes.append((filename, score))
             memes_scoring_details[filename] = {
                 "score": score,
