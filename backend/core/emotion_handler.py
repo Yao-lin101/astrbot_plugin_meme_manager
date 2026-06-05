@@ -112,12 +112,22 @@ async def _select_memes_by_emotions_priority(
 
                 if isinstance(item, tuple):
                     raw_tag, candidates = item
-                    hit_candidates = [c for c in candidates if c in meme_emotions]
-                    if hit_candidates:
+                    # 找到所有匹配的候选词及其在候选列表中的索引
+                    matching_indices = [
+                        idx_c
+                        for idx_c, c in enumerate(candidates)
+                        if c in meme_emotions
+                    ]
+                    if matching_indices:
                         matched_count += 1
-                        matched_score += tag_weight
+                        # 取匹配度最高的那个候选词（即 index 最小的那个）
+                        best_candidate_idx = min(matching_indices)
+                        # 基于候选词排名的衰减系数：排在第 1 的（index 0）保留 100% 分值，后面每顺延一位衰减 10%，保底保留 50%
+                        decay_factor = max(0.5, 1.0 - best_candidate_idx * 0.1)
+                        weighted_tag_score = int(tag_weight * decay_factor)
+                        matched_score += weighted_tag_score
                         matched_details.append(
-                            f"{raw_tag}->{hit_candidates}(+{tag_weight})"
+                            f"{raw_tag}->{candidates[best_candidate_idx]}(+{weighted_tag_score})"
                         )
                 else:
                     if item in meme_emotions:
