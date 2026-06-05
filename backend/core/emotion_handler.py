@@ -380,6 +380,17 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
 
     sender.found_emotions = []  # 重置表情列表
     persona_id = await get_persona_id(sender, event)
+
+    # Print config and persona prompt details
+    logger.info(
+        f"[meme_manager] Debug handle_resp: enable_emotion_llm={getattr(sender, 'enable_emotion_llm', False)}, "
+        f"enable_llm_tool={getattr(sender, 'enable_llm_tool', 'tag')}, persona_id={persona_id}"
+    )
+    for p in sender.context.provider_manager.personas:
+        if p.get("name") == persona_id or p.get("id") == persona_id:
+            logger.info(
+                f"[meme_manager] Debug Persona prompt in use: {p.get('prompt')!r}"
+            )
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
@@ -445,7 +456,7 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
             from .helpers import get_persona_setting
 
             pref = get_persona_setting(sender.config, persona_id, "meme_use_preference")
-            pref_str = f"【当前人格的表情包使用偏好说明】:\n{pref}\n\n" if pref else ""
+            pref_str = f"【当前人格的常用偏好表情标签】:\n{pref}\n\n" if pref else ""
 
             base_prompt = getattr(sender, "emotion_llm_prompt", "")
             prompt = (
