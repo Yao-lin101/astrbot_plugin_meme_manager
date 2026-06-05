@@ -59,7 +59,7 @@ async def _select_memes_by_emotions_priority(
     if emotion_conditions:
         conditions.append(f"({' OR '.join(emotion_conditions)})")
 
-    sql = f"SELECT filename, emotions FROM memes WHERE {' AND '.join(conditions)}"
+    sql = f"SELECT filename, emotions, description FROM memes WHERE {' AND '.join(conditions)}"
     cursor.execute(sql, tuple(params))
     rows = cursor.fetchall()
     conn.close()
@@ -145,6 +145,7 @@ async def _select_memes_by_emotions_priority(
                     if dedicated_bonus > 0:
                         matched_dedicated.append(primary_dedicated)
 
+            description = row["description"] if "description" in row.keys() else ""
             score = matched_score + dedicated_bonus
             valid_memes.append((filename, score))
             memes_scoring_details[filename] = {
@@ -154,6 +155,7 @@ async def _select_memes_by_emotions_priority(
                 "dedicated_bonus": dedicated_bonus,
                 "matched_dedicated": matched_dedicated,
                 "meme_emotions": meme_emotions,
+                "description": description,
             }
 
     if not valid_memes:
@@ -184,10 +186,13 @@ async def _select_memes_by_emotions_priority(
         log_lines = []
         for filename in selected_memes:
             detail = memes_scoring_details.get(filename, {})
+            desc = detail.get("description", "")
+            desc_line = f"    描述: {desc}\n" if desc else ""
             log_lines.append(
-                f"  - 图片: {filename}\n"
+                f"  - 表情包所有标签: {detail.get('meme_emotions')}\n"
+                f"{desc_line}"
                 f"    总分: {detail.get('score')} | 意图匹配数: {detail.get('matched_count')}\n"
-                f"    匹配详情: {detail.get('matched_details')} | 表情包所有标签: {detail.get('meme_emotions')}\n"
+                f"    匹配详情: {detail.get('matched_details')} |\n"
                 f"    专属标签加分: {detail.get('dedicated_bonus')} (命中专属标签: {detail.get('matched_dedicated')})"
             )
         logger.info(
@@ -304,7 +309,7 @@ async def _handle_resp_vector(
                 raw_tags.append(tag)
         clean_text = clean_text.replace(original, "")
 
-    logger.info(
+    logger.debug(
         f"[meme_manager] _handle_resp_vector: raw_text={text!r}, extracted raw_tags={raw_tags}, clean_text={clean_text!r}"
     )
     logger.debug(
@@ -339,7 +344,9 @@ async def _handle_resp_vector(
                 if not already_matched:
                     sender.found_emotions.append((chosen_tag, [chosen_tag]))
 
-    logger.info(f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}")
+    logger.debug(
+        f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}"
+    )
 
     clean_text = re.sub(
         r"<emotions>.*?</emotions>",
@@ -675,7 +682,7 @@ async def match_emotions_by_tags(
             tags_to_embed.append(raw_tag)
 
     if exact_matches:
-        logger.info(
+        logger.debug(
             f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(exact_matches.values())}"
         )
 
@@ -744,7 +751,7 @@ async def match_emotions_by_tags(
                             if len(filtered_candidates) == 5:
                                 break
 
-                    logger.info(
+                    logger.debug(
                         f"[meme_manager] (直接触发) 查询标签 '{raw_tag}' 召回候选匹配 (已去重/顺延/最多5个): {filtered_candidates} (阈值={similarity_threshold})"
                     )
 
@@ -805,7 +812,7 @@ async def get_direct_trigger_memes(
     matched_emotions = await match_emotions_by_tags(
         sender, event, raw_tags, valid_emoticons
     )
-    logger.info(f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}")
+    logger.debug(f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}")
     if not matched_emotions:
         return []
 
