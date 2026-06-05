@@ -20,7 +20,7 @@ from .helpers import (
 
 
 async def _select_memes_by_emotions_priority(
-    sender, found_emotions: list[str], persona_id: str
+    sender, found_emotions: list, persona_id: str
 ) -> list[str]:
     """根据情绪标签的重合度优先级筛选并随机推荐表情包图片。
 
@@ -29,10 +29,21 @@ async def _select_memes_by_emotions_priority(
     if not found_emotions:
         return []
 
+    # 兼容处理：提取所有可能的目标表情标签，用于构建 SQL 查询条件
+    flat_emotions = set()
+    for item in found_emotions:
+        if isinstance(item, tuple):
+            flat_emotions.update(item[1])
+        else:
+            flat_emotions.add(item)
+
+    if not flat_emotions:
+        return []
+
     conn = get_db_conn()
     cursor = conn.cursor()
 
-    # 构建 SQL 条件：匹配指定人格或全局，并且至少匹配其中一个情绪标签 (OR)
+    # 构建 SQL 条件：匹配指定人格或全局，并且至少匹配其中一个候选情绪标签 (OR)
     conditions = []
     params = []
 
@@ -40,7 +51,7 @@ async def _select_memes_by_emotions_priority(
     params.append(f"%,{persona_id},%")
 
     emotion_conditions = []
-    for emotion in found_emotions:
+    for emotion in flat_emotions:
         if emotion:
             emotion_conditions.append("',' || emotions || ',' LIKE ?")
             params.append(f"%,{emotion},%")
@@ -60,11 +71,16 @@ async def _select_memes_by_emotions_priority(
     dedicated_tag_str = p_tags.get(persona_id) or ""
     dedicated_tags = [t.strip() for t in dedicated_tag_str.split(",") if t.strip()]
 
-    emotions_to_match = (
-        [e for e in found_emotions if e not in dedicated_tags]
-        if dedicated_tags
-        else found_emotions
-    )
+    # 过滤掉专属表情，仅保留真正用于意图匹配/偏向打分的标签
+    emotions_to_match = []
+    for item in found_emotions:
+        if isinstance(item, tuple):
+            raw_tag, candidates = item
+            if raw_tag not in dedicated_tags:
+                emotions_to_match.append(item)
+        else:
+            if item not in dedicated_tags:
+                emotions_to_match.append(item)
 
     # 评分并筛选出本地确实存在的文件
     valid_memes = []
@@ -78,13 +94,20 @@ async def _select_memes_by_emotions_priority(
                 if row["emotions"]
                 else []
             )
-            matched_count = sum(1 for e in emotions_to_match if e in meme_emotions)
 
-            # 偏置评分：越靠前的标签越优先
+            # 计算匹配到的意图/输入标签重合数（matched_count）与位置分
+            matched_count = 0
             position_bonus = 0
-            for idx, e in enumerate(emotions_to_match):
-                if e in meme_emotions:
-                    position_bonus += max(0, 100 - idx)
+            for idx, item in enumerate(emotions_to_match):
+                if isinstance(item, tuple):
+                    raw_tag, candidates = item
+                    if any(c in meme_emotions for c in candidates):
+                        matched_count += 1
+                        position_bonus += max(0, 100 - idx)
+                else:
+                    if item in meme_emotions:
+                        matched_count += 1
+                        position_bonus += max(0, 100 - idx)
 
             # 专属标签额外加分（每个匹配到的专属标签加 500 分）
             dedicated_bonus = 0
@@ -236,118 +259,12 @@ async def _handle_resp_vector(
         f"[meme_manager] _handle_resp_vector: valid_emoticons={list(valid_emoticons)}"
     )
 
-    # 3. 精确匹配校验与筛选（保持 LLM 输出的标签顺序，顺序会影响下游优先级评分）
-    exact_matches = {}
-    tags_to_embed = []
+    # 2. 调用 match_emotions_by_tags 匹配标签
+    sender.found_emotions = await match_emotions_by_tags(
+        sender, event, raw_tags, valid_emoticons
+    )
 
-    for raw_tag in raw_tags:
-        matched = None
-        for valid in valid_emoticons:
-            if raw_tag.lower() == valid.lower():
-                matched = valid
-                break
-        if matched:
-            exact_matches[raw_tag] = matched
-        else:
-            tags_to_embed.append(raw_tag)
-
-    if exact_matches:
-        logger.info(
-            f"[meme_manager] 精确匹配到的表情标签: {list(exact_matches.values())}"
-        )
-
-    # 4. 获取 Embedding Provider
-    provider_id = get_config_value(sender.config, "embedding_provider_id", "")
-    embedding_provider = None
-    if provider_id:
-        embedding_provider = sender.context.get_provider_by_id(provider_id)
-    if not embedding_provider:
-        provs = sender.context.get_all_embedding_providers()
-        if provs:
-            embedding_provider = provs[0]
-
-    if embedding_provider:
-        logger.debug(
-            f"[meme_manager] 使用 Embedding Provider: {getattr(embedding_provider, 'id', type(embedding_provider).__name__)}"
-        )
-    else:
-        logger.info("[meme_manager] 没有可用的 Embedding Provider 节点")
-
-    # 5. 计算相似度匹配
-    vector_matches = {}
-    if embedding_provider:
-        from ..db.database import get_all_tag_embeddings
-
-        tag_embeddings = get_all_tag_embeddings()
-
-        # Check if there are any valid emotions missing from the embedding database
-        import asyncio
-
-        missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
-        if missing_tags:
-            logger.info(
-                f"[meme_manager] 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
-            )
-            asyncio.create_task(sync_tag_embeddings(sender))
-
-        raw_tags_vectors = {}
-        for raw_tag in tags_to_embed:
-            try:
-                vec = await embedding_provider.get_embedding(raw_tag)
-                if vec:
-                    raw_tags_vectors[raw_tag] = vec
-                    logger.info(
-                        f"[meme_manager] 获取标签 '{raw_tag}' 向量成功：维度={len(vec)}, "
-                        f"前5位数据={vec[:5]}"
-                    )
-            except Exception as e:
-                logger.warning(f"[meme_manager] 获取标签 '{raw_tag}' 向量失败: {e}")
-
-        logger.debug(
-            f"[meme_manager] 提取标签向量 {len(raw_tags_vectors)} 个, 缓存的标签向量总数={len(tag_embeddings)}"
-        )
-
-        if raw_tags_vectors and tag_embeddings:
-            similarity_threshold = get_config_value(
-                sender.config, "embedding_similarity_threshold", 0.6
-            )
-
-            # 每个查询标签单独召回最相似的数据库标签，且保留各自最高得分的召回结果
-            for raw_tag, raw_vec in raw_tags_vectors.items():
-                best_tag = None
-                best_sim = -1.0
-                for valid_tag in valid_emoticons:
-                    if valid_tag in exact_matches.values():
-                        continue
-                    tag_vec = tag_embeddings.get(valid_tag)
-                    if not tag_vec:
-                        continue
-                    sim = cosine_similarity(raw_vec, tag_vec)
-                    if sim > best_sim:
-                        best_sim = sim
-                        best_tag = valid_tag
-
-                logger.info(
-                    f"[meme_manager] 查询标签 '{raw_tag}' 召回最佳匹配: '{best_tag}' (相似度={best_sim:.4f}, 阈值={similarity_threshold})"
-                )
-
-                if best_tag and best_sim >= similarity_threshold:
-                    vector_matches[raw_tag] = best_tag
-    else:
-        logger.warning(
-            "[meme_manager] 未配置或未找到可用的 Embedding 模型，无法进行向量召回。"
-        )
-
-    # 6. 合并精确匹配和召回结果，严格保持 LLM 原始的标签顺序
-    final_emotions = []
-    for raw_tag in raw_tags:
-        matched_tag = exact_matches.get(raw_tag) or vector_matches.get(raw_tag)
-        if matched_tag and matched_tag not in final_emotions:
-            final_emotions.append(matched_tag)
-
-    sender.found_emotions = final_emotions
-
-    # 追加专属表情判定（跟原逻辑保持一致）
+    # 3. 追加专属表情判定（跟原逻辑保持一致，支持新的 tuple 结构）
     if sender.found_emotions:
         import random
 
@@ -356,8 +273,19 @@ async def _handle_resp_vector(
             d_tags = [t.strip() for t in dedicated_tag.split(",") if t.strip()]
             if d_tags:
                 chosen_tag = d_tags[0]
-                if chosen_tag not in sender.found_emotions:
-                    sender.found_emotions.append(chosen_tag)
+                already_matched = False
+                for item in sender.found_emotions:
+                    if isinstance(item, tuple):
+                        raw_tag, candidates = item
+                        if chosen_tag == raw_tag or chosen_tag in candidates:
+                            already_matched = True
+                            break
+                    else:
+                        if chosen_tag == item:
+                            already_matched = True
+                            break
+                if not already_matched:
+                    sender.found_emotions.append((chosen_tag, [chosen_tag]))
 
     logger.info(f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}")
 
@@ -669,8 +597,8 @@ async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict
 
 async def match_emotions_by_tags(
     sender, event: AstrMessageEvent, raw_tags: list[str], valid_emoticons: set[str]
-) -> list[str]:
-    """根据原始标签列表，通过精确匹配 + 向量相似度匹配，返回命中的有效表情标签列表。
+) -> list[tuple[str, list[str]]]:
+    """根据原始标签列表，通过精确匹配 + 向量相似度匹配，返回命中的有效表情标签列表 (每个标签对应其候选列表)。
 
     与 `_handle_resp_vector` 的核心匹配逻辑一致（均为仅基于标签的单通道检索），
     供 `<emotions>...</emotions>` 直接触发场景复用。
@@ -678,7 +606,7 @@ async def match_emotions_by_tags(
     if not raw_tags or not valid_emoticons:
         return []
 
-    # 1. 精确匹配（大小写不敏感，保持 LLM 输出顺序，顺序会影响下游优先级评分）
+    used_candidates = set()
     exact_matches = {}
     tags_to_embed = []
     for raw_tag in raw_tags:
@@ -688,7 +616,9 @@ async def match_emotions_by_tags(
                 matched = valid
                 break
         if matched:
-            exact_matches[raw_tag] = matched
+            if matched not in used_candidates:
+                exact_matches[raw_tag] = matched
+                used_candidates.add(matched)
         else:
             tags_to_embed.append(raw_tag)
 
@@ -740,27 +670,35 @@ async def match_emotions_by_tags(
                     sender.config, "embedding_similarity_threshold", 0.6
                 )
 
-                # 每个查询标签单独召回最相似 of 数据库标签，且保留各自最高得分的召回结果
+                # 每个查询标签单独召回最相似 of 数据库标签，保留相似度符合阈值的 top 5 候选结果 (跨标签去重且顺延)
                 for raw_tag, raw_vec in raw_tags_vectors.items():
-                    best_tag = None
-                    best_sim = -1.0
+                    candidates_with_scores = []
                     for valid_tag in valid_emoticons:
-                        if valid_tag in exact_matches.values():
-                            continue
                         tag_vec = tag_embeddings.get(valid_tag)
                         if not tag_vec:
                             continue
                         sim = cosine_similarity(raw_vec, tag_vec)
-                        if sim > best_sim:
-                            best_sim = sim
-                            best_tag = valid_tag
+                        if sim >= similarity_threshold:
+                            candidates_with_scores.append((valid_tag, sim))
+
+                    # 降序排序
+                    candidates_with_scores.sort(key=lambda x: x[1], reverse=True)
+
+                    # 过滤已使用的候选词，向下顺延，取前5个
+                    filtered_candidates = []
+                    for valid_tag, sim in candidates_with_scores:
+                        if valid_tag not in used_candidates:
+                            filtered_candidates.append(valid_tag)
+                            if len(filtered_candidates) == 5:
+                                break
 
                     logger.info(
-                        f"[meme_manager] (直接触发) 查询标签 '{raw_tag}' 召回最佳匹配: '{best_tag}' (相似度={best_sim:.4f}, 阈值={similarity_threshold})"
+                        f"[meme_manager] (直接触发) 查询标签 '{raw_tag}' 召回候选匹配 (已去重/顺延/最多5个): {filtered_candidates} (阈值={similarity_threshold})"
                     )
 
-                    if best_tag and best_sim >= similarity_threshold:
-                        vector_matches[raw_tag] = best_tag
+                    if filtered_candidates:
+                        used_candidates.update(filtered_candidates)
+                        vector_matches[raw_tag] = filtered_candidates
         else:
             logger.debug(
                 "[meme_manager] (直接触发) 没有可用的 Embedding Provider，跳过向量匹配。"
@@ -769,9 +707,12 @@ async def match_emotions_by_tags(
     # 合并精确匹配和召回结果，严格保持原始输入的标签顺序
     final_emotions = []
     for raw_tag in raw_tags:
-        matched_tag = exact_matches.get(raw_tag) or vector_matches.get(raw_tag)
-        if matched_tag and matched_tag not in final_emotions:
-            final_emotions.append(matched_tag)
+        if raw_tag in exact_matches:
+            matched_tag = exact_matches[raw_tag]
+            final_emotions.append((raw_tag, [matched_tag]))
+        elif raw_tag in vector_matches:
+            candidates = vector_matches[raw_tag]
+            final_emotions.append((raw_tag, candidates))
 
     return final_emotions
 
