@@ -439,16 +439,13 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
                 )
                 return
 
-            max_emotions = getattr(sender, "max_emotions_per_message", 2)
             user_input = event.message_str or ""
             bot_response = response.completion_text
 
             from .helpers import get_persona_setting
 
-            pref = get_persona_setting(sender.config, persona_id, "meme_preference")
-            pref_str = (
-                f"【当前人格的表情包收集与使用偏好】:\n{pref}\n\n" if pref else ""
-            )
+            pref = get_persona_setting(sender.config, persona_id, "meme_use_preference")
+            pref_str = f"【当前人格的表情包使用偏好说明】:\n{pref}\n\n" if pref else ""
 
             base_prompt = getattr(sender, "emotion_llm_prompt", "")
             prompt = (
@@ -458,11 +455,8 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
                 f"用户发送: {user_input}\n"
                 f"助手回复: {bot_response}\n\n"
                 f"【输出格式要求】:\n"
-                f"1. 请根据对话背景和助手回复，自由输出 1 到 {max_emotions} 个最符合当前回复语气、画面主体或情感的表情包标签（可从意图、画面主体、风格态度等社交维度自由选择，如：得意, 摸头, 猫猫, 委屈，多个标签用英文逗号分隔）。多标签更容易匹配到合适的表情包。\n"
-                f"2. 如果不需要发送表情包，请直接返回空。\n"
-                f"3. 必须输出以 `<emotions>标签1, 标签2</emotions>` 格式包裹的标签，不要包含任何其他说明文字、markdown标记或标点符号。\n"
-                f"例如：`<emotions>得意, 摸头</emotions>`\n"
-                f"如果不需要表情，则直接返回空内容。"
+                f"1. 请根据对话背景和助手回复，自由输出最符合当前回复语气、画面主体或情感的多个表情包标签（用英文逗号分隔，如：得意, 摸头, 猫猫, 委屈）。可以自由发挥，输出尽可能丰富的标签以方便向量匹配。\n"
+                f"2. 请直接输出用逗号分隔的标签文本，严禁包含任何 HTML 标签（如 <emotions>）、Markdown 格式、解释说明或额外文字。如果不需要任何表情包，请直接返回空。"
             )
 
             logger.info(
@@ -476,9 +470,14 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
                 raw_text = llm_resp.completion_text.strip()
                 logger.info(f"[meme_manager] 情感模型返回内容: {raw_text}")
                 if raw_text:
-                    if "<emotions>" not in raw_text.lower():
-                        raw_text = f"<emotions>{raw_text}</emotions>"
-                    response.completion_text = f"{response.completion_text}\n{raw_text}"
+                    # Clean up any accidental markdown or html wrappers the LLM might have outputted
+                    clean_tags = re.sub(r"<[^>]*>", "", raw_text)
+                    clean_tags = clean_tags.replace("`", "").strip()
+                    if clean_tags:
+                        wrapped_tags = f"<emotions>{clean_tags}</emotions>"
+                        response.completion_text = (
+                            f"{response.completion_text}\n{wrapped_tags}"
+                        )
         except Exception as e:
             logger.error(f"[meme_manager] 调用情感模型失败: {e}", exc_info=True)
 
