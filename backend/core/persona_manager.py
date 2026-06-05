@@ -96,4 +96,6 @@ def reload_personas(sender):
                 persona["prompt"] = injected_prompt + hybrid_instruction
             else:
                 behavior_prompt = f"\n\n<meme_behavior_instructions>\n{sender.meme_prompt}\n</meme_behavior_instructions>"
-                persona["prompt"] = injected_prompt + behavior_prompt + format_instruction
+                persona["prompt"] = (
+                    injected_prompt + behavior_prompt + format_instruction
+                )
