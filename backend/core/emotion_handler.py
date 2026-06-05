@@ -68,16 +68,16 @@ async def get_scored_memes_by_emotions(
     dedicated_tag_str = p_tags.get(persona_id) or ""
     dedicated_tags = [t.strip() for t in dedicated_tag_str.split(",") if t.strip()]
 
-    # 过滤掉专属表情，仅保留真正用于意图匹配/偏向打分 的标签
+    # Filter out auto-appended dedicated tags, keeping only the tags meant for active matching/scoring
     emotions_to_match = []
     for item in found_emotions:
         if isinstance(item, tuple):
-            raw_tag, candidates = item
-            if raw_tag not in dedicated_tags:
-                emotions_to_match.append(item)
+            if len(item) == 3 and item[2] is True:
+                continue
+            raw_tag, candidates = item[0], item[1]
+            emotions_to_match.append((raw_tag, candidates))
         else:
-            if item not in dedicated_tags:
-                emotions_to_match.append(item)
+            emotions_to_match.append(item)
 
     # 评分并筛选出本地确实存在的文件
     last_tag_score = 1000
@@ -361,7 +361,7 @@ async def _handle_resp_vector(
                             already_matched = True
                             break
                 if not already_matched:
-                    sender.found_emotions.append((chosen_tag, [chosen_tag]))
+                    sender.found_emotions.append((chosen_tag, [chosen_tag], True))
 
     logger.debug(
         f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}"
