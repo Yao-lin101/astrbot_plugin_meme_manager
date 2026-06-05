@@ -11,7 +11,16 @@ def reload_personas(sender):
     for persona in personas:
         name = persona.get("name") or ""
         if name not in sender.persona_prompts_backup:
-            sender.persona_prompts_backup[name] = persona.get("prompt") or ""
+            raw_prompt = persona.get("prompt") or ""
+            import re
+
+            cleaned_prompt = re.sub(
+                r"\n*<(meme_formatting_instructions|meme_tool_instructions|meme_hybrid_instructions|meme_behavior_instructions|meme_preference|meme_use_preference)>.*?</\1>",
+                "",
+                raw_prompt,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            sender.persona_prompts_backup[name] = cleaned_prompt.strip()
 
     format_instruction = (
         "\n\n<meme_formatting_instructions>\n"
