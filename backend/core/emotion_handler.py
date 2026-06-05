@@ -229,7 +229,7 @@ async def _handle_resp_vector(
                 raw_tags.append(tag)
         clean_text = clean_text.replace(original, "")
 
-    logger.debug(
+    logger.info(
         f"[meme_manager] _handle_resp_vector: raw_text={text!r}, extracted raw_tags={raw_tags}, clean_text={clean_text!r}"
     )
     logger.debug(
@@ -253,7 +253,7 @@ async def _handle_resp_vector(
             tags_to_embed.append(raw_tag)
 
     if found_exact:
-        logger.debug(f"[meme_manager] 精确匹配到的表情标签: {found_exact}")
+        logger.info(f"[meme_manager] 精确匹配到的表情标签: {found_exact}")
 
     # 4. 获取 Embedding Provider
     provider_id = get_config_value(sender.config, "embedding_provider_id", "")
@@ -284,7 +284,7 @@ async def _handle_resp_vector(
 
         missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
         if missing_tags:
-            logger.debug(
+            logger.info(
                 f"[meme_manager] 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
             )
             asyncio.create_task(sync_tag_embeddings(sender))
@@ -295,7 +295,7 @@ async def _handle_resp_vector(
                 vec = await embedding_provider.get_embedding(raw_tag)
                 if vec:
                     raw_tags_vectors[raw_tag] = vec
-                    logger.debug(
+                    logger.info(
                         f"[meme_manager] 获取标签 '{raw_tag}' 向量成功：维度={len(vec)}, "
                         f"前5位数据={vec[:5]}"
                     )
@@ -326,7 +326,7 @@ async def _handle_resp_vector(
                         best_sim = sim
                         best_tag = valid_tag
 
-                logger.debug(
+                logger.info(
                     f"[meme_manager] 查询标签 '{raw_tag}' 召回最佳匹配: '{best_tag}' (相似度={best_sim:.4f}, 阈值={similarity_threshold})"
                 )
 
@@ -348,11 +348,14 @@ async def _handle_resp_vector(
         import random
 
         if random.random() < 0.7 and dedicated_tag:
-            dedicated_tag = dedicated_tag.strip()
-            if dedicated_tag and dedicated_tag not in sender.found_emotions:
-                sender.found_emotions.append(dedicated_tag)
+            # 只取第一个标签作为专属标签进行追加，后面的标签只是偏好
+            d_tags = [t.strip() for t in dedicated_tag.split(",") if t.strip()]
+            if d_tags:
+                chosen_tag = d_tags[0]
+                if chosen_tag not in sender.found_emotions:
+                    sender.found_emotions.append(chosen_tag)
 
-    logger.debug(f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}")
+    logger.info(f"[meme_manager] 向量召回最终匹配到的标签列表: {sender.found_emotions}")
 
     clean_text = re.sub(
         r"<emotions>.*?</emotions>",
@@ -407,9 +410,9 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
     p_tags = load_persona_tags()
     dedicated_tag = p_tags.get(persona_id)
     if dedicated_tag:
-        dedicated_tag = dedicated_tag.strip()
-        if dedicated_tag:
-            valid_emoticons.add(dedicated_tag)
+        # 偏好标签可能由逗号分隔，将其中的每个单独标签都加入有效候选集
+        for tag in [t.strip() for t in dedicated_tag.split(",") if t.strip()]:
+            valid_emoticons.add(tag)
 
     if getattr(sender, "enable_emotion_llm", False):
         if event.get_extra("meme_tool_executed"):
@@ -456,7 +459,13 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
             from .helpers import get_persona_setting
 
             pref = get_persona_setting(sender.config, persona_id, "meme_use_preference")
-            pref_str = f"【当前人格的常用偏好表情标签】:\n{pref}\n\n" if pref else ""
+            pref_str = ""
+            if pref:
+                d_tags = [t.strip() for t in pref.split(",") if t.strip()]
+                # 第一个标签是专属标签，自动追加，因此不需要且不应该写入提示词中；仅将后面的偏好标签写入提示词
+                if len(d_tags) > 1:
+                    pref_filtered = ", ".join(d_tags[1:])
+                    pref_str = f"【当前人格的常用偏好表情标签】:\n{pref_filtered}\n\n"
 
             base_prompt = getattr(sender, "emotion_llm_prompt", "")
             prompt = (
@@ -681,7 +690,7 @@ async def match_emotions_by_tags(
             tags_to_embed.append(raw_tag)
 
     if found_exact:
-        logger.debug(f"[meme_manager] (直接触发) 精确匹配到的表情标签: {found_exact}")
+        logger.info(f"[meme_manager] (直接触发) 精确匹配到的表情标签: {found_exact}")
 
     # 2. 向量相似度匹配（仅对未精确命中的标签）
     found_vector = []
@@ -705,7 +714,7 @@ async def match_emotions_by_tags(
 
             missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
             if missing_tags:
-                logger.debug(
+                logger.info(
                     f"[meme_manager] (直接触发) 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
                 )
                 asyncio.create_task(sync_tag_embeddings(sender))
@@ -741,7 +750,7 @@ async def match_emotions_by_tags(
                             best_sim = sim
                             best_tag = valid_tag
 
-                    logger.debug(
+                    logger.info(
                         f"[meme_manager] (直接触发) 查询标签 '{raw_tag}' 召回最佳匹配: '{best_tag}' (相似度={best_sim:.4f}, 阈值={similarity_threshold})"
                     )
 
@@ -786,14 +795,14 @@ async def get_direct_trigger_memes(
     p_tags = load_persona_tags()
     dedicated_tag = p_tags.get(persona_id)
     if dedicated_tag:
-        dedicated_tag = dedicated_tag.strip()
-        if dedicated_tag:
-            valid_emoticons.add(dedicated_tag)
+        # 偏好标签可能由逗号分隔，将其中的每个单独标签都加入有效候选集
+        for tag in [t.strip() for t in dedicated_tag.split(",") if t.strip()]:
+            valid_emoticons.add(tag)
 
     matched_emotions = await match_emotions_by_tags(
         sender, event, raw_tags, valid_emoticons
     )
-    logger.debug(f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}")
+    logger.info(f"[meme_manager] (直接触发) 最终匹配到的标签列表: {matched_emotions}")
     if not matched_emotions:
         return []
 
