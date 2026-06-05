@@ -186,6 +186,31 @@
       }
     }
   },
+  "emotion_llm_config": {
+    "description": "情感模型配置",
+    "type": "object",
+    "items": {
+      "enable_emotion_llm": {
+        "description": "启用额外情感模型判定表情",
+        "type": "bool",
+        "default": false,
+        "hint": "开启后，将使用额外一次大模型请求专门分析回复所需表情包标签，并将结果拼接到回复中，避免大模型在正常回复中输出不稳定或漏输出标签。"
+      },
+      "emotion_llm_provider_id": {
+        "description": "情感模型Provider ID",
+        "type": "string",
+        "default": "",
+        "hint": "选择专门用于分析表情标签的模型提供商。留空则默认使用当前对话的模型。",
+        "_special": "select_provider"
+      },
+      "emotion_llm_prompt": {
+        "description": "情感分析提示词说明",
+        "type": "text",
+        "hint": "用于引导大模型根据对话内容和助手回复选择表情标签的提示词说明。系统会自动附加格式约束及最大标签数限制，请在此处指定你期望的情感分析偏好或指引。",
+        "default": "根据以下对话背景，分析助手回复的语气和情感，自由输出符合回复语气、画面主体或情感的表情包标签。"
+      }
+    }
+  },
   "compression_config": {
     "description": "表情包压缩配置",
     "type": "object",

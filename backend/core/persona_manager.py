@@ -11,7 +11,16 @@ def reload_personas(sender):
     for persona in personas:
         name = persona.get("name") or ""
         if name not in sender.persona_prompts_backup:
-            sender.persona_prompts_backup[name] = persona.get("prompt") or ""
+            raw_prompt = persona.get("prompt") or ""
+            import re
+
+            cleaned_prompt = re.sub(
+                r"\n*<(meme_formatting_instructions|meme_tool_instructions|meme_hybrid_instructions|meme_behavior_instructions|meme_preference|meme_use_preference)>.*?</\1>",
+                "",
+                raw_prompt,
+                flags=re.DOTALL | re.IGNORECASE,
+            )
+            sender.persona_prompts_backup[name] = cleaned_prompt.strip()
 
     format_instruction = (
         "\n\n<meme_formatting_instructions>\n"
@@ -73,10 +82,20 @@ def reload_personas(sender):
         if pref_prompt:
             injected_prompt += "\n\n" + pref_prompt
 
-        if sender.enable_llm_tool == "tool":
-            persona["prompt"] = injected_prompt + tool_instruction
-        elif sender.enable_llm_tool == "hybrid":
-            persona["prompt"] = injected_prompt + hybrid_instruction
+        is_emotion_llm = getattr(sender, "enable_emotion_llm", False)
+
+        if is_emotion_llm:
+            if sender.enable_llm_tool in ("tool", "hybrid"):
+                persona["prompt"] = injected_prompt + tool_instruction
+            else:
+                persona["prompt"] = injected_prompt
         else:
-            behavior_prompt = f"\n\n<meme_behavior_instructions>\n{sender.meme_prompt}\n</meme_behavior_instructions>"
-            persona["prompt"] = injected_prompt + behavior_prompt + format_instruction
+            if sender.enable_llm_tool == "tool":
+                persona["prompt"] = injected_prompt + tool_instruction
+            elif sender.enable_llm_tool == "hybrid":
+                persona["prompt"] = injected_prompt + hybrid_instruction
+            else:
+                behavior_prompt = f"\n\n<meme_behavior_instructions>\n{sender.meme_prompt}\n</meme_behavior_instructions>"
+                persona["prompt"] = (
+                    injected_prompt + behavior_prompt + format_instruction
+                )
