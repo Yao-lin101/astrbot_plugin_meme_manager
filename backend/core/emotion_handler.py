@@ -67,11 +67,11 @@ async def _select_memes_by_emotions_priority(
     # 获取人格专属标签，用于评分加分（而不是计入 matched_count）
     from .helpers import load_persona_tags
 
-    p_tags = load_persona_tags()
+    p_tags = load_persona_tags(sender.config)
     dedicated_tag_str = p_tags.get(persona_id) or ""
     dedicated_tags = [t.strip() for t in dedicated_tag_str.split(",") if t.strip()]
 
-    # 过滤掉专属表情，仅保留真正用于意图匹配/偏向打分的标签
+    # 过滤掉专属表情，仅保留真正用于意图匹配/偏向打分 的标签
     emotions_to_match = []
     for item in found_emotions:
         if isinstance(item, tuple):
@@ -84,6 +84,7 @@ async def _select_memes_by_emotions_priority(
 
     # 评分并筛选出本地确实存在的文件
     valid_memes = []
+    memes_scoring_details = {}
     for row in rows:
         filename = row["filename"]
         full_path = os.path.join(MEMES_DIR, filename)
@@ -98,26 +99,40 @@ async def _select_memes_by_emotions_priority(
             # 计算匹配到的意图/输入标签重合数（matched_count）与位置分
             matched_count = 0
             position_bonus = 0
+            matched_details = []
             for idx, item in enumerate(emotions_to_match):
                 if isinstance(item, tuple):
                     raw_tag, candidates = item
-                    if any(c in meme_emotions for c in candidates):
+                    hit_candidates = [c for c in candidates if c in meme_emotions]
+                    if hit_candidates:
                         matched_count += 1
                         position_bonus += max(0, 100 - idx)
+                        matched_details.append(f"{raw_tag}->{hit_candidates}")
                 else:
                     if item in meme_emotions:
                         matched_count += 1
                         position_bonus += max(0, 100 - idx)
+                        matched_details.append(f"{item}")
 
             # 专属标签额外加分（每个匹配到的专属标签加 500 分）
             dedicated_bonus = 0
+            matched_dedicated = []
             if dedicated_tags:
                 for d_tag in dedicated_tags:
                     if d_tag in meme_emotions:
                         dedicated_bonus += 500
+                        matched_dedicated.append(d_tag)
 
             score = matched_count * 1000 + position_bonus + dedicated_bonus
             valid_memes.append((filename, score))
+            memes_scoring_details[filename] = {
+                "score": score,
+                "matched_count": matched_count,
+                "matched_details": matched_details,
+                "dedicated_bonus": dedicated_bonus,
+                "matched_dedicated": matched_dedicated,
+                "meme_emotions": meme_emotions,
+            }
 
     if not valid_memes:
         return []
@@ -141,6 +156,21 @@ async def _select_memes_by_emotions_priority(
                 break
         if len(selected_memes) >= max_limit:
             break
+
+    # 打印最终选中的表情的标签命中及打分详情
+    if selected_memes:
+        log_lines = []
+        for filename in selected_memes:
+            detail = memes_scoring_details.get(filename, {})
+            log_lines.append(
+                f"  - 图片: {filename}\n"
+                f"    总分: {detail.get('score')} | 意图匹配数: {detail.get('matched_count')}\n"
+                f"    匹配详情: {detail.get('matched_details')} | 表情包所有标签: {detail.get('meme_emotions')}\n"
+                f"    专属标签加分: {detail.get('dedicated_bonus')} (命中专属标签: {detail.get('matched_dedicated')})"
+            )
+        logger.info(
+            "[meme_manager] 最终发送的表情匹配打分情况:\n" + "\n".join(log_lines)
+        )
 
     return selected_memes
 
@@ -339,7 +369,7 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
 
     from .helpers import load_persona_tags
 
-    p_tags = load_persona_tags()
+    p_tags = load_persona_tags(sender.config)
     dedicated_tag = p_tags.get(persona_id)
     if dedicated_tag:
         # 偏好标签可能由逗号分隔，将其中的每个单独标签都加入有效候选集
@@ -743,7 +773,7 @@ async def get_direct_trigger_memes(
     # 追加当前人格的专属标签
     from .helpers import load_persona_tags
 
-    p_tags = load_persona_tags()
+    p_tags = load_persona_tags(sender.config)
     dedicated_tag = p_tags.get(persona_id)
     if dedicated_tag:
         # 偏好标签可能由逗号分隔，将其中的每个单独标签都加入有效候选集
