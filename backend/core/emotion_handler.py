@@ -122,8 +122,8 @@ async def _select_memes_by_emotions_priority(
                         matched_count += 1
                         # 取匹配度最高的那个候选词（即 index 最小的那个）
                         best_candidate_idx = min(matching_indices)
-                        # 基于候选词排名的衰减系数：排在第 1 的（index 0）保留 100% 分值，后面每顺延一位衰减 10%，保底保留 50%
-                        decay_factor = max(0.5, 1.0 - best_candidate_idx * 0.1)
+                        # 基于候选词排名的衰减系数：排在第 1 的（index 0）保留 100% 分值，后面每顺延一位衰减 5%，保底保留 80%
+                        decay_factor = max(0.8, 1.0 - best_candidate_idx * 0.05)
                         weighted_tag_score = int(tag_weight * decay_factor)
                         matched_score += weighted_tag_score
                         matched_details.append(
