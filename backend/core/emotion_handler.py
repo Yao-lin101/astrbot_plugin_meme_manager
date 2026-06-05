@@ -466,7 +466,7 @@ async def handle_resp(sender, event: AstrMessageEvent, response: LLMResponse):
             )
 
             logger.info(
-                f"[meme_manager] 正在调用情感模型 {provider_id} 判定表情标签..."
+                f"[meme_manager] 正在调用情感模型 {provider_id} 判定表情标签。Prompt内容:\n{prompt}"
             )
             llm_resp = await sender.context.llm_generate(
                 chat_provider_id=provider_id,
