@@ -252,7 +252,9 @@ async def _handle_resp_vector(
             tags_to_embed.append(raw_tag)
 
     if exact_matches:
-        logger.info(f"[meme_manager] 精确匹配到的表情标签: {list(exact_matches.values())}")
+        logger.info(
+            f"[meme_manager] 精确匹配到的表情标签: {list(exact_matches.values())}"
+        )
 
     # 4. 获取 Embedding Provider
     provider_id = get_config_value(sender.config, "embedding_provider_id", "")
@@ -691,7 +693,9 @@ async def match_emotions_by_tags(
             tags_to_embed.append(raw_tag)
 
     if exact_matches:
-        logger.info(f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(exact_matches.values())}")
+        logger.info(
+            f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(exact_matches.values())}"
+        )
 
     # 2. 向量相似度匹配（仅对未精确命中的标签）
     vector_matches = {}
