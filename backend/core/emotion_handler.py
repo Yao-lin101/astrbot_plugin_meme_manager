@@ -19,13 +19,10 @@ from .helpers import (
 )
 
 
-async def _select_memes_by_emotions_priority(
+async def get_scored_memes_by_emotions(
     sender, found_emotions: list, persona_id: str
-) -> list[str]:
-    """根据情绪标签的重合度优先级筛选并随机推荐表情包图片。
-
-    优先返回满足更多情绪标签的表情图片。
-    """
+) -> list[dict]:
+    """根据情绪标签的重合度评分规则，计算并返回所有匹配表情包的评分列表。"""
     if not found_emotions:
         return []
 
@@ -88,7 +85,6 @@ async def _select_memes_by_emotions_priority(
         last_tag_score = max(1, 400 // (2 ** (len(emotions_to_match) - 2)))
 
     valid_memes = []
-    memes_scoring_details = {}
     for row in rows:
         filename = row["filename"]
         full_path = os.path.join(MEMES_DIR, filename)
@@ -147,24 +143,47 @@ async def _select_memes_by_emotions_priority(
 
             description = row["description"] if "description" in row.keys() else ""
             score = matched_score + dedicated_bonus
-            valid_memes.append((filename, score))
-            memes_scoring_details[filename] = {
-                "score": score,
-                "matched_count": matched_count,
-                "matched_details": matched_details,
-                "dedicated_bonus": dedicated_bonus,
-                "matched_dedicated": matched_dedicated,
-                "meme_emotions": meme_emotions,
-                "description": description,
-            }
 
-    if not valid_memes:
+            if score > 0:
+                valid_memes.append(
+                    {
+                        "filename": filename,
+                        "emotions": meme_emotions,
+                        "description": description or "",
+                        "score": score,
+                        "matched_count": matched_count,
+                        "matched_details": matched_details,
+                        "dedicated_bonus": dedicated_bonus,
+                        "matched_dedicated": matched_dedicated,
+                    }
+                )
+
+    # 按分数降序排列
+    valid_memes.sort(key=lambda x: x["score"], reverse=True)
+    return valid_memes
+
+
+async def _select_memes_by_emotions_priority(
+    sender, found_emotions: list, persona_id: str
+) -> list[str]:
+    """根据情绪标签的重合度优先级筛选并随机推荐表情包图片。
+
+    优先返回满足更多情绪标签的表情图片。
+    """
+    scored_memes = await get_scored_memes_by_emotions(
+        sender, found_emotions, persona_id
+    )
+    if not scored_memes:
         return []
 
     # 按评分分组
     score_groups = {}
-    for filename, score in valid_memes:
+    memes_scoring_details = {}
+    for item in scored_memes:
+        filename = item["filename"]
+        score = item["score"]
         score_groups.setdefault(score, []).append(filename)
+        memes_scoring_details[filename] = item
 
     # 从高分到低分依次填充选择池，直至达到 max_emotions_per_message
     selected_memes = []
@@ -189,7 +208,7 @@ async def _select_memes_by_emotions_priority(
             desc = detail.get("description", "")
             desc_line = f"    描述: {desc}\n" if desc else ""
             log_lines.append(
-                f"  - 表情包所有标签: {detail.get('meme_emotions')}\n"
+                f"  - 表情包所有标签: {detail.get('emotions')}\n"
                 f"{desc_line}"
                 f"    总分: {detail.get('score')} | 意图匹配数: {detail.get('matched_count')}\n"
                 f"    匹配详情: {detail.get('matched_details')} |\n"
@@ -557,101 +576,67 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
         sender.found_emotions = []
 
 
-async def search_memes_for_llm(sender, query: str, persona_id: str) -> list[dict]:
-    """为 LLM 搜索表情包。支持精确子串匹配与向量相似度检索。"""
+async def search_memes_for_llm(
+    sender, query: str, persona_id: str, event: AstrMessageEvent = None
+) -> list[dict]:
+    """为 LLM 搜索表情包。使用精确匹配与向量相似度检索，并采用与情绪表情匹配一致的评分规则。"""
     query = query.strip()
     if not query:
         return []
 
+    # 1. Get all available emotions for the current persona and global
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT filename, emotions, description FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+        "SELECT emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
         (f"%,{persona_id},%",),
     )
     rows = cursor.fetchall()
     conn.close()
 
-    # 获取 Embeddings Provider
-    provider_id = get_config_value(sender.config, "embedding_provider_id", "")
-    embedding_provider = None
-    if provider_id:
-        embedding_provider = sender.context.get_provider_by_id(provider_id)
-    if not embedding_provider:
-        provs = sender.context.get_all_embedding_providers()
-        if provs:
-            embedding_provider = provs[0]
+    valid_emoticons = set()
+    for row in rows:
+        if row["emotions"]:
+            for emo in row["emotions"].split(","):
+                emo = emo.strip()
+                if emo:
+                    valid_emoticons.add(emo)
 
-    # 计算 query 的 embedding
-    query_vector = None
-    if embedding_provider:
-        try:
-            query_vector = await embedding_provider.get_embedding(query)
-        except Exception as e:
-            logger.warning(f"[meme_manager] 获取查询词 '{query}' 向量失败: {e}")
+    # 2. Append the dedicated tag for the current persona
+    from .helpers import load_persona_tags
 
-    # 获取所有标签的向量
-    from ..db.database import get_all_tag_embeddings
+    p_tags = load_persona_tags(sender.config)
+    dedicated_tag = p_tags.get(persona_id)
+    if dedicated_tag:
+        for tag in [t.strip() for t in dedicated_tag.split(",") if t.strip()]:
+            valid_emoticons.add(tag)
 
-    tag_embeddings = get_all_tag_embeddings()
-
-    similarity_threshold = get_config_value(
-        sender.config, "embedding_similarity_threshold", 0.6
+    # 3. Split query by comma and call match_emotions_by_tags
+    query_parts = [q.strip() for q in query.split(",") if q.strip()]
+    matched_emotions = await match_emotions_by_tags(
+        sender, event, query_parts, valid_emoticons
     )
 
-    query_parts = [q.strip() for q in query.split(",") if q.strip()]
+    if not matched_emotions:
+        return []
 
-    scored_memes = []
-    for row in rows:
-        filename = row["filename"]
-        full_path = os.path.join(MEMES_DIR, filename)
-        if not os.path.exists(full_path):
-            continue
+    # 4. Get scoring details
+    scored_memes = await get_scored_memes_by_emotions(
+        sender, matched_emotions, persona_id
+    )
 
-        emotions_str = row["emotions"] or ""
-        emotions = [e.strip() for e in emotions_str.split(",") if e.strip()]
-
-        max_score = 0.0
-        # 1. 尝试多标签子串匹配与打分提升
-        match_count = 0
-        match_score = 0.0
-        for part in query_parts:
-            part_best = 0.0
-            for emotion in emotions:
-                if part.lower() in emotion.lower():
-                    score = 1.0 + (len(part) / len(emotion)) * 0.1
-                    if score > part_best:
-                        part_best = score
-            if part_best > 0.0:
-                match_count += 1
-                match_score += part_best
-
-        if match_count > 0:
-            max_score = (match_score / len(query_parts)) + 0.5 * (match_count - 1)
-
-        # 2. 尝试向量相似度匹配
-        if query_vector and tag_embeddings:
-            for emotion in emotions:
-                tag_vec = tag_embeddings.get(emotion)
-                if tag_vec:
-                    sim = cosine_similarity(query_vector, tag_vec)
-                    if sim >= similarity_threshold:
-                        if sim > max_score:
-                            max_score = sim
-
-        if max_score > 0.0:
-            scored_memes.append(
-                {
-                    "filename": filename,
-                    "emotions": emotions,
-                    "description": row["description"] or "",
-                    "score": max_score,
-                }
-            )
-
-    # 按分数降序排列，最多返回前 8 个
-    scored_memes.sort(key=lambda x: x["score"], reverse=True)
-    return scored_memes[:8]
+    # Return the top 8 matched memes (required format: filename, emotions, description, score)
+    results = []
+    for item in scored_memes[:8]:
+        results.append(
+            {
+                "filename": item["filename"],
+                "emotions": item["emotions"],
+                "description": item["description"],
+                "score": item["score"],
+            }
+        )
+    return results
 
 
 async def match_emotions_by_tags(

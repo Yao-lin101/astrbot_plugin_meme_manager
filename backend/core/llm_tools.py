@@ -65,7 +65,7 @@ async def send_meme(
     # otherwise fall back to the candidates cached from a previous call so the
     # follow-up selection call only needs `index`.
     if query and query.strip():
-        candidates = await search_memes_for_llm(sender, query, persona_id)
+        candidates = await search_memes_for_llm(sender, query, persona_id, event)
         if not candidates:
             sender._meme_tool_candidates.pop(session_key, None)
             return f"未找到与标签 '{query}' 相关的表情包，请尝试其他的关键词检索。"
