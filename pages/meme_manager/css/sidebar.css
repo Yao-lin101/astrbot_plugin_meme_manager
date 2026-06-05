@@ -18,9 +18,9 @@
 }
 
 .emoji-tab-btn:hover {
-  background: #ffffff;
+  background: var(--bg-element);
   color: var(--text-primary);
-  border-color: rgba(0,0,0,0.15);
+  border-color: var(--border-color);
 }
 
 .emoji-tab-btn.active {
@@ -166,7 +166,7 @@
   justify-content: space-between;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: #ffffff;
+  background: var(--bg-element);
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   font-size: 12px;
@@ -179,7 +179,7 @@
 .emoji-tab-btn-vertical:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: rgba(0, 0, 0, 0.12);
+  border-color: var(--border-color);
 }
 
 .emoji-tab-btn-vertical.active {
