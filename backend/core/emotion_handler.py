@@ -650,7 +650,7 @@ async def match_emotions_by_tags(
     if not raw_tags or not valid_emoticons:
         return []
 
-    used_candidates = set()
+    # 1. Check for exact matches and initialize lists
     exact_matches = {}
     tags_to_embed = []
     for raw_tag in raw_tags:
@@ -660,18 +660,17 @@ async def match_emotions_by_tags(
                 matched = valid
                 break
         if matched:
-            if matched not in used_candidates:
-                exact_matches[raw_tag] = matched
-                used_candidates.add(matched)
-        else:
-            tags_to_embed.append(raw_tag)
+            exact_matches[raw_tag] = matched
+
+        # Always run vector similarity matching to recall related tags even on exact matches
+        tags_to_embed.append(raw_tag)
 
     if exact_matches:
         logger.debug(
             f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(exact_matches.values())}"
         )
 
-    # 2. 向量相似度匹配（仅对未精确命中的标签）
+    # 2. Vector similarity matching (run for all tags to recall related ones)
     vector_matches = {}
     if tags_to_embed:
         provider_id = get_config_value(sender.config, "embedding_provider_id", "")
@@ -688,7 +687,7 @@ async def match_emotions_by_tags(
 
             tag_embeddings = get_all_tag_embeddings()
 
-            # 若有效标签缺失向量，触发后台增量计算
+            # Trigger background synchronization if any valid emotions lack embeddings
             import asyncio
 
             missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
@@ -700,6 +699,10 @@ async def match_emotions_by_tags(
 
             raw_tags_vectors = {}
             for raw_tag in tags_to_embed:
+                # Prefer cached tag vectors to avoid redundant remote API calls
+                if raw_tag in tag_embeddings:
+                    raw_tags_vectors[raw_tag] = tag_embeddings[raw_tag]
+                    continue
                 try:
                     vec = await embedding_provider.get_embedding(raw_tag)
                     if vec:
@@ -714,10 +717,16 @@ async def match_emotions_by_tags(
                     sender.config, "embedding_similarity_threshold", 0.6
                 )
 
-                # 每个查询标签单独召回最相似 of 数据库标签，保留相似度符合阈值的 top 5 候选结果 (跨标签去重且顺延)
+                # Search similar database tags for each query tag
                 for raw_tag, raw_vec in raw_tags_vectors.items():
                     candidates_with_scores = []
                     for valid_tag in valid_emoticons:
+                        # Skip comparing with the exact matched tag itself
+                        if (
+                            raw_tag in exact_matches
+                            and valid_tag == exact_matches[raw_tag]
+                        ):
+                            continue
                         tag_vec = tag_embeddings.get(valid_tag)
                         if not tag_vec:
                             continue
@@ -725,14 +734,19 @@ async def match_emotions_by_tags(
                         if sim >= similarity_threshold:
                             candidates_with_scores.append((valid_tag, sim))
 
-                    # 降序排序
+                    # Sort by similarity score descending
                     candidates_with_scores.sort(key=lambda x: x[1], reverse=True)
 
-                    # 过滤已使用的候选词，向下顺延，取前5个
+                    # Gather top 5 non-duplicate similar candidate tags
                     filtered_candidates = []
+                    used_candidates_for_tag = set()
+                    if raw_tag in exact_matches:
+                        used_candidates_for_tag.add(exact_matches[raw_tag])
+
                     for valid_tag, sim in candidates_with_scores:
-                        if valid_tag not in used_candidates:
+                        if valid_tag not in used_candidates_for_tag:
                             filtered_candidates.append(valid_tag)
+                            used_candidates_for_tag.add(valid_tag)
                             if len(filtered_candidates) == 5:
                                 break
 
@@ -741,21 +755,23 @@ async def match_emotions_by_tags(
                     )
 
                     if filtered_candidates:
-                        used_candidates.update(filtered_candidates)
                         vector_matches[raw_tag] = filtered_candidates
         else:
             logger.debug(
                 "[meme_manager] (直接触发) 没有可用的 Embedding Provider，跳过向量匹配。"
             )
 
-    # 合并精确匹配和召回结果，严格保持原始输入的标签顺序
+    # 3. Merge exact matches and recalled tags, preserving query tag order
     final_emotions = []
     for raw_tag in raw_tags:
+        candidates = []
         if raw_tag in exact_matches:
-            matched_tag = exact_matches[raw_tag]
-            final_emotions.append((raw_tag, [matched_tag]))
-        elif raw_tag in vector_matches:
-            candidates = vector_matches[raw_tag]
+            candidates.append(exact_matches[raw_tag])
+        if raw_tag in vector_matches:
+            for c in vector_matches[raw_tag]:
+                if c not in candidates:
+                    candidates.append(c)
+        if candidates:
             final_emotions.append((raw_tag, candidates))
 
     return final_emotions
