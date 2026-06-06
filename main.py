@@ -337,14 +337,12 @@ class MemeSender(Star, MemeConfigMixin):
         category: str | None = None,
         description: str | None = None,
     ):
-        """保存并收录最近聊天中发送的表情包到当前人格的表情包库中。
-
-        取图优先级：当前消息直发的图片 > 你引用/回复的图片 > 本会话最近收到的图片（约 5 分钟内）。因此当你想收录前面某条消息里的表情包时，可直接调用本工具；若那张图已超出有效期或会话无图，请提示用户重新发送或引用该图。
+        """保存并收录聊天中的表情包到表情包库中。
 
         Args:
-            categories(list): 表情包所属的类别列表，如 ["happy", "sad"] 等。注意：只有当用户在指令中明确指定了具体分类名称（例如“收录到 happy 分类中”）时才传入此参数；如果用户只是说“偷图/收录”或未明确指定，请保持此参数为 None，严禁自行推测或生成分类。
-            category(string): 同上，表情包所属的类别（单标签兼容，仅在用户明确指定时传入，否则不传）
-            description(string): 对这张表情包画面的简洁描述，请用简短的一句话描述该图内容（如 "一只摊在地上表情无语的猫猫" 或 "熊猫头双手抱头表示痛苦"）。此参数对于表情包的后续精准检索 and 描述匹配至关重要！
+            categories(list): 表情分类列表（如 ['happy']）。仅在用户明确指定了分类时传入，否则不传。
+            category(string): 表情分类。单标签兼容，仅在用户明确指定了分类时传入，否则不传。
+            description(string): 表情包画面的简洁描述。仅在用户明确指定了描述时传入，否则不传。
         """
         await self.check_and_reload_if_changed()
         if not categories and category:
