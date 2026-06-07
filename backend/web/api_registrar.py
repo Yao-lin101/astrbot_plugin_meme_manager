@@ -81,37 +81,89 @@ def wrap_api_handler(sender, handler):
 
 async def serve_emoji(sender, category, filename):
     """Serve emoji files from various directories."""
-    from quart import send_from_directory
+    from quart import request, send_from_directory
 
-    from ...config import MEMES_DIR
+    from ...config import MEMES_DIR, PLUGIN_DATA_DIR
 
+    target_path = None
     # Check absolute location directly under MEMES_DIR
-    target_path = os.path.join(MEMES_DIR, filename)
-    if os.path.exists(target_path):
-        return await send_from_directory(MEMES_DIR, filename)
+    check_path = os.path.join(MEMES_DIR, filename)
+    if os.path.exists(check_path):
+        target_path = check_path
+    else:
+        # Check category path
+        if category != "file" and category != "all":
+            category_path = os.path.join(MEMES_DIR, category)
+            check_path = os.path.join(category_path, filename)
+            if os.path.exists(check_path):
+                target_path = check_path
 
-    # Check category path
-    if category != "file" and category != "all":
-        category_path = os.path.join(MEMES_DIR, category)
-        if os.path.exists(os.path.join(category_path, filename)):
-            return await send_from_directory(category_path, filename)
+        if not target_path:
+            # Search all subdirectories inside MEMES_DIR
+            for item in os.listdir(MEMES_DIR):
+                if item == ".thumbnails":
+                    continue
+                item_path = os.path.join(MEMES_DIR, item)
+                if os.path.isdir(item_path):
+                    check_path = os.path.join(item_path, filename)
+                    if os.path.exists(check_path):
+                        target_path = check_path
+                        break
 
-    # Search all subdirectories inside MEMES_DIR
-    for item in os.listdir(MEMES_DIR):
-        item_path = os.path.join(MEMES_DIR, item)
-        if os.path.isdir(item_path):
-            file_path = os.path.join(item_path, filename)
-            if os.path.exists(file_path):
-                return await send_from_directory(item_path, filename)
+    if not target_path or not os.path.exists(target_path):
+        return "File not found: " + filename, 404
 
-    return "File not found: " + filename, 404
+    is_thumbnail = request.args.get("thumbnail", "false").lower() == "true"
+    if is_thumbnail:
+        thumb_dir = os.path.join(PLUGIN_DATA_DIR, "thumbnails")
+        os.makedirs(thumb_dir, exist_ok=True)
+        thumb_filename = filename + ".avif"
+        thumb_path = os.path.join(thumb_dir, thumb_filename)
+
+        need_generate = True
+        if os.path.exists(thumb_path):
+            try:
+                if os.path.getmtime(target_path) <= os.path.getmtime(thumb_path):
+                    need_generate = False
+            except Exception:
+                pass
+
+        if need_generate:
+            try:
+                from PIL import Image as PILImage
+
+                with PILImage.open(target_path) as img:
+                    orig_format = img.format
+                    # If GIF, extract first frame
+                    if orig_format == "GIF":
+                        img.seek(0)
+                        img = img.copy()
+
+                    img.thumbnail((150, 150))
+
+                    # Save atomically
+                    temp_thumb_path = thumb_path + ".tmp"
+                    img.save(temp_thumb_path, format="AVIF")
+                    os.replace(temp_thumb_path, thumb_path)
+            except Exception as e:
+                logger.warning(f"Failed to generate AVIF thumbnail for {filename}: {e}")
+                # fallback to serving original
+                return await send_from_directory(
+                    os.path.dirname(target_path), os.path.basename(target_path)
+                )
+
+        return await send_from_directory(thumb_dir, thumb_filename)
+
+    return await send_from_directory(
+        os.path.dirname(target_path), os.path.basename(target_path)
+    )
 
 
 def register_apis(sender):
     """Register all Quart web endpoints for Meme Manager plugin."""
     from .api import (
-        analyze_single_emoji,
         add_emoji,
+        analyze_single_emoji,
         batch_analyze_emojis,
         batch_convert_emoji_gif,
         batch_copy_emoji,
@@ -132,6 +184,7 @@ def register_apis(sender):
         get_batch_analyze_status,
         get_config_schema,
         get_config_values,
+        get_embedding_providers,
         get_emoji_file_base64,
         get_emoji_info,
         get_emojis_by_category,
@@ -141,20 +194,19 @@ def register_apis(sender):
         get_personas,
         get_prompt_template,
         get_providers,
-        get_embedding_providers,
         get_sync_status,
+        get_ui_settings,
         merge_tags,
         move_emoji,
         rename_category,
         resolve_duplicates,
         restore_category,
         save_persona_tag,
+        save_ui_settings,
         scan_similar_tags,
         sync_config,
         sync_from_remote,
         sync_to_remote,
-        get_ui_settings,
-        save_ui_settings,
         update_config_values,
     )
 

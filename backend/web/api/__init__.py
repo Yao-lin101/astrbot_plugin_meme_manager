@@ -10,9 +10,9 @@ from .batch import (
     batch_rename_emojis_to_tags,
     cancel_batch_analyze,
     get_batch_analyze_status,
+    get_embedding_providers,
     get_prompt_template,
     get_providers,
-    get_embedding_providers,
     move_emoji,
 )
 from .category import (

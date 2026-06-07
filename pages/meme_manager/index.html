@@ -320,7 +320,7 @@
                     <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
                       <div class="emoji-item" 
                            :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
-                           :style="{ backgroundImage: 'url(' + getImageUrl(emoji) + ')' }"
+                           :style="{ backgroundImage: 'url(' + getImageUrl(emoji, true) + ')' }"
                            :draggable="activeCategories.length === 1 && activeCategories[0] !== 'all'" 
                            @dragstart="onDragStart($event, emoji, activeCategory)"
                            @click="onEmojiClick(activeCategory, emoji)"
@@ -531,6 +531,7 @@
         :selected-provider="batchAnalyzeModal.selectedProvider"
         @update:selected-provider="batchAnalyzeModal.selectedProvider = $event"
         @close="closeDetailDrawer"
+        @image-loaded="markEmojiFullyLoaded"
         @toggle-tag="toggleTagInDrawer"
         @toggle-persona="togglePersonaInDrawer"
         @backspace="handleBackspace"
