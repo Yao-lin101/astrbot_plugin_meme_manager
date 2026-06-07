@@ -18,6 +18,7 @@ export function useEmojiActions({
   closeImportModal,
   drawerTagSearchQuery,
   selectedEmotions,
+  batchAnalyzeModal,
 }) {
   const activeDetailEmoji = ref(null);
   const detailMetadata = ref(null);
@@ -766,6 +767,80 @@ export function useEmojiActions({
     await fetchEmojis();
   };
 
+  const runSingleEmojiAnalysis = async (mode) => {
+    if (!activeDetailEmoji.value) return;
+
+    if (!batchAnalyzeModal.selectedProvider) {
+      showToast("请先选择多模态 AI 供应商。", "warning", "分析提示");
+      return;
+    }
+
+    detailDrawerLoading.value = true;
+
+    try {
+      // Ensure prompt templates are loaded
+      if (!batchAnalyzeModal.promptTemplate || !batchAnalyzeModal.promptTemplate.intro) {
+        const templateRes = await fetch("/api/prompt/template");
+        if (templateRes.ok) {
+          batchAnalyzeModal.promptTemplate = await templateRes.json();
+        }
+      }
+
+      const analyze_tags = mode === 'tags' || mode === 'full';
+      const analyze_description = mode === 'desc_by_tags' || mode === 'full';
+      const pass_existing_tags_as_ref = mode === 'desc_by_tags';
+
+      let parts = [];
+      if (batchAnalyzeModal.promptTemplate.intro) {
+        parts.push(batchAnalyzeModal.promptTemplate.intro);
+      }
+      if (analyze_tags && batchAnalyzeModal.promptTemplate.tags) {
+        parts.push(batchAnalyzeModal.promptTemplate.tags);
+      }
+      if (analyze_description && batchAnalyzeModal.promptTemplate.desc) {
+        parts.push(batchAnalyzeModal.promptTemplate.desc);
+      }
+      const prompt_content = parts.join("\n\n");
+
+      const res = await fetch("/api/emoji/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: activeDetailEmoji.value,
+          provider_id: batchAnalyzeModal.selectedProvider,
+          analyze_tags,
+          analyze_description,
+          pass_existing_tags_as_ref,
+          prompt_content
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "AI 分析请求失败");
+      }
+
+      const result = await res.json();
+
+      if (analyze_tags) {
+        // AI-generated tags completely overwrite existing tags
+        selectedEmotions.value = result.tags || [];
+      }
+      if (analyze_description) {
+        detailEmojiDescription.value = result.description || "";
+      }
+
+      showToast("AI 分析成功！正在自动保存到数据库...", "success", "分析成功");
+      // Trigger automatic save to backend database without closing the modal
+      await saveEmojiAttributes(false);
+    } catch (e) {
+      console.error(e);
+      showToast(e.message, "error", "AI 分析失败");
+    } finally {
+      detailDrawerLoading.value = false;
+    }
+  };
+
   const onEmojiClick = (category, emoji) => {
     if (selectionEnabled.value) {
       const key = `${category}:${emoji}`;
@@ -794,6 +869,7 @@ export function useEmojiActions({
     toggleTagInDrawer,
     togglePersonaInDrawer,
     saveEmojiAttributes,
+    runSingleEmojiAnalysis,
     deleteEmoji,
     batchDeleteSelected,
     batchConvertToGif,

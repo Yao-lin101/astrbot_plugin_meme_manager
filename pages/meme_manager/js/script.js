@@ -90,6 +90,7 @@ createApp({
       closeImportModal: modals.closeImportModal,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
       selectedEmotions: api.selectedEmotions,
+      batchAnalyzeModal: modals.batchAnalyzeModal,
     });
 
     // 7. Dedup
@@ -228,6 +229,7 @@ createApp({
       }
       // Load UI settings from server before other resource fetching to restore tab state
       await modals.fetchUiSettings();
+      await modals.fetchProviders();
       currentTab.value = modals.safeGetItem('meme_mgr_tab') || 'meme';
 
       await api.fetchPersonaTags();
@@ -359,6 +361,7 @@ createApp({
       toggleTagInDrawer: emojiActions.toggleTagInDrawer,
       togglePersonaInDrawer: emojiActions.togglePersonaInDrawer,
       saveEmojiAttributes: emojiActions.saveEmojiAttributes,
+      runSingleEmojiAnalysis: emojiActions.runSingleEmojiAnalysis,
       deleteEmoji: emojiActions.deleteEmoji,
       batchDeleteSelected: emojiActions.batchDeleteSelected,
       batchConvertToGif: emojiActions.batchConvertToGif,
