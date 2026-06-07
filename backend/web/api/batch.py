@@ -463,6 +463,23 @@ async def batch_analyze_emojis():
     return jsonify({"message": "批量分析任务已启动"}), 200
 
 
+async def get_batch_analyze_status():
+    """获取批量分析任务的状态和结果"""
+    global batch_analyze_status
+    return jsonify(batch_analyze_status), 200
+
+
+async def cancel_batch_analyze():
+    """取消当前的批量分析任务"""
+    global cancel_batch_analyze_flag, batch_analyze_status, active_analyze_task
+    if batch_analyze_status["status"] == "running":
+        cancel_batch_analyze_flag = True
+        if active_analyze_task and not active_analyze_task.done():
+            active_analyze_task.cancel()
+        return jsonify({"message": "已发送取消信号并中止当前请求"}), 200
+    return jsonify({"message": "当前没有正在运行的任务"}), 200
+
+
 async def analyze_emoji_core(
     filename: str,
     provider_id: str,
