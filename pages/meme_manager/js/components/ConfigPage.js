@@ -341,7 +341,7 @@ export const ConfigPage = {
         
         <div v-else style="display: flex; flex-direction: column; gap: 20px;">
           <!-- 核心选择器及配置卡片 -->
-          <div class="config-card">
+          <div class="config-card" :style="{ zIndex: showUsePreferenceDropdown ? 100 : 'auto', position: showUsePreferenceDropdown ? 'relative' : 'static' }">
             <!-- 选择人格 -->
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="persona-select">选择人格</label>
@@ -442,7 +442,7 @@ export const ConfigPage = {
         <div v-else style="display: flex; flex-direction: column; gap: 24px;">
           <!-- Loop through keys mapped to current activeSubTab -->
           <template v-for="key in tabKeys[activeSubTab]" :key="key">
-            <div v-if="configSchema[key]" class="config-card">
+            <div v-if="configSchema[key]" class="config-card" :style="{ zIndex: (key === 'persona_blacklist' && showBlacklistDropdown) ? 100 : 'auto', position: (key === 'persona_blacklist' && showBlacklistDropdown) ? 'relative' : 'static' }">
               <div class="config-card-title">
                 {{ configSchema[key].description || key }}
               </div>
