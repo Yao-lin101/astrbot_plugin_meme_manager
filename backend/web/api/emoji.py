@@ -359,3 +359,107 @@ async def get_emotions():
     except Exception as e:
         current_app.logger.error(f"获取标签失败: {e}")
         return jsonify({"error": "获取标签失败"}), 500
+
+
+async def generate_thumbnails_api():
+    """手动触发全量缩略图生成，用于调试和预生成"""
+    try:
+        from PIL import Image as PILImage
+
+        from ....config import MEMES_DIR, PLUGIN_DATA_DIR
+        from ...db.database import get_db_conn
+
+        PILImage.init()
+        avif_supported = "AVIF" in PILImage.SAVE
+        thumb_ext = ".avif" if avif_supported else ".webp"
+        thumb_format = "AVIF" if avif_supported else "WEBP"
+
+        thumb_dir = os.path.join(PLUGIN_DATA_DIR, "thumbnails")
+        os.makedirs(thumb_dir, exist_ok=True)
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM memes")
+        rows = cursor.fetchall()
+        conn.close()
+
+        total = len(rows)
+        existed = 0
+        generated = 0
+        failed = 0
+        errors = []
+
+        for row in rows:
+            filename = row["filename"]
+            # Find original file
+            target_path = os.path.join(MEMES_DIR, filename)
+            if not os.path.exists(target_path):
+                # Search inside categories if not found
+                found = False
+                for item in os.listdir(MEMES_DIR):
+                    if item == ".thumbnails" or item == "thumbnails":
+                        continue
+                    item_path = os.path.join(MEMES_DIR, item)
+                    if os.path.isdir(item_path):
+                        check_path = os.path.join(item_path, filename)
+                        if os.path.exists(check_path):
+                            target_path = check_path
+                            found = True
+                            break
+                if not found:
+                    failed += 1
+                    errors.append(
+                        {
+                            "filename": filename,
+                            "error": "Original file not found on disk",
+                        }
+                    )
+                    continue
+
+            thumb_filename = filename + thumb_ext
+            thumb_path = os.path.join(thumb_dir, thumb_filename)
+
+            need_generate = True
+            if os.path.exists(thumb_path):
+                try:
+                    if os.path.getmtime(target_path) <= os.path.getmtime(thumb_path):
+                        need_generate = False
+                        existed += 1
+                except Exception:
+                    pass
+
+            if need_generate:
+                try:
+                    with PILImage.open(target_path) as img:
+                        orig_format = img.format
+                        if orig_format == "GIF":
+                            img.seek(0)
+                            img = img.copy()
+
+                        img.thumbnail((150, 150))
+
+                        temp_thumb_path = thumb_path + ".tmp"
+                        img.save(temp_thumb_path, format=thumb_format)
+                        os.replace(temp_thumb_path, thumb_path)
+                        generated += 1
+                except Exception as e:
+                    failed += 1
+                    errors.append({"filename": filename, "error": str(e)})
+
+        return (
+            jsonify(
+                {
+                    "status": "success",
+                    "avif_supported": avif_supported,
+                    "total": total,
+                    "existed": existed,
+                    "generated": generated,
+                    "failed": failed,
+                    "errors": errors,
+                }
+            ),
+            200,
+        )
+    except Exception as e:
+        logger.error(f"Failed manual thumbnail generation: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
