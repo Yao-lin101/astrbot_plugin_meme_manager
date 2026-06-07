@@ -208,6 +208,7 @@
 @media (max-width: 992px) {
   .workspace-layout {
     flex-direction: column-reverse;
+    align-items: stretch;
   }
 
   .tags-sidebar {
@@ -228,6 +229,9 @@
 }
 
 @media (max-width: 768px) {
+  .main-workspace {
+    width: 100%;
+  }
   .mobile-sidebar-toggle-btn {
     display: inline-flex !important;
     align-items: center;

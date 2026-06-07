@@ -33,6 +33,7 @@
 .persona-filter-wrapper label {
   font-size: 13px;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .persona-filter-wrapper select {
@@ -142,5 +143,13 @@
     right: 0 !important;
     margin-bottom: 8px !important;
     margin-top: 0 !important;
+  }
+  
+  .filter-group {
+    gap: 8px !important;
+  }
+  
+  .persona-filter-wrapper {
+    gap: 4px !important;
   }
 }
