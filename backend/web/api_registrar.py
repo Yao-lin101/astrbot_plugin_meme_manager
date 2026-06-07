@@ -115,9 +115,16 @@ async def serve_emoji(sender, category, filename):
 
     is_thumbnail = request.args.get("thumbnail", "false").lower() == "true"
     if is_thumbnail:
+        from PIL import Image as PILImage
+
+        PILImage.init()
+        avif_supported = "AVIF" in PILImage.SAVE
+        thumb_ext = ".avif" if avif_supported else ".webp"
+        thumb_format = "AVIF" if avif_supported else "WEBP"
+
         thumb_dir = os.path.join(PLUGIN_DATA_DIR, "thumbnails")
         os.makedirs(thumb_dir, exist_ok=True)
-        thumb_filename = filename + ".avif"
+        thumb_filename = filename + thumb_ext
         thumb_path = os.path.join(thumb_dir, thumb_filename)
 
         need_generate = True
@@ -130,8 +137,6 @@ async def serve_emoji(sender, category, filename):
 
         if need_generate:
             try:
-                from PIL import Image as PILImage
-
                 with PILImage.open(target_path) as img:
                     orig_format = img.format
                     # If GIF, extract first frame
@@ -143,10 +148,12 @@ async def serve_emoji(sender, category, filename):
 
                     # Save atomically
                     temp_thumb_path = thumb_path + ".tmp"
-                    img.save(temp_thumb_path, format="AVIF")
+                    img.save(temp_thumb_path, format=thumb_format)
                     os.replace(temp_thumb_path, thumb_path)
             except Exception as e:
-                logger.warning(f"Failed to generate AVIF thumbnail for {filename}: {e}")
+                logger.warning(
+                    f"Failed to generate {thumb_format} thumbnail for {filename}: {e}"
+                )
                 # fallback to serving original
                 return await send_from_directory(
                     os.path.dirname(target_path), os.path.basename(target_path)
