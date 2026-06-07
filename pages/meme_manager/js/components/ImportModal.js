@@ -139,7 +139,7 @@ export const ImportModal = {
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   display: 'inline-flex',
-                  align-items: 'center',
+                  alignItems: 'center',
                   border: '1px solid var(--btn-primary-bg, #2563eb)'
                 } : {
                   background: 'var(--bg-card)',
@@ -151,7 +151,7 @@ export const ImportModal = {
                   cursor: 'pointer',
                   transition: 'all 0.2s',
                   display: 'inline-flex',
-                  align-items: 'center',
+                  alignItems: 'center',
                   border: '1px solid var(--border-color)'
                 }">
                 {{ tag }}
