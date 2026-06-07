@@ -1,5 +1,8 @@
 const { ref, reactive, nextTick, watch } = window.Vue;
 
+// Fallback in-memory storage to survive session state resets when localStorage is blocked/unavailable (e.g. cross-origin iframe)
+const memoryStorage = {};
+
 export function useModals(showToast) {
   // Safe localStorage helper
   let isLocalStorageAvailable = false;
@@ -8,23 +11,69 @@ export function useModals(showToast) {
       localStorage.setItem('__probe', '1');
       localStorage.removeItem('__probe');
       isLocalStorageAvailable = true;
+      console.log("[useModals] localStorage probe succeeded.");
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error("[useModals] localStorage probe failed:", e);
+  }
 
-  const safeGetItem = (key) => {
-    if (!isLocalStorageAvailable) return null;
+  const fetchUiSettings = async () => {
     try {
-      return localStorage.getItem(key);
+      const res = await fetch("/api/ui_settings");
+      if (res.ok) {
+        const data = await res.json();
+        console.log("[useModals] Loaded UI settings from server:", data);
+        Object.assign(memoryStorage, data);
+      }
     } catch (e) {
-      return null;
+      console.error("[useModals] Failed to load UI settings from server:", e);
     }
   };
 
+  const safeGetItem = (key) => {
+    console.log(`[safeGetItem] key="${key}", isLocalStorageAvailable=${isLocalStorageAvailable}`);
+    if (isLocalStorageAvailable) {
+      try {
+        const val = localStorage.getItem(key);
+        console.log(`[safeGetItem] retrieved value from localStorage: "${val}"`);
+        return val;
+      } catch (e) {
+        console.error("[safeGetItem] localStorage error, falling back to memory:", e);
+      }
+    }
+    const val = memoryStorage[key] || null;
+    console.log(`[safeGetItem] retrieved value from memoryStorage: "${val}"`);
+    return val;
+  };
+
   const safeSetItem = (key, value) => {
-    if (!isLocalStorageAvailable) return;
-    try {
-      localStorage.setItem(key, value);
-    } catch (e) {}
+    console.log(`[safeSetItem] key="${key}", value="${value}", isLocalStorageAvailable=${isLocalStorageAvailable}`);
+    memoryStorage[key] = value;
+    if (isLocalStorageAvailable) {
+      try {
+        localStorage.setItem(key, value);
+        console.log(`[safeSetItem] successfully saved to localStorage`);
+      } catch (e) {
+        console.error("[safeSetItem] localStorage error:", e);
+      }
+    } else {
+      console.log(`[safeSetItem] successfully saved to memoryStorage`);
+    }
+
+    // Persist to server backend asynchronously
+    fetch("/api/ui_settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(memoryStorage)
+    }).then(res => {
+      if (res.ok) {
+        console.log("[safeSetItem] Persisted UI settings to server");
+      } else {
+        console.error("[safeSetItem] Failed to persist UI settings to server:", res.statusText);
+      }
+    }).catch(err => {
+      console.error("[safeSetItem] Failed to persist UI settings to server:", err);
+    });
   };
 
   const confirmDialog = reactive({
@@ -123,8 +172,10 @@ export function useModals(showToast) {
 
   watch(
     () => batchAnalyzeModal.selectedProvider,
-    (newVal) => {
+    (newVal, oldVal) => {
+      console.log(`[BatchAnalyzeModal Watcher] selectedProvider changed from "${oldVal}" to "${newVal}"`);
       if (newVal) {
+        console.log(`[BatchAnalyzeModal Watcher] Saving "${newVal}" to localStorage`);
         safeSetItem("meme_mgr_batch_provider", newVal);
       }
     }
@@ -254,10 +305,12 @@ export function useModals(showToast) {
   };
 
   const openBatchAnalyzeModal = async () => {
+    console.log("[openBatchAnalyzeModal] Starting...");
     try {
       const res = await fetch("/api/providers");
       if (!res.ok) throw new Error("获取大模型提供商失败");
       batchAnalyzeModal.providers = await res.json();
+      console.log("[openBatchAnalyzeModal] Loaded providers:", JSON.parse(JSON.stringify(batchAnalyzeModal.providers)));
     } catch (e) {
       console.error(e);
       showToast(e.message, "error", "获取供应商失败");
@@ -273,6 +326,7 @@ export function useModals(showToast) {
           batchAnalyzeModal.step = "progress";
           batchAnalyzeModal.visible = true;
           startPollingBatchAnalyze();
+          console.log("[openBatchAnalyzeModal] Batch analyze is already running.");
           return;
         }
       }
@@ -286,6 +340,7 @@ export function useModals(showToast) {
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
     batchAnalyzeModal.isPromptManuallyEdited = false;
+    console.log("[openBatchAnalyzeModal] Reset modal state. selectedProvider:", batchAnalyzeModal.selectedProvider);
 
     try {
       const templateRes = await fetch("/api/prompt/template");
@@ -302,12 +357,17 @@ export function useModals(showToast) {
     updatePromptContent();
 
     batchAnalyzeModal.visible = true;
+    console.log("[openBatchAnalyzeModal] Set visible=true");
 
     // Restore provider selection after DOM renders the select options
     nextTick(() => {
       const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
+      console.log("[openBatchAnalyzeModal] nextTick - Saved provider from localStorage:", savedProvider);
       if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
+        console.log("[openBatchAnalyzeModal] nextTick - Restoring provider to:", savedProvider);
         batchAnalyzeModal.selectedProvider = savedProvider;
+      } else {
+        console.warn("[openBatchAnalyzeModal] nextTick - Provider not found in list or empty. List:", JSON.parse(JSON.stringify(batchAnalyzeModal.providers)));
       }
     });
   };
@@ -426,5 +486,8 @@ export function useModals(showToast) {
     closeBatchAnalyzeModal,
     startBatchAnalyze,
     cancelBatchAnalyze,
+    fetchUiSettings,
+    safeGetItem,
+    safeSetItem,
   };
 }

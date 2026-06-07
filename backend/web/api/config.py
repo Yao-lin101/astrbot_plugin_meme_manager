@@ -97,3 +97,35 @@ async def update_config_values():
     except Exception as e:
         logger.exception("Failed to update config")
         return jsonify({"message": f"Failed to save config: {str(e)}"}), 500
+
+
+async def get_ui_settings():
+    """Get UI settings from a local json file in PLUGIN_DATA_DIR."""
+    try:
+        from ...config import PLUGIN_DATA_DIR
+
+        settings_path = PLUGIN_DATA_DIR / "ui_settings.json"
+        if not settings_path.exists():
+            return jsonify({}), 200
+        with open(settings_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify(data), 200
+    except Exception as e:
+        logger.exception("Failed to get UI settings")
+        return jsonify({"message": str(e)}), 500
+
+
+async def save_ui_settings():
+    """Save UI settings to a local json file in PLUGIN_DATA_DIR."""
+    try:
+        from ...config import PLUGIN_DATA_DIR
+
+        post_data = await request.get_json()
+        settings_path = PLUGIN_DATA_DIR / "ui_settings.json"
+        PLUGIN_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        with open(settings_path, "w", encoding="utf-8") as f:
+            json.dump(post_data, f, ensure_ascii=False, indent=2)
+        return jsonify({"message": "UI settings saved"}), 200
+    except Exception as e:
+        logger.exception("Failed to save UI settings")
+        return jsonify({"message": str(e)}), 500

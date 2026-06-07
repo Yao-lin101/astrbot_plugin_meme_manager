@@ -101,42 +101,11 @@ createApp({
     // 9. Config API
     const configApi = useConfigApi(showToast);
 
-    // Probe localStorage availability once quietly to avoid repeated console warnings/stacktraces
-    let isLocalStorageAvailable = false;
-    try {
-      if (window.localStorage) {
-        localStorage.setItem('__probe', '1');
-        localStorage.removeItem('__probe');
-        isLocalStorageAvailable = true;
-      }
-    } catch (e) {
-      // Quietly ignore, localStorage is not available (e.g. sandboxed iframe)
-    }
-
-    const safeLocalStorage = {
-      getItem(key) {
-        if (!isLocalStorageAvailable) return null;
-        try {
-          return localStorage.getItem(key);
-        } catch (e) {
-          return null;
-        }
-      },
-      setItem(key, value) {
-        if (!isLocalStorageAvailable) return;
-        try {
-          localStorage.setItem(key, value);
-        } catch (e) {
-          // ignore
-        }
-      }
-    };
-
     // Local UI states
-    const currentTab = ref(safeLocalStorage.getItem('meme_mgr_tab') || 'meme');
+    const currentTab = ref('meme');
     const switchTab = (tab) => {
       currentTab.value = tab;
-      safeLocalStorage.setItem('meme_mgr_tab', tab);
+      modals.safeSetItem('meme_mgr_tab', tab);
     };
 
     const savePersonaSettingsDirect = async ({ persona_id, meme_use_preference, meme_preference }) => {
@@ -257,6 +226,10 @@ createApp({
       if (window.AstrBotPluginPage) {
         await window.AstrBotPluginPage.ready();
       }
+      // Load UI settings from server before other resource fetching to restore tab state
+      await modals.fetchUiSettings();
+      currentTab.value = modals.safeGetItem('meme_mgr_tab') || 'meme';
+
       await api.fetchPersonaTags();
       await api.fetchEmojis();
       await api.fetchPersonas();
