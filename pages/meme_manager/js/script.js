@@ -302,6 +302,7 @@ createApp({
       emojiTagsMap: api.emojiTagsMap,
       allEmojisList: api.allEmojisList,
       importableEmojisList: api.importableEmojisList,
+      allCategories: api.allCategories,
       activeCategoryTimeGroups: api.activeCategoryTimeGroups,
       getEmojiTags: api.getEmojiTags,
       visibleLimit: api.visibleLimit,

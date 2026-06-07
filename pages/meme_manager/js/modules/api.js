@@ -238,6 +238,10 @@ export function useApi(showToast, pruneSelections) {
     return limitedGroups;
   });
 
+  const allCategories = computed(() => {
+    return Object.keys(emojiData.value).sort();
+  });
+
   const getEmojiTags = (emoji) => {
     const tags = emojiTagsMap.value.get(emoji);
     return tags ? Array.from(tags).sort() : [];
@@ -267,6 +271,7 @@ export function useApi(showToast, pruneSelections) {
     emojiTagsMap,
     allEmojisList,
     importableEmojisList,
+    allCategories,
     activeCategoryTimeGroups,
     getEmojiTags,
     visibleLimit,

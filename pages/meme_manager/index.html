@@ -451,7 +451,7 @@
 
     <!-- 批量导入已有表情包模态框 -->
     <import-modal :dialog="importModal" :active-category="activeCategory" :importable-emojis-list="importableEmojisList"
-      :get-image-url="getImageUrl" @toggle-emoji="toggleImportEmoji" @close="closeImportModal"
+      :get-image-url="getImageUrl" :get-emoji-tags="getEmojiTags" :all-categories="allCategories" @toggle-emoji="toggleImportEmoji" @close="closeImportModal"
       @submit="submitImport"></import-modal>
 
     <!-- 右键/长按批量快捷菜单 -->
