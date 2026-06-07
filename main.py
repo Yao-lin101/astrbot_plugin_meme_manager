@@ -20,7 +20,6 @@ try:
 
         async def serve_emoji_thumb_wrapper(category, filename):
             from .backend.web.api_registrar import serve_emoji
-            from .main import _meme_sender_instance
 
             if _meme_sender_instance:
                 return await serve_emoji(
@@ -30,7 +29,6 @@ try:
 
         async def serve_emoji_wrapper(category, filename):
             from .backend.web.api_registrar import serve_emoji
-            from .main import _meme_sender_instance
 
             if _meme_sender_instance:
                 return await serve_emoji(
