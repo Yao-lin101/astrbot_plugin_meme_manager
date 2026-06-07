@@ -1,6 +1,11 @@
+import mimetypes
 import os
 
 from astrbot.api import logger
+
+# Ensure webp and avif mimetypes are registered
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("image/avif", ".avif")
 
 
 def patch_onebot_serializer():
@@ -201,7 +206,8 @@ async def serve_emoji(sender, category, filename, is_thumbnail=False):
                 return response
 
         logger.info(f"Meme Manager serve_emoji: serving thumbnail {thumb_path}")
-        return await send_from_directory(thumb_dir, thumb_filename)
+        mimetype = "image/avif" if avif_supported else "image/webp"
+        return await send_from_directory(thumb_dir, thumb_filename, mimetype=mimetype)
 
     logger.info(f"Meme Manager serve_emoji: serving original image {target_path}")
     return await send_from_directory(
