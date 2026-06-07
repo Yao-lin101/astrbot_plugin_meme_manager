@@ -148,11 +148,10 @@ createApp({
 
     const getImageUrl = (emoji, isThumbnail = false) => {
       if (!emoji) return '';
-      let url = `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
       if (isThumbnail && !fullyLoadedEmojis.value[emoji]) {
-        url += '?thumbnail=true';
+        return `/api/file/meme_manager/memes/file/thumbnail/${encodeURIComponent(emoji)}`;
       }
-      return url;
+      return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
     };
 
     const activeCategory = computed(() => {

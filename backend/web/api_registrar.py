@@ -44,15 +44,26 @@ def wrap_api_handler(sender, handler):
 
         # Register the dynamic unauthenticated serve_emoji route on app startup/first request
         app = current_app._get_current_object()
-        route_name = "meme_manager_serve_emoji"
-        if route_name not in app.view_functions:
+        route_name_thumb = "meme_manager_serve_emoji_thumbnail"
+        route_name_orig = "meme_manager_serve_emoji"
+        if route_name_orig not in app.view_functions:
 
             async def serve_emoji_wrapper(category, filename):
-                return await serve_emoji(sender, category, filename)
+                return await serve_emoji(sender, category, filename, is_thumbnail=False)
+
+            async def serve_emoji_thumb_wrapper(category, filename):
+                return await serve_emoji(sender, category, filename, is_thumbnail=True)
+
+            app.add_url_rule(
+                "/api/file/meme_manager/memes/<category>/thumbnail/<filename>",
+                endpoint=route_name_thumb,
+                view_func=serve_emoji_thumb_wrapper,
+                methods=["GET"],
+            )
 
             app.add_url_rule(
                 "/api/file/meme_manager/memes/<category>/<filename>",
-                endpoint=route_name,
+                endpoint=route_name_orig,
                 view_func=serve_emoji_wrapper,
                 methods=["GET"],
             )
@@ -79,9 +90,9 @@ def wrap_api_handler(sender, handler):
     return wrapper
 
 
-async def serve_emoji(sender, category, filename):
+async def serve_emoji(sender, category, filename, is_thumbnail=False):
     """Serve emoji files from various directories."""
-    from quart import request, send_from_directory
+    from quart import send_from_directory
 
     from ...config import MEMES_DIR, PLUGIN_DATA_DIR
 
@@ -113,7 +124,9 @@ async def serve_emoji(sender, category, filename):
     if not target_path or not os.path.exists(target_path):
         return "File not found: " + filename, 404
 
-    is_thumbnail = request.args.get("thumbnail", "false").lower() == "true"
+    logger.info(
+        f"Meme Manager serve_emoji: filename={filename}, category={category}, is_thumbnail={is_thumbnail}"
+    )
     if is_thumbnail:
         from PIL import Image as PILImage
 
@@ -132,11 +145,18 @@ async def serve_emoji(sender, category, filename):
             try:
                 if os.path.getmtime(target_path) <= os.path.getmtime(thumb_path):
                     need_generate = False
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Error checking mtime for {thumb_filename}: {e}")
+
+        logger.info(
+            f"Meme Manager serve_emoji: thumb_path={thumb_path}, exists={os.path.exists(thumb_path)}, need_generate={need_generate}"
+        )
 
         if need_generate:
             try:
+                logger.info(
+                    f"Meme Manager serve_emoji: generating thumbnail for {filename} using format {thumb_format}"
+                )
                 with PILImage.open(target_path) as img:
                     orig_format = img.format
                     # If GIF, extract first frame
@@ -150,17 +170,26 @@ async def serve_emoji(sender, category, filename):
                     temp_thumb_path = thumb_path + ".tmp"
                     img.save(temp_thumb_path, format=thumb_format)
                     os.replace(temp_thumb_path, thumb_path)
+                logger.info(
+                    f"Meme Manager serve_emoji: thumbnail generated successfully at {thumb_path}"
+                )
             except Exception as e:
                 logger.warning(
                     f"Failed to generate {thumb_format} thumbnail for {filename}: {e}"
                 )
-                # fallback to serving original
-                return await send_from_directory(
+                # fallback to serving original and disable browser caching for the fallback image
+                response = await send_from_directory(
                     os.path.dirname(target_path), os.path.basename(target_path)
                 )
+                response.headers["Cache-Control"] = (
+                    "no-store, no-cache, must-revalidate, max-age=0"
+                )
+                return response
 
+        logger.info(f"Meme Manager serve_emoji: serving thumbnail {thumb_path}")
         return await send_from_directory(thumb_dir, thumb_filename)
 
+    logger.info(f"Meme Manager serve_emoji: serving original image {target_path}")
     return await send_from_directory(
         os.path.dirname(target_path), os.path.basename(target_path)
     )
