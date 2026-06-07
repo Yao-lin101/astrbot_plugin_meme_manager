@@ -32,6 +32,8 @@ from .config import (
 from .duplicates import check_duplicates, resolve_duplicates
 from .emoji import (
     add_emoji,
+    clear_all_thumbnails_api,
+    clear_orphaned_thumbnails_api,
     delete_emoji,
     edit_emoji,
     generate_thumbnails_api,
@@ -76,6 +78,8 @@ __all__ = [
     "check_duplicates",
     "resolve_duplicates",
     "add_emoji",
+    "clear_all_thumbnails_api",
+    "clear_orphaned_thumbnails_api",
     "delete_emoji",
     "edit_emoji",
     "get_all_emojis",

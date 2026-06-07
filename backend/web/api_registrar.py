@@ -232,7 +232,9 @@ def register_apis(sender):
         check_duplicates,
         check_sync_process,
         clear_all_emoji,
+        clear_all_thumbnails_api,
         clear_category,
+        clear_orphaned_thumbnails_api,
         delete_category,
         delete_emoji,
         edit_emoji,
@@ -272,6 +274,8 @@ def register_apis(sender):
     apis = [
         ("emoji", get_all_emojis, ["GET"]),
         ("emoji/generate_thumbnails", generate_thumbnails_api, ["POST"]),
+        ("emoji/clear_all_thumbnails", clear_all_thumbnails_api, ["POST"]),
+        ("emoji/clear_orphaned_thumbnails", clear_orphaned_thumbnails_api, ["POST"]),
         ("emoji/add", add_emoji, ["POST"]),
         ("emoji/delete", delete_emoji, ["POST"]),
         ("emoji/analyze", analyze_single_emoji, ["POST"]),

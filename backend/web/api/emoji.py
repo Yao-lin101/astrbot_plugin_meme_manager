@@ -463,3 +463,74 @@ async def generate_thumbnails_api():
     except Exception as e:
         logger.error(f"Failed manual thumbnail generation: {e}", exc_info=True)
         return jsonify({"status": "error", "message": str(e)}), 500
+
+
+async def clear_all_thumbnails_api():
+    """Clear all thumbnail cache files."""
+    try:
+        from ....config import PLUGIN_DATA_DIR
+
+        thumb_dir = Path(PLUGIN_DATA_DIR) / "thumbnails"
+        removed = 0
+        if thumb_dir.exists():
+            for f in thumb_dir.iterdir():
+                if f.is_file():
+                    f.unlink()
+                    removed += 1
+
+        return jsonify({"status": "success", "removed": removed}), 200
+    except Exception as e:
+        logger.error(f"Failed to clear all thumbnails: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+async def clear_orphaned_thumbnails_api():
+    """Clear thumbnail files that have no matching meme in the database."""
+    try:
+        from ....config import PLUGIN_DATA_DIR
+
+        thumb_dir = Path(PLUGIN_DATA_DIR) / "thumbnails"
+        if not thumb_dir.exists():
+            return jsonify({"status": "success", "removed": 0, "total": 0}), 200
+
+        # Get all known meme filenames from DB
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute("SELECT filename FROM memes")
+        rows = cursor.fetchall()
+        conn.close()
+        known_filenames = {row["filename"] for row in rows}
+
+        # Scan thumbnail directory and remove orphans
+        removed = 0
+        total = 0
+        for thumb_file in thumb_dir.iterdir():
+            if not thumb_file.is_file():
+                continue
+            total += 1
+            # Thumbnail filename format: <original_filename>.<thumb_ext>
+            # e.g. "image.jpg.avif" or "image.jpg.webp"
+            name = thumb_file.name
+            # Strip the thumbnail extension (.avif or .webp) to get original filename
+            original_name = None
+            for ext in (".avif", ".webp"):
+                if name.endswith(ext):
+                    original_name = name[: -len(ext)]
+                    break
+            if original_name is None:
+                # Unknown format, treat as orphan
+                thumb_file.unlink()
+                removed += 1
+                continue
+
+            if original_name not in known_filenames:
+                thumb_file.unlink()
+                removed += 1
+
+        return (
+            jsonify({"status": "success", "removed": removed, "total": total}),
+            200,
+        )
+    except Exception as e:
+        logger.error(f"Failed to clear orphaned thumbnails: {e}", exc_info=True)
+        return jsonify({"status": "error", "message": str(e)}), 500

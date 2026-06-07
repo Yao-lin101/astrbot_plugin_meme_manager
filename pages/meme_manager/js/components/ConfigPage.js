@@ -237,28 +237,46 @@ export const ConfigPage = {
       fetchEmbeddingProviders();
     });
 
-    const generatingThumbnails = ref(false);
-    const generationResult = ref(null);
+    // Cache cleanup state
+    const clearingAll = ref(false);
+    const clearingOrphans = ref(false);
+    const cacheCleanupResult = ref(null);
 
-    const triggerThumbnailGeneration = async () => {
-      generatingThumbnails.value = true;
-      generationResult.value = null;
+    const clearAllThumbnails = async () => {
+      clearingAll.value = true;
+      cacheCleanupResult.value = null;
       try {
-        const res = await fetch("/api/emoji/generate_thumbnails", {
+        const res = await fetch("/api/emoji/clear_all_thumbnails", {
           method: "POST",
           headers: { "Content-Type": "application/json" }
         });
-        if (!res.ok) throw new Error("生成请求失败");
-        generationResult.value = await res.json();
+        if (!res.ok) throw new Error("请求失败");
+        const data = await res.json();
+        cacheCleanupResult.value = { type: 'all', ...data };
       } catch (e) {
         console.error(e);
-        generationResult.value = {
-          status: "error",
-          failed: 1,
-          errors: [{ filename: "System Error", error: e.message }]
-        };
+        cacheCleanupResult.value = { type: 'all', status: 'error', message: e.message };
       } finally {
-        generatingThumbnails.value = false;
+        clearingAll.value = false;
+      }
+    };
+
+    const clearOrphanedThumbnails = async () => {
+      clearingOrphans.value = true;
+      cacheCleanupResult.value = null;
+      try {
+        const res = await fetch("/api/emoji/clear_orphaned_thumbnails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        if (!res.ok) throw new Error("请求失败");
+        const data = await res.json();
+        cacheCleanupResult.value = { type: 'orphan', ...data };
+      } catch (e) {
+        console.error(e);
+        cacheCleanupResult.value = { type: 'orphan', status: 'error', message: e.message };
+      } finally {
+        clearingOrphans.value = false;
       }
     };
 
@@ -325,9 +343,11 @@ export const ConfigPage = {
       filteredBlacklistPersonas,
       handleBlacklistBlur,
       toggleBlacklistPersona,
-      generatingThumbnails,
-      generationResult,
-      triggerThumbnailGeneration
+      clearingAll,
+      clearingOrphans,
+      cacheCleanupResult,
+      clearAllThumbnails,
+      clearOrphanedThumbnails
     };
   },
   template: `
@@ -354,6 +374,9 @@ export const ConfigPage = {
         </button>
         <button class="secondary-tab" :class="{ active: activeSubTab === 'compression' }" @click="activeSubTab = 'compression'">
           <i class="fas fa-compress-arrows-alt"></i> 压缩设置
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'cache' }" @click="activeSubTab = 'cache'">
+          <i class="fas fa-broom"></i> 缓存清理
         </button>
         <button class="secondary-tab" :class="{ active: activeSubTab === 'image_host' }" @click="activeSubTab = 'image_host'">
           <i class="fas fa-cloud-arrow-up"></i> 图床设置
@@ -451,7 +474,7 @@ export const ConfigPage = {
       </div>
 
       <!-- Tab: 其它配置页签 -->
-      <div v-if="activeSubTab !== 'persona'" class="tab-content">
+      <div v-if="activeSubTab !== 'persona' && activeSubTab !== 'cache'" class="tab-content">
         <div v-if="loading" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); gap: 12px;">
           <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary-color);"></i>
           <p style="font-size: 14px;">正在加载配置数据...</p>
@@ -674,44 +697,6 @@ export const ConfigPage = {
             </div>
           </template>
 
-          <!-- Manual Thumbnail generation section (only under compression tab) -->
-          <div v-if="activeSubTab === 'compression'" class="config-card">
-            <div class="config-card-title">
-              缩略图预生成 & 调试
-            </div>
-            <p class="form-hint" style="margin-top: -12px;">
-              手动扫描全库并生成表情包的缩略图缓存。这对于在新服务器上预先缓存表情，或者调试缩略图生成异常非常有用。
-            </p>
-            <div style="display: flex; flex-direction: column; gap: 15px; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
-              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                <div style="font-size: 13.5px; color: var(--text-primary); margin: 0;">
-                  <strong>缩略图状态：</strong>
-                  <span v-if="generationResult" style="color: var(--primary-color); font-weight: bold;">
-                    总数 {{ generationResult.total }} | 成功 {{ generationResult.generated }} | 已存在 {{ generationResult.existed }} | 失败 {{ generationResult.failed }} (AVIF 支持: {{ generationResult.avif_supported ? '是' : '否' }})
-                  </span>
-                  <span v-else style="color: var(--text-secondary);">尚未进行手动预生成。</span>
-                </div>
-                <button type="button" class="btn-primary" :disabled="generatingThumbnails" @click="triggerThumbnailGeneration" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
-                  <i class="fas" :class="generatingThumbnails ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
-                  {{ generatingThumbnails ? '正在生成...' : '立即预生成全部缩略图' }}
-                </button>
-              </div>
-
-              <!-- Error details if any failed -->
-              <div v-if="generationResult && generationResult.errors && generationResult.errors.length > 0" style="margin-top: 10px; border-top: 1px dashed var(--border-color); padding-top: 12px;">
-                <div style="font-size: 12.5px; font-weight: bold; color: var(--danger-color); margin-bottom: 8px;">
-                  生成失败列表 (共 {{ generationResult.failed }} 个)：
-                </div>
-                <div style="max-height: 150px; overflow-y: auto; background: rgba(239, 68, 68, 0.03); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: var(--radius-sm); padding: 8px; display: flex; flex-direction: column; gap: 4px;">
-                  <div v-for="err in generationResult.errors" :key="err.filename" style="font-size: 11.5px; color: var(--text-primary); display: flex; gap: 8px; margin: 0;">
-                    <span style="font-family: monospace; font-weight: bold; color: var(--danger-color); flex-shrink: 0;">{{ err.filename }}:</span>
-                    <span style="color: var(--text-secondary); word-break: break-all;">{{ err.error }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <!-- Save and Reset Action buttons sticky bar -->
           <div class="form-actions-bar">
             <button class="btn-secondary" @click="resetPluginConfig" :disabled="loading">重置</button>
@@ -719,6 +704,67 @@ export const ConfigPage = {
               <i class="fas fa-circle-check"></i> 保存设置
             </button>
           </div>
+        </div>
+      </div>
+
+      <!-- Tab: 缓存清理 -->
+      <div v-if="activeSubTab === 'cache'" class="tab-content">
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+
+          <!-- Card: 清理所有缩略图 -->
+          <div class="config-card">
+            <div class="config-card-title">
+              <i class="fas fa-trash-can" style="margin-right: 6px;"></i>清理所有缩略图
+            </div>
+            <p class="form-hint" style="margin-top: -12px;">
+              删除全部已缓存的缩略图文件。下次浏览表情时将自动按需重新生成。
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 15px; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="font-size: 13.5px; color: var(--text-primary); margin: 0;">
+                  <span v-if="cacheCleanupResult && cacheCleanupResult.type === 'all' && cacheCleanupResult.status === 'success'" style="color: var(--primary-color); font-weight: bold;">
+                    <i class="fas fa-circle-check" style="margin-right: 4px;"></i>已清理 {{ cacheCleanupResult.removed }} 个缩略图文件
+                  </span>
+                  <span v-else-if="cacheCleanupResult && cacheCleanupResult.type === 'all' && cacheCleanupResult.status === 'error'" style="color: var(--danger-color); font-weight: bold;">
+                    <i class="fas fa-circle-xmark" style="margin-right: 4px;"></i>清理失败: {{ cacheCleanupResult.message }}
+                  </span>
+                  <span v-else style="color: var(--text-secondary);">将清空 thumbnails 目录下的所有缩略图缓存。</span>
+                </div>
+                <button type="button" class="btn-danger-outline" :disabled="clearingAll || clearingOrphans" @click="clearAllThumbnails" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 16px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600;">
+                  <i class="fas" :class="clearingAll ? 'fa-spinner fa-spin' : 'fa-fire'"></i>
+                  {{ clearingAll ? '正在清理...' : '清理所有缩略图' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card: 清理无匹配项缩略图 -->
+          <div class="config-card">
+            <div class="config-card-title">
+              <i class="fas fa-filter-circle-xmark" style="margin-right: 6px;"></i>清理无匹配项的缩略图
+            </div>
+            <p class="form-hint" style="margin-top: -12px;">
+              仅删除在数据库中已找不到对应原图记录的孤立缩略图。适合在批量删除表情包后回收磁盘空间，不影响正常使用。
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 15px; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="font-size: 13.5px; color: var(--text-primary); margin: 0;">
+                  <span v-if="cacheCleanupResult && cacheCleanupResult.type === 'orphan' && cacheCleanupResult.status === 'success'" style="color: var(--primary-color); font-weight: bold;">
+                    <i class="fas fa-circle-check" style="margin-right: 4px;"></i>扫描 {{ cacheCleanupResult.total }} 个缩略图，清理了 {{ cacheCleanupResult.removed }} 个无匹配项
+                  </span>
+                  <span v-else-if="cacheCleanupResult && cacheCleanupResult.type === 'orphan' && cacheCleanupResult.status === 'error'" style="color: var(--danger-color); font-weight: bold;">
+                    <i class="fas fa-circle-xmark" style="margin-right: 4px;"></i>清理失败: {{ cacheCleanupResult.message }}
+                  </span>
+                  <span v-else style="color: var(--text-secondary);">扫描缩略图目录，移除与数据库中表情记录不匹配的缓存文件。</span>
+                </div>
+                <button type="button" class="btn-primary" :disabled="clearingAll || clearingOrphans" @click="clearOrphanedThumbnails" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 8px 16px; border-radius: var(--radius-md); font-size: 13px; font-weight: 600;">
+                  <i class="fas" :class="clearingOrphans ? 'fa-spinner fa-spin' : 'fa-broom'"></i>
+                  {{ clearingOrphans ? '正在扫描...' : '清理无匹配项缩略图' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </div>
