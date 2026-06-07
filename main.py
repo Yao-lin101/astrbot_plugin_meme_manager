@@ -4,6 +4,58 @@ import time
 
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403
+
+# Monkeypatch FileRoute statically at plugin import time to avoid dynamic route registration context issues
+try:
+    from astrbot.dashboard.routes.file import FileRoute
+
+    original_file_route_init = FileRoute.__init__
+
+    def patched_file_route_init(self, context):
+        original_file_route_init(self, context)
+
+        app = context.app
+        route_name_thumb = "meme_manager_serve_emoji_thumbnail"
+        route_name_orig = "meme_manager_serve_emoji"
+
+        async def serve_emoji_thumb_wrapper(category, filename):
+            from .backend.web.api_registrar import serve_emoji
+            from .main import _meme_sender_instance
+
+            if _meme_sender_instance:
+                return await serve_emoji(
+                    _meme_sender_instance, category, filename, is_thumbnail=True
+                )
+            return "Meme Manager plugin instance not found", 404
+
+        async def serve_emoji_wrapper(category, filename):
+            from .backend.web.api_registrar import serve_emoji
+            from .main import _meme_sender_instance
+
+            if _meme_sender_instance:
+                return await serve_emoji(
+                    _meme_sender_instance, category, filename, is_thumbnail=False
+                )
+            return "Meme Manager plugin instance not found", 404
+
+        if route_name_orig not in app.view_functions:
+            app.add_url_rule(
+                "/api/file/meme_manager/memes/<category>/thumbnail/<filename>",
+                endpoint=route_name_thumb,
+                view_func=serve_emoji_thumb_wrapper,
+                methods=["GET"],
+            )
+            app.add_url_rule(
+                "/api/file/meme_manager/memes/<category>/<filename>",
+                endpoint=route_name_orig,
+                view_func=serve_emoji_wrapper,
+                methods=["GET"],
+            )
+
+    FileRoute.__init__ = patched_file_route_init
+except Exception as e:
+    logger.error(f"[meme_manager] Failed to patch FileRoute statically: {e}")
+
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api.message_components import *  # noqa: F403
@@ -26,6 +78,8 @@ from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
 
+_meme_sender_instance = None
+
 
 @register(
     "meme_manager",
@@ -37,6 +91,8 @@ class MemeSender(Star, MemeConfigMixin):
     context: Context
 
     def __init__(self, context: Context, config: dict | None = None):
+        global _meme_sender_instance
+        _meme_sender_instance = self
         super().__init__(context)
         self.config = config or {}
         migrate_old_persona_tags_if_needed(self.config)
