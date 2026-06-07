@@ -90,7 +90,7 @@ export const ImportModal = {
           <span class="drawer-title">导入已存表情到标签「{{ activeCategory }}」</span>
           <button class="drawer-close-btn" @click="$emit('close')">&times;</button>
         </div>
-        <div class="drawer-content" style="max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
+        <div class="drawer-content" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
           
           <!-- 标签筛选及多选框 -->
           <div class="filter-section" style="margin-bottom: 10px;">
@@ -179,7 +179,7 @@ export const ImportModal = {
             </div>
           </div>
         </div>
-        <div class="drawer-actions" style="margin-top: 20px;">
+        <div class="drawer-actions">
           <span style="color: var(--text-secondary); font-size: 13px;">请选择要追加的表情包（已选中 {{ dialog.selectedEmojis.size }} 个）</span>
           <div class="action-group">
             <button class="btn-secondary" @click="$emit('close')">取消</button>
