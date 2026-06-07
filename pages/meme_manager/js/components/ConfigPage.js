@@ -1,4 +1,4 @@
-const { ref, computed, watch } = window.Vue;
+const { ref, computed, watch, onMounted } = window.Vue;
 
 export const ConfigPage = {
   name: 'ConfigPage',
@@ -36,6 +36,37 @@ export const ConfigPage = {
     const selectedPersonaId = ref('');
     const newPreferenceTagInput = ref('');
     const showUsePreferenceDropdown = ref(false);
+
+    const providers = ref([]);
+    const embeddingProviders = ref([]);
+
+    const fetchProviders = async () => {
+      try {
+        const res = await fetch("providers");
+        if (res.ok) {
+          providers.value = await res.json();
+        }
+      } catch (e) {
+        console.error("加载提供商列表失败:", e);
+      }
+    };
+
+    const fetchEmbeddingProviders = async () => {
+      try {
+        const res = await fetch("embedding_providers");
+        if (res.ok) {
+          embeddingProviders.value = await res.json();
+        }
+      } catch (e) {
+        console.error("加载 Embedding 提供商列表失败:", e);
+      }
+    };
+
+    onMounted(() => {
+      fetchProviders();
+      fetchEmbeddingProviders();
+    });
+
 
     const tabKeys = {
       basic: ['enable_llm_tool', 'persona_blacklist', 'meme_prompt'],
@@ -201,6 +232,8 @@ export const ConfigPage = {
       if (field.type === 'text') return 'textarea';
       if (field.type === 'list') return 'list';
       if (field.type === 'string' && field.options) return 'select';
+      if (field.type === 'string' && field._special === 'select_provider') return 'provider_select';
+      if (field.type === 'string' && field._special === 'select_embedding_provider') return 'embedding_provider_select';
       return 'text';
     };
 
@@ -223,7 +256,9 @@ export const ConfigPage = {
       addNewPreferenceTag,
       handleInputBlur,
       filteredPreferenceCategories,
-      tabKeys
+      tabKeys,
+      providers,
+      embeddingProviders
     };
   },
   template: `
@@ -434,8 +469,28 @@ export const ConfigPage = {
                       <option v-for="opt in subField.options" :key="opt" :value="opt">{{ opt }}</option>
                     </select>
 
+                    <!-- Provider ID Dropdown -->
+                    <select v-else-if="getFieldType(subField) === 'provider_select'" v-model="localConfig[key][subKey]" class="form-control">
+                      <option value="">-- 请选择供应商 (留空默认) --</option>
+                      <option v-for="prov in providers" :key="prov.id" :value="prov.id">
+                        {{ prov.name }} ({{ prov.id }})
+                      </option>
+                    </select>
+
+                    <!-- Embedding Provider ID Dropdown or Input fallback -->
+                    <template v-else-if="getFieldType(subField) === 'embedding_provider_select'">
+                      <select v-if="embeddingProviders.length > 0" v-model="localConfig[key][subKey]" class="form-control">
+                        <option value="">-- 请选择 Embedding 供应商 (留空默认) --</option>
+                        <option v-for="prov in embeddingProviders" :key="prov.id" :value="prov.id">
+                          {{ prov.name }} ({{ prov.id }})
+                        </option>
+                      </select>
+                      <input v-else type="text" v-model="localConfig[key][subKey]" class="form-control" placeholder="无法查找到 Embedding 供应商，请输入 Provider ID" />
+                    </template>
+
                     <!-- Number -->
                     <input v-else-if="getFieldType(subField) === 'number'" type="number" v-model.number="localConfig[key][subKey]" class="form-control" />
+
 
                     <!-- Textarea -->
                     <textarea v-else-if="getFieldType(subField) === 'textarea'" v-model="localConfig[key][subKey]" class="form-control"></textarea>
@@ -470,8 +525,28 @@ export const ConfigPage = {
                     <option v-for="opt in configSchema[key].options" :key="opt" :value="opt">{{ opt }}</option>
                   </select>
 
+                  <!-- Provider ID Dropdown -->
+                  <select v-else-if="getFieldType(configSchema[key]) === 'provider_select'" v-model="localConfig[key]" class="form-control">
+                    <option value="">-- 请选择供应商 (留空默认) --</option>
+                    <option v-for="prov in providers" :key="prov.id" :value="prov.id">
+                      {{ prov.name }} ({{ prov.id }})
+                    </option>
+                  </select>
+
+                  <!-- Embedding Provider ID Dropdown or Input fallback -->
+                  <template v-else-if="getFieldType(configSchema[key]) === 'embedding_provider_select'">
+                    <select v-if="embeddingProviders.length > 0" v-model="localConfig[key]" class="form-control">
+                      <option value="">-- 请选择 Embedding 供应商 (留空默认) --</option>
+                      <option v-for="prov in embeddingProviders" :key="prov.id" :value="prov.id">
+                        {{ prov.name }} ({{ prov.id }})
+                      </option>
+                    </select>
+                    <input v-else type="text" v-model="localConfig[key]" class="form-control" placeholder="无法查找到 Embedding 供应商，请输入 Provider ID" />
+                  </template>
+
                   <!-- List (Blacklist / Array of strings) -->
                   <div v-else-if="getFieldType(configSchema[key]) === 'list'" class="list-editor">
+
                     <div v-for="(item, idx) in localConfig[key]" :key="idx" class="list-editor-item">
                       <input type="text" v-model="localConfig[key][idx]" class="form-control" />
                       <button class="btn-danger-outline" style="padding: 0 12px;" @click="localConfig[key].splice(idx, 1)">&times;</button>

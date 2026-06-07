@@ -314,6 +314,30 @@ async def get_providers():
         return jsonify({"message": str(e)}), 500
 
 
+async def get_embedding_providers():
+    """获取所有可用的 Embedding 提供商"""
+    try:
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        context = plugin_config.get("context")
+        if context:
+            providers = context.get_all_embedding_providers()
+            result = []
+            for p in providers:
+                meta = p.meta()
+                result.append(
+                    {
+                        "id": meta.id,
+                        "name": getattr(p, "name", meta.id) or meta.id,
+                    }
+                )
+            return jsonify(result), 200
+        return jsonify([]), 200
+    except Exception as e:
+        logger.error(f"获取 Embedding 提供商列表失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
+
+
 async def get_prompt_template():
     """Get the meme analysis prompt template split into intro, tags, and desc."""
     try:
