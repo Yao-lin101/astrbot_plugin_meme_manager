@@ -352,7 +352,9 @@
                             :draggable="activeCategories.length === 1 && activeCategories[0] !== 'all'"
                             @dragstart="onDragStart($event, emoji, activeCategory)"
                             @click="onEmojiClick(activeCategory, emoji)"
-                            @contextmenu.prevent="activeCategories.length === 1 && activeCategories[0] !== 'all' && openContextMenu($event, activeCategory, emoji)">
+                            @contextmenu.prevent="activeCategories.length === 1 && activeCategories[0] !== 'all' && openContextMenu($event, activeCategory, emoji)"
+                            @mouseenter="onMouseEnterEmoji(emoji)"
+                            @mouseleave="onMouseLeaveEmoji">
 
                             <!-- 选中标记按钮 -->
                             <button type="button" class="selection-indicator" aria-label="选择表情包"
