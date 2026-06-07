@@ -7,8 +7,8 @@ import { useCategories } from './modules/categories.js';
 import { useEmojiActions } from './modules/emojiActions.js';
 import { useDedup } from './modules/dedup.js';
 import { useTagMerge } from './modules/tagMerge.js';
+import { useConfigApi } from './modules/configApi.js';
 
-import { SyncDrawer } from './components/SyncDrawer.js';
 import { ConfirmDialog } from './components/ConfirmDialog.js';
 import { DangerConfirmDialog } from './components/DangerConfirmDialog.js';
 import { CategoryRenameModal } from './components/CategoryRenameModal.js';
@@ -16,16 +16,17 @@ import { AddCategoryModal } from './components/AddCategoryModal.js';
 import { BatchPersonaModal } from './components/BatchPersonaModal.js';
 import { ImportModal } from './components/ImportModal.js';
 import { ContextMenu } from './components/ContextMenu.js';
-import { DuplicateModal } from './components/DuplicateModal.js';
-import { TagMergeModal } from './components/TagMergeModal.js';
 import { BatchAnalyzeModal } from './components/BatchAnalyzeModal.js';
 import { EmojiDetailModal } from './components/EmojiDetailModal.js';
+import { TagMergePage } from './components/TagMergePage.js';
+import { DuplicatePage } from './components/DuplicatePage.js';
+import { SyncPage } from './components/SyncPage.js';
+import { ConfigPage } from './components/ConfigPage.js';
 
 const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
 createApp({
   components: {
-    SyncDrawer,
     ConfirmDialog,
     DangerConfirmDialog,
     CategoryRenameModal,
@@ -33,10 +34,12 @@ createApp({
     BatchPersonaModal,
     ImportModal,
     ContextMenu,
-    DuplicateModal,
-    TagMergeModal,
     BatchAnalyzeModal,
-    EmojiDetailModal
+    EmojiDetailModal,
+    TagMergePage,
+    DuplicatePage,
+    SyncPage,
+    ConfigPage
   },
   setup() {
     // 1. Toasts
@@ -95,7 +98,39 @@ createApp({
     // 8. Tag Merge
     const tagMerge = useTagMerge(showToast, api.fetchEmojis, modals.confirm);
 
+    // 9. Config API
+    const configApi = useConfigApi(showToast);
+
     // Local UI states
+    const currentTab = ref(localStorage.getItem('meme_mgr_tab') || 'meme');
+    const switchTab = (tab) => {
+      currentTab.value = tab;
+      localStorage.setItem('meme_mgr_tab', tab);
+    };
+
+    const savePersonaSettingsDirect = async ({ persona_id, meme_use_preference, meme_preference }) => {
+      try {
+        const res = await fetch("/api/persona_tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            persona_id,
+            meme_use_preference,
+            meme_preference
+          })
+        });
+        if (!res.ok) throw new Error("保存专属配置失败");
+        api.personaTags.value[persona_id] = {
+          meme_use_preference,
+          meme_preference
+        };
+        showToast("保存人设配置成功~", "success", "人设管理");
+      } catch (e) {
+        console.error(e);
+        showToast(e.message, "error", "人设管理");
+      }
+    };
+
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
     const otherDropdownVisible = ref(false);
@@ -230,7 +265,6 @@ createApp({
       }
     };
 
-    // Lifecycle hooks
     onMounted(async () => {
       if (window.AstrBotPluginPage) {
         await window.AstrBotPluginPage.ready();
@@ -238,6 +272,7 @@ createApp({
       await api.fetchPersonaTags();
       await api.fetchEmojis();
       await api.fetchPersonas();
+      await configApi.fetchConfig();
       void sync.checkSyncStatus(false);
       
       window.addEventListener("scroll", handleScroll);
@@ -422,6 +457,15 @@ createApp({
       toggleTagInGroup: tagMerge.toggleTagInGroup,
       mergeSelectedGroups: tagMerge.mergeSelectedGroups,
       totalMergeCount: tagMerge.totalMergeCount,
+
+      // Primary Tabs & Configurations
+      currentTab,
+      switchTab,
+      savePersonaSettingsDirect,
+      pluginSchema: configApi.configSchema,
+      pluginConfig: configApi.configValues,
+      pluginConfigLoading: configApi.loading,
+      savePluginConfig: configApi.saveConfig,
     };
   },
 }).mount("#app");
