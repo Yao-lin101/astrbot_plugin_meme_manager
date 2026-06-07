@@ -74,22 +74,8 @@ export const EmojiDetailModal = {
   ],
   data() {
     return {
-      isDrawerInputFocused: false,
-      isImageLoading: true
+      isDrawerInputFocused: false
     };
-  },
-  watch: {
-    activeEmoji(newVal, oldVal) {
-      if (newVal !== oldVal) {
-        this.isImageLoading = true;
-      }
-    }
-  },
-  methods: {
-    onImageLoad() {
-      this.isImageLoading = false;
-      this.$emit('image-loaded', this.activeEmoji);
-    }
   },
   computed: {
     localDescription: {
@@ -133,10 +119,7 @@ export const EmojiDetailModal = {
           <!-- 左侧大图预览 + AI 助手 -->
           <div class="drawer-preview-column">
             <div class="drawer-image-wrapper">
-              <div v-show="isImageLoading" class="image-loading-spinner" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
-                <i class="fas fa-circle-notch fa-spin fa-2x" style="color: var(--primary-color);"></i>
-              </div>
-              <img v-show="!isImageLoading" :src="getImageUrl(activeEmoji)" :alt="activeEmoji" @load="onImageLoad" />
+              <img :key="activeEmoji" :src="getImageUrl(activeEmoji)" :alt="activeEmoji" @load="$emit('image-loaded', activeEmoji)" />
             </div>
 
             <!-- AI 助手板块 -->
