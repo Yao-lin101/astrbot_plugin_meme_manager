@@ -4,6 +4,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding-bottom: 110px;
 }
 
 .config-card {
@@ -206,10 +207,15 @@ input:checked + .slider-switch:before {
   gap: 8px;
 }
 
-/* Form Actions sticky bar */
+/* Form Actions fixed bar */
 .form-actions-bar {
-  position: sticky;
+  position: fixed;
   bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 48px);
+  max-width: 1352px;
+  box-sizing: border-box;
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -219,8 +225,7 @@ input:checked + .slider-switch:before {
   border-radius: var(--radius-lg);
   backdrop-filter: blur(20px);
   box-shadow: var(--shadow-md);
-  z-index: 10;
-  margin-top: 10px;
+  z-index: 100;
 }
 
 /* Persona Config Cards */
