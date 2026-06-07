@@ -58,6 +58,10 @@ html[data-theme="dark"] {
   box-sizing: border-box;
 }
 
+html, body {
+  overflow-x: hidden;
+}
+
 body {
   background-color: var(--bg-app);
   color: var(--text-primary);
@@ -276,4 +280,56 @@ button:disabled {
 @keyframes slideIn {
   from { opacity: 0; transform: translateX(20px); }
   to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+  .layout-container {
+    padding: 12px;
+    gap: 12px;
+  }
+  .header {
+    padding: 12px 16px;
+    border-radius: var(--radius-md);
+  }
+  .header h1 {
+    font-size: 15px;
+  }
+  .primary-tabs {
+    padding: 4px;
+    gap: 4px;
+    border-radius: var(--radius-md);
+    margin-bottom: 12px;
+  }
+  .page-toolbar {
+    padding: 10px 14px;
+    border-radius: var(--radius-md);
+  }
+  .category {
+    padding: 12px;
+    border-radius: var(--radius-md);
+  }
+  .config-card {
+    padding: 16px !important;
+    border-radius: var(--radius-md) !important;
+    gap: 16px !important;
+  }
+  .form-actions-bar {
+    padding: 12px 16px !important;
+    border-radius: var(--radius-md) !important;
+    bottom: 12px !important;
+    width: calc(100% - 24px) !important;
+  }
+  .secondary-tabs-container {
+    gap: 6px 10px !important;
+    margin-bottom: 16px !important;
+  }
+  .secondary-tab {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
 }
