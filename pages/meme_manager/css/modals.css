@@ -71,7 +71,7 @@
   background: var(--bg-app);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  max-height: 250px;
+  max-height: 95px;
   overflow-y: auto;
 }
 

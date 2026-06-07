@@ -527,6 +527,9 @@
         :has-previous-emoji="hasPreviousEmoji"
         :has-next-emoji="hasNextEmoji"
         :get-image-url="getImageUrl"
+        :providers="batchAnalyzeModal.providers"
+        :selected-provider="batchAnalyzeModal.selectedProvider"
+        @update:selected-provider="batchAnalyzeModal.selectedProvider = $event"
         @close="closeDetailDrawer"
         @toggle-tag="toggleTagInDrawer"
         @toggle-persona="togglePersonaInDrawer"
@@ -534,6 +537,7 @@
         @create-tag="handleCreateTagInDrawer"
         @navigate="navigateToSiblingEmoji"
         @save="saveEmojiAttributes"
+        @analyze="runSingleEmojiAnalysis"
       ></emoji-detail-modal>
 
       <!-- 批量导入已有表情包模态框 -->

@@ -1,4 +1,5 @@
 from .batch import (
+    analyze_single_emoji,
     batch_analyze_emojis,
     batch_convert_emoji_gif,
     batch_copy_emoji,
@@ -51,6 +52,7 @@ from .sync import (
 from .tag_merge import merge_tags, scan_similar_tags
 
 __all__ = [
+    "analyze_single_emoji",
     "batch_convert_emoji_gif",
     "batch_copy_emoji",
     "batch_delete_emoji",

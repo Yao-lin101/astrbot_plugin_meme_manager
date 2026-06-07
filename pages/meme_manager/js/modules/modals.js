@@ -279,14 +279,27 @@ export function useModals(showToast) {
     }
   };
 
-  const openBatchAnalyzeModal = async () => {
+  const fetchProviders = async () => {
     try {
       const res = await fetch("/api/providers");
       if (!res.ok) throw new Error("获取大模型提供商失败");
       batchAnalyzeModal.providers = await res.json();
+      
+      const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
+      if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
+        batchAnalyzeModal.selectedProvider = savedProvider;
+      } else if (batchAnalyzeModal.providers.length > 0 && !batchAnalyzeModal.selectedProvider) {
+        batchAnalyzeModal.selectedProvider = batchAnalyzeModal.providers[0].id;
+      }
     } catch (e) {
       console.error(e);
       showToast(e.message, "error", "获取供应商失败");
+    }
+  };
+
+  const openBatchAnalyzeModal = async () => {
+    await fetchProviders();
+    if (!batchAnalyzeModal.providers || batchAnalyzeModal.providers.length === 0) {
       return;
     }
 
@@ -307,7 +320,6 @@ export function useModals(showToast) {
     }
 
     batchAnalyzeModal.step = "config";
-    batchAnalyzeModal.selectedProvider = "";
     batchAnalyzeModal.analyzeTags = true;
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
@@ -455,5 +467,6 @@ export function useModals(showToast) {
     fetchUiSettings,
     safeGetItem,
     safeSetItem,
+    fetchProviders,
   };
 }

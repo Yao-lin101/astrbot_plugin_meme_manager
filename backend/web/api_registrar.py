@@ -110,6 +110,7 @@ async def serve_emoji(sender, category, filename):
 def register_apis(sender):
     """Register all Quart web endpoints for Meme Manager plugin."""
     from .api import (
+        analyze_single_emoji,
         add_emoji,
         batch_analyze_emojis,
         batch_convert_emoji_gif,
@@ -163,6 +164,7 @@ def register_apis(sender):
         ("emoji", get_all_emojis, ["GET"]),
         ("emoji/add", add_emoji, ["POST"]),
         ("emoji/delete", delete_emoji, ["POST"]),
+        ("emoji/analyze", analyze_single_emoji, ["POST"]),
         ("emoji/batch_delete", batch_delete_emoji, ["POST"]),
         ("emoji/batch_convert_gif", batch_convert_emoji_gif, ["POST"]),
         ("emoji/batch_rename_to_tags", batch_rename_emojis_to_tags, ["POST"]),
