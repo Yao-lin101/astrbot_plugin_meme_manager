@@ -147,25 +147,25 @@
 
 <body>
   <div id="app" class="layout-container" v-cloak
-    @click="closeContextMenu(); otherDropdownVisible = false; showUsePreferenceDropdown = false">
+    @click="closeContextMenu(); otherDropdownVisible = false; showUsePreferenceDropdown = false; mobileSidebarOpen = false">
 
     <main class="main-content">
       <!-- 一级 Tab 导航栏 -->
       <nav class="primary-tabs">
         <button class="primary-tab" :class="{ active: currentTab === 'meme' }" @click="switchTab('meme')">
-          <i class="fas fa-images"></i>表情管理
+          <i class="fas fa-images"></i><span class="tab-text">表情管理</span>
         </button>
         <button class="primary-tab" :class="{ active: currentTab === 'tagMerge' }" @click="switchTab('tagMerge')">
-          <i class="fas fa-object-group"></i>标签合并
+          <i class="fas fa-object-group"></i><span class="tab-text">标签合并</span>
         </button>
         <button class="primary-tab" :class="{ active: currentTab === 'dedup' }" @click="switchTab('dedup')">
-          <i class="fas fa-clone"></i>重复检测
+          <i class="fas fa-clone"></i><span class="tab-text">重复检测</span>
         </button>
         <button class="primary-tab" :class="{ active: currentTab === 'sync' }" @click="switchTab('sync')">
-          <i class="fas fa-arrows-spin"></i>同步管理
+          <i class="fas fa-arrows-spin"></i><span class="tab-text">同步管理</span>
         </button>
         <button class="primary-tab" :class="{ active: currentTab === 'config' }" @click="switchTab('config')">
-          <i class="fas fa-gears"></i>配置管理
+          <i class="fas fa-gears"></i><span class="tab-text">配置管理</span>
         </button>
       </nav>
 
@@ -175,6 +175,9 @@
         <div class="page-toolbar">
           <div class="selection-toolbar">
             <div class="filter-group" style="display: flex; align-items: center; gap: 15px;">
+              <button class="btn-secondary mobile-sidebar-toggle-btn" @click.stop="mobileSidebarOpen = true">
+                <i class="fas fa-tags icon"></i>标签
+              </button>
               <div class="persona-filter-wrapper">
                 <label for="persona-filter"><i class="fas fa-user-gear icon"></i>过滤人格:</label>
                 <select id="persona-filter" v-model="personaFilter" @change="fetchEmojis">
@@ -191,27 +194,27 @@
                 <i class="fas fa-plus icon"></i>添加标签
               </button>
 
-              <span v-if="selectionEnabled" id="selection-summary" class="active-selection">
+              <span v-if="selectionEnabled" id="selection-summary" class="active-selection desktop-only">
                 已选中 {{ selectedEmojis.size }} 个
               </span>
 
-              <button id="batch-persona-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0"
+              <button id="batch-persona-btn" class="btn-secondary desktop-only" :disabled="selectedEmojis.size === 0"
                 @click="openBatchPersonaModal">
                 <i class="fas fa-user-gear icon"></i>设置人格
               </button>
 
-              <button id="batch-analyze-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0"
+              <button id="batch-analyze-btn" class="btn-secondary desktop-only" :disabled="selectedEmojis.size === 0"
                 @click="openBatchAnalyzeModal">
                 <i class="fas fa-brain icon"></i>批量重新分析
               </button>
 
-              <button id="batch-delete-btn" class="btn-danger" :disabled="selectedEmojis.size === 0"
+              <button id="batch-delete-btn" class="btn-danger desktop-only" :disabled="selectedEmojis.size === 0"
                 @click="batchDeleteSelected">
                 <i class="fas fa-trash-can icon"></i>删除
               </button>
 
               <!-- 其他操作下拉菜单 -->
-              <div class="dropdown-wrapper" style="position: relative; display: inline-block;">
+              <div class="dropdown-wrapper desktop-only" style="position: relative; display: inline-block;">
                 <button class="btn-secondary dropdown-trigger"
                   @click.stop="otherDropdownVisible = !otherDropdownVisible"
                   style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 500; transition: var(--transition);">
@@ -380,10 +383,11 @@
           </div>
 
           <!-- 右侧：固定垂直标签列表 -->
-          <aside class="tags-sidebar">
+          <aside class="tags-sidebar" :class="{ open: mobileSidebarOpen }">
             <div class="tags-sidebar-header">
               <i class="fas fa-tags"></i>
               <h3>标签分类</h3>
+              <button type="button" class="close-sidebar-btn" @click.stop="mobileSidebarOpen = false">&times;</button>
             </div>
 
             <!-- Active filter chips above the search wrapper -->
@@ -503,6 +507,44 @@
     <!-- 右键/长按批量快捷菜单 -->
     <context-menu :menu="contextMenu" @delete="contextMenuDelete" @move="contextMenuMove" @copy="contextMenuCopy"
       @convert-gif="contextMenuConvertToGif" @paste="contextMenuPaste"></context-menu>
+
+    <!-- 移动端底部批量操作栏 -->
+    <div class="mobile-bottom-actions-bar" v-if="selectionEnabled && selectedEmojis.size > 0">
+      <div class="mobile-actions-summary">
+        已选中 {{ selectedEmojis.size }} 个表情包
+      </div>
+      <div class="mobile-actions-buttons">
+        <button class="btn-secondary btn-sm" @click="openBatchPersonaModal">
+          <i class="fas fa-user-gear"></i> 人设
+        </button>
+        <button class="btn-secondary btn-sm" @click="openBatchAnalyzeModal">
+          <i class="fas fa-brain"></i> 分析
+        </button>
+        <button class="btn-danger btn-sm" @click="batchDeleteSelected">
+          <i class="fas fa-trash-can"></i> 删除
+        </button>
+        <div class="dropdown-wrapper mobile-dropdown" style="position: relative; display: inline-block;">
+          <button class="btn-secondary btn-sm dropdown-trigger" @click.stop="otherDropdownVisible = !otherDropdownVisible">
+            <i class="fas fa-ellipsis-h"></i> 其他 <i class="fas fa-chevron-up" style="font-size: 8px; margin-left: 2px;"></i>
+          </button>
+          <div class="dropdown-menu" v-show="otherDropdownVisible"
+            style="position: absolute; right: 0; bottom: 100%; margin-bottom: 6px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 100; min-width: 140px; display: flex; flex-direction: column; padding: 4px 0; overflow: hidden;">
+            <button class="dropdown-item" @click="batchConvertToGif(); otherDropdownVisible = false"
+              style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;"
+              onmouseover="this.style.background='var(--bg-secondary)'"
+              onmouseout="this.style.background='transparent'">
+              <i class="fas fa-file-image" style="width: 16px; color: var(--text-secondary);"></i> 转换为 GIF
+            </button>
+            <button class="dropdown-item" @click="batchRenameToTags(); otherDropdownVisible = false"
+              style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;"
+              onmouseover="this.style.background='var(--bg-secondary)'"
+              onmouseout="this.style.background='transparent'">
+              <i class="fas fa-tags" style="width: 16px; color: var(--text-secondary);"></i> 重命名标签
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- 吐司通知容器 -->
     <div class="toast-container">

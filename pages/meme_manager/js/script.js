@@ -135,6 +135,7 @@ createApp({
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
     const otherDropdownVisible = ref(false);
+    const mobileSidebarOpen = ref(false);
 
 
 
@@ -190,6 +191,7 @@ createApp({
     });
 
     const selectCategory = (category) => {
+      mobileSidebarOpen.value = false;
       if (category === 'all') {
         api.activeCategories.value = ['all'];
       } else {
@@ -354,6 +356,7 @@ createApp({
       // UI States & Navigation
       syncDrawerVisible,
       otherDropdownVisible,
+      mobileSidebarOpen,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,
