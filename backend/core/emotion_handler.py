@@ -232,6 +232,21 @@ def cosine_similarity(v1, v2):
 
 async def sync_tag_embeddings(sender):
     """后台增量计算缺失标签的向量并同步至 SQLite"""
+    if not sender:
+        return
+
+    # Concurrency guard: if another synchronization task is already running,
+    # set the pending flag so it will check again when finished, and exit.
+    if getattr(sender, "_embedding_sync_in_progress", False):
+        sender._embedding_sync_pending = True
+        logger.debug(
+            "[meme_manager] Tag embedding synchronization already in progress, marked pending."
+        )
+        return
+
+    sender._embedding_sync_in_progress = True
+    sender._embedding_sync_pending = False
+
     try:
         from ..db.database import (
             get_all_tag_embeddings,
@@ -239,68 +254,87 @@ async def sync_tag_embeddings(sender):
             save_tag_embedding,
         )
 
-        conn = get_db_conn()
-        cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT emotions FROM memes")
-        rows = cursor.fetchall()
-        conn.close()
+        while True:
+            conn = get_db_conn()
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT emotions FROM memes")
+            rows = cursor.fetchall()
+            conn.close()
 
-        all_tags = set()
-        for row in rows:
-            if row["emotions"]:
-                for emo in row["emotions"].split(","):
-                    emo = emo.strip()
-                    if emo:
-                        all_tags.add(emo)
+            all_tags = set()
+            for row in rows:
+                if row["emotions"]:
+                    for emo in row["emotions"].split(","):
+                        emo = emo.strip()
+                        if emo:
+                            all_tags.add(emo)
 
-        if not all_tags:
-            return
+            if not all_tags:
+                break
 
-        cached_embeddings = get_all_tag_embeddings()
-        missing_tags = [tag for tag in all_tags if tag not in cached_embeddings]
+            cached_embeddings = get_all_tag_embeddings()
+            missing_tags = [tag for tag in all_tags if tag not in cached_embeddings]
 
-        if not missing_tags:
-            return
+            if not missing_tags:
+                # If a new request was pending, check again; otherwise exit.
+                if getattr(sender, "_embedding_sync_pending", False):
+                    sender._embedding_sync_pending = False
+                    continue
+                break
 
-        logger.info(
-            f"[meme_manager] 检测到 {len(missing_tags)} 个表情标签缺失向量，正在后台计算..."
-        )
-
-        provider_id = get_config_value(sender.config, "embedding_provider_id", "")
-        embedding_provider = None
-        if provider_id:
-            embedding_provider = sender.context.get_provider_by_id(provider_id)
-        if not embedding_provider:
-            provs = sender.context.get_all_embedding_providers()
-            if provs:
-                embedding_provider = provs[0]
-
-        if not embedding_provider:
-            logger.warning(
-                "[meme_manager] 未配置或未找到可用的 Embedding 提供商，跳过向量同步。"
+            logger.info(
+                f"[meme_manager] 检测到 {len(missing_tags)} 个表情标签缺失向量，正在后台计算..."
             )
-            return
 
-        logger.info(
-            f"[meme_manager] 向量计算开始：使用 Provider ID: {getattr(embedding_provider, 'id', 'unknown')}, "
-            f"类型: {type(embedding_provider).__name__}, Model: {getattr(embedding_provider, 'model', 'unknown')}"
-        )
+            provider_id = get_config_value(sender.config, "embedding_provider_id", "")
+            embedding_provider = None
+            if provider_id:
+                embedding_provider = sender.context.get_provider_by_id(provider_id)
+            if not embedding_provider:
+                provs = sender.context.get_all_embedding_providers()
+                if provs:
+                    embedding_provider = provs[0]
 
-        for tag in missing_tags:
-            try:
-                embedding = await embedding_provider.get_embedding(tag)
-                if embedding:
-                    save_tag_embedding(tag, embedding)
-                    logger.info(
-                        f"[meme_manager] 标签 '{tag}' 向量计算成功：维度={len(embedding)}, "
-                        f"前5位数据={embedding[:5]}"
-                    )
-            except Exception as e:
-                logger.error(f"[meme_manager] 标签 '{tag}' 向量计算失败: {e}")
+            if not embedding_provider:
+                logger.warning(
+                    "[meme_manager] 未配置或未找到可用的 Embedding 提供商，跳过向量同步。"
+                )
+                break
 
-        logger.info("[meme_manager] 标签向量增量同步完成")
+            logger.info(
+                f"[meme_manager] 向量计算开始：使用 Provider ID: {getattr(embedding_provider, 'id', 'unknown')}, "
+                f"类型: {type(embedding_provider).__name__}, Model: {getattr(embedding_provider, 'model', 'unknown')}"
+            )
+
+            for tag in missing_tags:
+                try:
+                    embedding = await embedding_provider.get_embedding(tag)
+                    if embedding:
+                        save_tag_embedding(tag, embedding)
+                        logger.info(
+                            f"[meme_manager] 标签 '{tag}' 向量计算成功：维度={len(embedding)}, "
+                            f"前5位数据={embedding[:5]}"
+                        )
+                except Exception as e:
+                    logger.error(f"[meme_manager] 标签 '{tag}' 向量计算失败: {e}")
+
+            logger.info("[meme_manager] 标签向量增量同步一轮完成")
+
+            # Check if another synchronization request was triggered during execution.
+            if getattr(sender, "_embedding_sync_pending", False):
+                sender._embedding_sync_pending = False
+                logger.info(
+                    "[meme_manager] Pending sync request detected, starting a new round."
+                )
+                continue
+            else:
+                break
+
+        logger.info("[meme_manager] 标签向量增量同步全部完成")
     except Exception as e:
         logger.error(f"[meme_manager] 标签向量同步过程发生错误: {e}")
+    finally:
+        sender._embedding_sync_in_progress = False
 
 
 async def _handle_resp_vector(
