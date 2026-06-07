@@ -146,6 +146,28 @@ createApp({
       }
     };
 
+    let hoverTimer = null;
+    const onMouseEnterEmoji = (emoji) => {
+      if (!emoji || fullyLoadedEmojis.value[emoji]) return;
+      if (hoverTimer) clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => {
+        markEmojiFullyLoaded(emoji);
+      }, 500);
+    };
+
+    const onMouseLeaveEmoji = () => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+        hoverTimer = null;
+      }
+    };
+
+    onUnmounted(() => {
+      if (hoverTimer) {
+        clearTimeout(hoverTimer);
+      }
+    });
+
     const getImageUrl = (emoji, isThumbnail = false) => {
       if (!emoji) return '';
       if (isThumbnail && !fullyLoadedEmojis.value[emoji]) {
@@ -398,6 +420,8 @@ createApp({
       isDrawerInputFocused,
       getImageUrl,
       markEmojiFullyLoaded,
+      onMouseEnterEmoji,
+      onMouseLeaveEmoji,
 
       // Dedup
       duplicateModal: dedup.duplicateModal,
