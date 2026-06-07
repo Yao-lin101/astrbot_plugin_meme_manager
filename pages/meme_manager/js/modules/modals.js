@@ -281,13 +281,7 @@ export function useModals(showToast) {
     }
 
     batchAnalyzeModal.step = "config";
-    // Load persisted provider from localStorage
-    const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
-    if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
-      batchAnalyzeModal.selectedProvider = savedProvider;
-    } else {
-      batchAnalyzeModal.selectedProvider = "";
-    }
+    batchAnalyzeModal.selectedProvider = "";
     batchAnalyzeModal.analyzeTags = true;
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
@@ -308,6 +302,14 @@ export function useModals(showToast) {
     updatePromptContent();
 
     batchAnalyzeModal.visible = true;
+
+    // Restore provider selection after DOM renders the select options
+    nextTick(() => {
+      const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
+      if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
+        batchAnalyzeModal.selectedProvider = savedProvider;
+      }
+    });
   };
 
   const closeBatchAnalyzeModal = () => {
