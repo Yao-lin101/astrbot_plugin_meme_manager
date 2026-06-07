@@ -337,7 +337,6 @@ async def get_embedding_providers():
         return jsonify({"message": str(e)}), 500
 
 
-
 async def get_prompt_template():
     """Get the meme analysis prompt template split into intro, tags, and desc."""
     try:
@@ -504,13 +503,15 @@ async def analyze_emoji_core(
     Core logic to analyze a single emoji file using an LLM.
     Returns a dict: {"status": "success", "tags": [...], "description": "..."}
     """
+    import asyncio
     import base64
     import io
     import json
     import os
     import re
-    import asyncio
+
     from PIL import Image as PILImage
+
     from ....config import MEMES_DIR
     from ...db.database import get_db_conn
 
@@ -680,9 +681,7 @@ async def analyze_emoji_core(
         except asyncio.CancelledError:
             raise
         except asyncio.TimeoutError:
-            last_error = TimeoutError(
-                f"模型分析超时（超过 {ANALYZE_TIMEOUT} 秒）"
-            )
+            last_error = TimeoutError(f"模型分析超时（超过 {ANALYZE_TIMEOUT} 秒）")
             logger.warning(
                 f"分析表情包超时: {filename}（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
             )
@@ -704,9 +703,7 @@ async def analyze_emoji_core(
     conn = get_db_conn()
     cursor = conn.cursor()
 
-    final_emotions = (
-        ",".join(parsed_tags) if analyze_tags else existing_emotions
-    )
+    final_emotions = ",".join(parsed_tags) if analyze_tags else existing_emotions
     final_desc = parsed_desc if analyze_description else existing_desc
 
     cursor.execute(
@@ -718,7 +715,9 @@ async def analyze_emoji_core(
 
     return {
         "status": "success",
-        "tags": parsed_tags if analyze_tags else (existing_emotions.split(",") if existing_emotions else []),
+        "tags": parsed_tags
+        if analyze_tags
+        else (existing_emotions.split(",") if existing_emotions else []),
         "description": final_desc,
     }
 
@@ -754,13 +753,6 @@ async def analyze_single_emoji():
             sender=sender,
         )
 
-        # Trigger vectorization and reload
-        from .common import trigger_tag_vectorization
-        try:
-            trigger_tag_vectorization()
-        except Exception as e:
-            logger.error(f"分析后触发向量化失败: {e}")
-
         try:
             await sender.reload_emotions()
         except Exception as e:
@@ -786,7 +778,7 @@ async def run_batch_analyze_task(
     """后台批量分析执行函数"""
     global batch_analyze_status, cancel_batch_analyze_flag
     import asyncio
-    from .common import trigger_tag_vectorization
+
 
     # 在一开始，先将所有文件状态置为等待中
     batch_analyze_status["results"] = [
@@ -838,7 +830,9 @@ async def run_batch_analyze_task(
             await asyncio.sleep(0.5)
 
     try:
-        tasks = [analyze_single_file(idx, filename) for idx, filename in enumerate(filenames)]
+        tasks = [
+            analyze_single_file(idx, filename) for idx, filename in enumerate(filenames)
+        ]
         await asyncio.gather(*tasks)
 
         if cancel_batch_analyze_flag:
@@ -857,12 +851,6 @@ async def run_batch_analyze_task(
         raise
     finally:
         batch_analyze_status["status"] = "completed"
-
-        # 全局重构向量与重新加载
-        try:
-            trigger_tag_vectorization()
-        except Exception as e:
-            logger.error(f"批量分析后触发向量化失败: {e}")
 
         try:
             await sender.reload_emotions()
@@ -885,7 +873,6 @@ async def batch_rename_emojis_to_tags():
 
         from ....config import MEMES_DIR
         from ...db.database import get_db_conn
-        from .common import trigger_tag_vectorization
 
         def sanitize_filename(name: str) -> str:
             name = re.sub(r'[\\/*?:"<>|]', "", name)
@@ -983,11 +970,6 @@ async def batch_rename_emojis_to_tags():
         category_manager = plugin_config.get("category_manager")
         if category_manager:
             category_manager.sync_with_filesystem()
-
-        try:
-            trigger_tag_vectorization()
-        except Exception as e:
-            logger.error(f"重命名后触发向量化失败: {e}")
 
         sender = plugin_config.get("sender")
         if sender:
