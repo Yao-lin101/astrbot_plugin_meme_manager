@@ -37,6 +37,16 @@ export const ConfigPage = {
     const newPreferenceTagInput = ref('');
     const showUsePreferenceDropdown = ref(false);
 
+    const tabKeys = {
+      basic: ['enable_llm_tool', 'persona_blacklist', 'meme_prompt'],
+      interaction: ['interaction_config'],
+      auto_steal: ['auto_steal_config', 'multimodal_config'],
+      emotion: ['emotion_llm_config'],
+      embedding: ['embedding_config', 'similarity_dedup_config'],
+      compression: ['compression_config'],
+      image_host: ['image_host', 'image_host_config']
+    };
+
     // Local copy of plugin configuration values for editing
     const localConfig = ref({});
 
@@ -212,18 +222,37 @@ export const ConfigPage = {
       showUsePreferenceDropdown,
       addNewPreferenceTag,
       handleInputBlur,
-      filteredPreferenceCategories
+      filteredPreferenceCategories,
+      tabKeys
     };
   },
   template: `
     <div class="config-container">
       <!-- 二级 Tab 导航栏 -->
-      <div class="secondary-tabs-container">
+      <div class="secondary-tabs-container" style="flex-wrap: wrap; gap: 8px 16px;">
         <button class="secondary-tab" :class="{ active: activeSubTab === 'persona' }" @click="activeSubTab = 'persona'">
           <i class="fas fa-user-gear"></i> 人设管理
         </button>
-        <button class="secondary-tab" :class="{ active: activeSubTab === 'plugin' }" @click="activeSubTab = 'plugin'">
-          <i class="fas fa-sliders"></i> 插件配置
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'basic' }" @click="activeSubTab = 'basic'">
+          <i class="fas fa-sliders"></i> 基础设置
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'interaction' }" @click="activeSubTab = 'interaction'">
+          <i class="fas fa-message"></i> 交互设置
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'auto_steal' }" @click="activeSubTab = 'auto_steal'">
+          <i class="fas fa-download"></i> 偷图与分类
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'emotion' }" @click="activeSubTab = 'emotion'">
+          <i class="fas fa-heart"></i> 情感分析
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'embedding' }" @click="activeSubTab = 'embedding'">
+          <i class="fas fa-magnifying-glass"></i> 检索与去重
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'compression' }" @click="activeSubTab = 'compression'">
+          <i class="fas fa-compress-arrows-alt"></i> 压缩设置
+        </button>
+        <button class="secondary-tab" :class="{ active: activeSubTab === 'image_host' }" @click="activeSubTab = 'image_host'">
+          <i class="fas fa-cloud-arrow-up"></i> 图床设置
         </button>
       </div>
 
@@ -314,8 +343,8 @@ export const ConfigPage = {
         </div>
       </div>
 
-      <!-- Tab 2: 插件配置 -->
-      <div v-if="activeSubTab === 'plugin'" class="tab-content">
+      <!-- Tab: 其它配置页签 -->
+      <div v-if="activeSubTab !== 'persona'" class="tab-content">
         <div v-if="loading" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); gap: 12px;">
           <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary-color);"></i>
           <p style="font-size: 14px;">正在加载配置数据...</p>
@@ -327,136 +356,138 @@ export const ConfigPage = {
         </div>
 
         <div v-else style="display: flex; flex-direction: column; gap: 24px;">
-          <!-- Loop through top level keys in Schema -->
-          <div v-for="(field, key) in configSchema" :key="key" class="config-card">
-            <div class="config-card-title">
-              {{ field.description || key }}
-            </div>
-            <p v-if="field.hint" class="form-hint" style="margin-top: -12px;">
-              {{ field.hint }}
-            </p>
+          <!-- Loop through keys mapped to current activeSubTab -->
+          <template v-for="key in tabKeys[activeSubTab]" :key="key">
+            <div v-if="configSchema[key]" class="config-card">
+              <div class="config-card-title">
+                {{ configSchema[key].description || key }}
+              </div>
+              <p v-if="configSchema[key].hint" class="form-hint" style="margin-top: -12px;">
+                {{ configSchema[key].hint }}
+              </p>
 
-            <!-- Object layout (grouped fields) -->
-            <div v-if="getFieldType(field) === 'object' && field.items" class="config-form-grid">
-              <div v-for="(subField, subKey) in field.items" :key="subKey" class="form-group" :class="{ 'full-width': subField.type === 'text' || subField.type === 'object' }">
-                
-                <!-- If nested object (like stardots, cloudflare_r2 config) -->
-                <div v-if="getFieldType(subField) === 'object' && subField.items" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; background: var(--bg-element); width: 100%;">
-                  <span style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
-                    {{ subField.description || subKey }}
-                  </span>
-                  <div class="config-form-grid" style="grid-template-columns: 1fr;">
-                    <div v-for="(nestedField, nestedKey) in subField.items" :key="nestedKey" class="form-group">
-                      <label class="form-label">{{ nestedField.description || nestedKey }}</label>
-                      
-                      <!-- Render control -->
-                      <input 
-                        v-if="getFieldType(nestedField) === 'text'"
-                        type="text" 
-                        v-model="localConfig[key][subKey][nestedKey]" 
-                        class="form-control"
-                      />
-                      <input 
-                        v-else-if="getFieldType(nestedField) === 'number'"
-                        type="number" 
-                        v-model.number="localConfig[key][subKey][nestedKey]" 
-                        class="form-control"
-                      />
-                      
-                      <p v-if="nestedField.hint" class="form-hint">{{ nestedField.hint }}</p>
+              <!-- Object layout (grouped fields) -->
+              <div v-if="getFieldType(configSchema[key]) === 'object' && configSchema[key].items" class="config-form-grid">
+                <div v-for="(subField, subKey) in configSchema[key].items" :key="subKey" class="form-group" :class="{ 'full-width': subField.type === 'text' || subField.type === 'object' }">
+                  
+                  <!-- If nested object (like stardots, cloudflare_r2 config) -->
+                  <div v-if="getFieldType(subField) === 'object' && subField.items" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; background: var(--bg-element); width: 100%;">
+                    <span style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
+                      {{ subField.description || subKey }}
+                    </span>
+                    <div class="config-form-grid" style="grid-template-columns: 1fr;">
+                      <div v-for="(nestedField, nestedKey) in subField.items" :key="nestedKey" class="form-group">
+                        <label class="form-label">{{ nestedField.description || nestedKey }}</label>
+                        
+                        <!-- Render control -->
+                        <input 
+                          v-if="getFieldType(nestedField) === 'text'"
+                          type="text" 
+                          v-model="localConfig[key][subKey][nestedKey]" 
+                          class="form-control"
+                        />
+                        <input 
+                          v-else-if="getFieldType(nestedField) === 'number'"
+                          type="number" 
+                          v-model.number="localConfig[key][subKey][nestedKey]" 
+                          class="form-control"
+                        />
+                        
+                        <p v-if="nestedField.hint" class="form-hint">{{ nestedField.hint }}</p>
+                      </div>
                     </div>
                   </div>
+
+                  <!-- Regular sub-fields -->
+                  <template v-else>
+                    <label class="form-label" v-if="getFieldType(subField) !== 'switch'">
+                      {{ subField.description || subKey }}
+                    </label>
+
+                    <!-- Switch/Toggle (Inline label) -->
+                    <div v-if="getFieldType(subField) === 'switch'" class="switch-container">
+                      <div class="switch-label-group">
+                        <span class="form-label" style="font-size: 13px;">{{ subField.description || subKey }}</span>
+                        <span v-if="subField.hint" class="form-hint">{{ subField.hint }}</span>
+                      </div>
+                      <label class="switch">
+                        <input type="checkbox" v-model="localConfig[key][subKey]" />
+                        <span class="slider-switch"></span>
+                      </label>
+                    </div>
+
+                    <!-- Slider -->
+                    <div v-else-if="getFieldType(subField) === 'slider'" class="slider-container">
+                      <input 
+                        type="range" 
+                        :min="subField.slider.min || 1" 
+                        :max="subField.slider.max || 100" 
+                        step="1" 
+                        v-model.number="localConfig[key][subKey]" 
+                        class="slider-input"
+                      />
+                      <span class="slider-value">{{ localConfig[key][subKey] }}%</span>
+                    </div>
+
+                    <!-- Dropdown / Select -->
+                    <select v-else-if="getFieldType(subField) === 'select'" v-model="localConfig[key][subKey]" class="form-control">
+                      <option v-for="opt in subField.options" :key="opt" :value="opt">{{ opt }}</option>
+                    </select>
+
+                    <!-- Number -->
+                    <input v-else-if="getFieldType(subField) === 'number'" type="number" v-model.number="localConfig[key][subKey]" class="form-control" />
+
+                    <!-- Textarea -->
+                    <textarea v-else-if="getFieldType(subField) === 'textarea'" v-model="localConfig[key][subKey]" class="form-control"></textarea>
+
+                    <!-- Hint -->
+                    <p v-if="subField.hint && getFieldType(subField) !== 'switch'" class="form-hint">{{ subField.hint }}</p>
+                  </template>
+
                 </div>
+              </div>
 
-                <!-- Regular sub-fields -->
-                <template v-else>
-                  <label class="form-label" v-if="getFieldType(subField) !== 'switch'">
-                    {{ subField.description || subKey }}
-                  </label>
-
-                  <!-- Switch/Toggle (Inline label) -->
-                  <div v-if="getFieldType(subField) === 'switch'" class="switch-container">
+              <!-- Top-level Non-Object controls -->
+              <div v-else class="config-form-grid" style="grid-template-columns: 1fr;">
+                <div class="form-group" style="width: 100%;">
+                  <!-- Switch -->
+                  <div v-if="getFieldType(configSchema[key]) === 'switch'" class="switch-container">
                     <div class="switch-label-group">
-                      <span class="form-label" style="font-size: 13px;">{{ subField.description || subKey }}</span>
-                      <span v-if="subField.hint" class="form-hint">{{ subField.hint }}</span>
+                      <span class="form-label" style="font-size: 13px;">{{ configSchema[key].description || key }}</span>
+                      <span v-if="configSchema[key].hint" class="form-hint">{{ configSchema[key].hint }}</span>
                     </div>
                     <label class="switch">
-                      <input type="checkbox" v-model="localConfig[key][subKey]" />
+                      <input type="checkbox" v-model="localConfig[key]" />
                       <span class="slider-switch"></span>
                     </label>
                   </div>
 
-                  <!-- Slider -->
-                  <div v-else-if="getFieldType(subField) === 'slider'" class="slider-container">
-                    <input 
-                      type="range" 
-                      :min="subField.slider.min || 1" 
-                      :max="subField.slider.max || 100" 
-                      step="1" 
-                      v-model.number="localConfig[key][subKey]" 
-                      class="slider-input"
-                    />
-                    <span class="slider-value">{{ localConfig[key][subKey] }}%</span>
-                  </div>
+                  <!-- Textarea -->
+                  <textarea v-else-if="getFieldType(configSchema[key]) === 'textarea'" v-model="localConfig[key]" class="form-control" style="min-height: 140px;"></textarea>
 
-                  <!-- Dropdown / Select -->
-                  <select v-else-if="getFieldType(subField) === 'select'" v-model="localConfig[key][subKey]" class="form-control">
-                    <option v-for="opt in subField.options" :key="opt" :value="opt">{{ opt }}</option>
+                  <!-- Select -->
+                  <select v-else-if="getFieldType(configSchema[key]) === 'select'" v-model="localConfig[key]" class="form-control">
+                    <option v-for="opt in configSchema[key].options" :key="opt" :value="opt">{{ opt }}</option>
                   </select>
 
-                  <!-- Number -->
-                  <input v-else-if="getFieldType(subField) === 'number'" type="number" v-model.number="localConfig[key][subKey]" class="form-control" />
-
-                  <!-- Textarea -->
-                  <textarea v-else-if="getFieldType(subField) === 'textarea'" v-model="localConfig[key][subKey]" class="form-control"></textarea>
-
-                  <!-- Hint -->
-                  <p v-if="subField.hint && getFieldType(subField) !== 'switch'" class="form-hint">{{ subField.hint }}</p>
-                </template>
-
-              </div>
-            </div>
-
-            <!-- Top-level Non-Object controls -->
-            <div v-else class="config-form-grid" style="grid-template-columns: 1fr;">
-              <div class="form-group" style="width: 100%;">
-                <!-- Switch -->
-                <div v-if="getFieldType(field) === 'switch'" class="switch-container">
-                  <div class="switch-label-group">
-                    <span class="form-label" style="font-size: 13px;">{{ field.description || key }}</span>
-                    <span v-if="field.hint" class="form-hint">{{ field.hint }}</span>
+                  <!-- List (Blacklist / Array of strings) -->
+                  <div v-else-if="getFieldType(configSchema[key]) === 'list'" class="list-editor">
+                    <div v-for="(item, idx) in localConfig[key]" :key="idx" class="list-editor-item">
+                      <input type="text" v-model="localConfig[key][idx]" class="form-control" />
+                      <button class="btn-danger-outline" style="padding: 0 12px;" @click="localConfig[key].splice(idx, 1)">&times;</button>
+                    </div>
+                    <button class="btn-secondary" style="align-self: flex-start; margin-top: 4px;" @click="localConfig[key].push('')">
+                      <i class="fas fa-plus"></i> 添加条目
+                    </button>
                   </div>
-                  <label class="switch">
-                    <input type="checkbox" v-model="localConfig[key]" />
-                    <span class="slider-switch"></span>
-                  </label>
+
+                  <!-- Regular Inputs -->
+                  <input v-else type="text" v-model="localConfig[key]" class="form-control" />
                 </div>
-
-                <!-- Textarea -->
-                <textarea v-else-if="getFieldType(field) === 'textarea'" v-model="localConfig[key]" class="form-control" style="min-height: 140px;"></textarea>
-
-                <!-- Select -->
-                <select v-else-if="getFieldType(field) === 'select'" v-model="localConfig[key]" class="form-control">
-                  <option v-for="opt in field.options" :key="opt" :value="opt">{{ opt }}</option>
-                </select>
-
-                <!-- List (Blacklist / Array of strings) -->
-                <div v-else-if="getFieldType(field) === 'list'" class="list-editor">
-                  <div v-for="(item, idx) in localConfig[key]" :key="idx" class="list-editor-item">
-                    <input type="text" v-model="localConfig[key][idx]" class="form-control" />
-                    <button class="btn-danger-outline" style="padding: 0 12px;" @click="localConfig[key].splice(idx, 1)">&times;</button>
-                  </div>
-                  <button class="btn-secondary" style="align-self: flex-start; margin-top: 4px;" @click="localConfig[key].push('')">
-                    <i class="fas fa-plus"></i> 添加条目
-                  </button>
-                </div>
-
-                <!-- Regular Inputs -->
-                <input v-else type="text" v-model="localConfig[key]" class="form-control" />
               </div>
-            </div>
 
-          </div>
+            </div>
+          </template>
 
           <!-- Save and Reset Action buttons sticky bar -->
           <div class="form-actions-bar">
@@ -470,3 +501,4 @@ export const ConfigPage = {
     </div>
   `
 };
+
