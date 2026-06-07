@@ -102,7 +102,7 @@ async def update_config_values():
 async def get_ui_settings():
     """Get UI settings from a local json file in PLUGIN_DATA_DIR."""
     try:
-        from ...config import PLUGIN_DATA_DIR
+        from ....config import PLUGIN_DATA_DIR
 
         settings_path = PLUGIN_DATA_DIR / "ui_settings.json"
         if not settings_path.exists():
@@ -118,7 +118,7 @@ async def get_ui_settings():
 async def save_ui_settings():
     """Save UI settings to a local json file in PLUGIN_DATA_DIR."""
     try:
-        from ...config import PLUGIN_DATA_DIR
+        from ....config import PLUGIN_DATA_DIR
 
         post_data = await request.get_json()
         settings_path = PLUGIN_DATA_DIR / "ui_settings.json"
