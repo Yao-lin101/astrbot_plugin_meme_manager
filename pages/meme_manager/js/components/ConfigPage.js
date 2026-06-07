@@ -37,36 +37,14 @@ export const ConfigPage = {
     const newPreferenceTagInput = ref('');
     const showUsePreferenceDropdown = ref(false);
 
+    const blacklistSearchQuery = ref('');
+    const showBlacklistDropdown = ref(false);
+
+    const localPersonaUseList = ref([]);
+    const localPersonaCollectPref = ref('');
+
     const providers = ref([]);
     const embeddingProviders = ref([]);
-
-    const fetchProviders = async () => {
-      try {
-        const res = await fetch("providers");
-        if (res.ok) {
-          providers.value = await res.json();
-        }
-      } catch (e) {
-        console.error("加载提供商列表失败:", e);
-      }
-    };
-
-    const fetchEmbeddingProviders = async () => {
-      try {
-        const res = await fetch("embedding_providers");
-        if (res.ok) {
-          embeddingProviders.value = await res.json();
-        }
-      } catch (e) {
-        console.error("加载 Embedding 提供商列表失败:", e);
-      }
-    };
-
-    onMounted(() => {
-      fetchProviders();
-      fetchEmbeddingProviders();
-    });
-
 
     const tabKeys = {
       basic: ['enable_llm_tool', 'persona_blacklist', 'meme_prompt'],
@@ -117,64 +95,43 @@ export const ConfigPage = {
       }
     }, { immediate: true });
 
+    // Watch selectedPersonaId and props.personaTags to sync local values
+    watch(() => [selectedPersonaId.value, props.personaTags], () => {
+      if (selectedPersonaId.value) {
+        const tagsObj = props.personaTags[selectedPersonaId.value] || { meme_use_preference: '', meme_preference: '' };
+        const pref = tagsObj.meme_use_preference || tagsObj.tag || '';
+        localPersonaUseList.value = pref ? pref.split(',').map(s => s.trim()).filter(Boolean) : [];
+        localPersonaCollectPref.value = tagsObj.meme_preference || '';
+      } else {
+        localPersonaUseList.value = [];
+        localPersonaCollectPref.value = '';
+      }
+    }, { immediate: true, deep: true });
+
     // Active persona computation
     const activePersona = computed(() => {
       return props.systemPersonas.find(p => p.id === selectedPersonaId.value) || null;
     });
 
-    // Computed properties for selected persona's settings
-    const activePersonaTags = computed(() => {
-      if (!selectedPersonaId.value) return { meme_use_preference: '', meme_preference: '' };
-      return props.personaTags[selectedPersonaId.value] || { meme_use_preference: '', meme_preference: '' };
-    });
-
-    const activePersonaUseList = computed(() => {
-      const pref = activePersonaTags.value.meme_use_preference || activePersonaTags.value.tag || '';
-      if (!pref) return [];
-      return pref.split(',').map(s => s.trim()).filter(Boolean);
-    });
-
-    const activePersonaCollectPref = computed({
-      get() {
-        return activePersonaTags.value.meme_preference || '';
-      },
-      set(val) {
-        emit('save-persona-settings', {
-          persona_id: selectedPersonaId.value,
-          meme_use_preference: activePersonaTags.value.meme_use_preference || '',
-          meme_preference: val
-        });
-      }
-    });
-
     // Methods for persona tags
     const togglePersonaTag = (tag) => {
-      const list = [...activePersonaUseList.value];
+      const list = [...localPersonaUseList.value];
       const idx = list.indexOf(tag);
       if (idx > -1) {
         list.splice(idx, 1);
       } else {
         list.push(tag);
       }
-      
-      emit('save-persona-settings', {
-        persona_id: selectedPersonaId.value,
-        meme_use_preference: list.join(', '),
-        meme_preference: activePersonaCollectPref.value
-      });
+      localPersonaUseList.value = list;
     };
 
     const addNewPreferenceTag = () => {
       const tag = newPreferenceTagInput.value.trim();
       if (tag) {
-        const list = [...activePersonaUseList.value];
+        const list = [...localPersonaUseList.value];
         if (!list.includes(tag)) {
           list.push(tag);
-          emit('save-persona-settings', {
-            persona_id: selectedPersonaId.value,
-            meme_use_preference: list.join(', '),
-            meme_preference: activePersonaCollectPref.value
-          });
+          localPersonaUseList.value = list;
         }
         newPreferenceTagInput.value = '';
       }
@@ -193,9 +150,22 @@ export const ConfigPage = {
       return categories.filter(cat => cat.toLowerCase().includes(query));
     });
 
-    // Helper to check if a category is active for the current persona
-    const isPersonaTagActive = (tag) => {
-      return activePersonaUseList.value.includes(tag);
+    // Manual Save / Reset for persona configuration
+    const savePersonaConfig = () => {
+      emit('save-persona-settings', {
+        persona_id: selectedPersonaId.value,
+        meme_use_preference: localPersonaUseList.value.join(', '),
+        meme_preference: localPersonaCollectPref.value
+      });
+    };
+
+    const resetPersonaConfig = () => {
+      if (selectedPersonaId.value) {
+        const tagsObj = props.personaTags[selectedPersonaId.value] || { meme_use_preference: '', meme_preference: '' };
+        const pref = tagsObj.meme_use_preference || tagsObj.tag || '';
+        localPersonaUseList.value = pref ? pref.split(',').map(s => s.trim()).filter(Boolean) : [];
+        localPersonaCollectPref.value = tagsObj.meme_preference || '';
+      }
     };
 
     // Dynamic config form saving
@@ -223,18 +193,82 @@ export const ConfigPage = {
     };
 
     // Helper functions for rendering forms
-    const getFieldType = (field) => {
+    const getFieldType = (field, key) => {
       if (field.type === 'object') return 'object';
       if (field.type === 'bool') return 'switch';
       if (field.type === 'int' || field.type === 'float') {
         return field.slider ? 'slider' : 'number';
       }
       if (field.type === 'text') return 'textarea';
-      if (field.type === 'list') return 'list';
+      if (field.type === 'list') {
+        if (key === 'persona_blacklist') return 'persona_blacklist_select';
+        return 'list';
+      }
       if (field.type === 'string' && field.options) return 'select';
       if (field.type === 'string' && field._special === 'select_provider') return 'provider_select';
       if (field.type === 'string' && field._special === 'select_embedding_provider') return 'embedding_provider_select';
       return 'text';
+    };
+
+    const fetchProviders = async () => {
+      try {
+        const res = await fetch("providers");
+        if (res.ok) {
+          providers.value = await res.json();
+        }
+      } catch (e) {
+        console.error("加载提供商列表失败:", e);
+      }
+    };
+
+    const fetchEmbeddingProviders = async () => {
+      try {
+        const res = await fetch("embedding_providers");
+        if (res.ok) {
+          embeddingProviders.value = await res.json();
+        }
+      } catch (e) {
+        console.error("加载 Embedding 提供商列表失败:", e);
+      }
+    };
+
+    onMounted(() => {
+      fetchProviders();
+      fetchEmbeddingProviders();
+    });
+
+    // Persona Blacklist Multiselect Helpers
+    const getPersonaName = (pId) => {
+      const p = props.systemPersonas.find(p => p.id === pId);
+      return p ? `${p.name} (${pId})` : pId;
+    };
+
+    const filteredBlacklistPersonas = computed(() => {
+      const query = blacklistSearchQuery.value.trim().toLowerCase();
+      if (!query) return props.systemPersonas;
+      return props.systemPersonas.filter(p => 
+        p.name.toLowerCase().includes(query) || p.id.toLowerCase().includes(query)
+      );
+    });
+
+    const handleBlacklistBlur = () => {
+      setTimeout(() => {
+        showBlacklistDropdown.value = false;
+      }, 200);
+    };
+
+    const toggleBlacklistPersona = (pId) => {
+      if (!localConfig.value.persona_blacklist) {
+        localConfig.value.persona_blacklist = [];
+      }
+      const list = [...localConfig.value.persona_blacklist];
+      const idx = list.indexOf(pId);
+      if (idx > -1) {
+        list.splice(idx, 1);
+      } else {
+        list.push(pId);
+      }
+      localConfig.value.persona_blacklist = list;
     };
 
     return {
@@ -242,10 +276,11 @@ export const ConfigPage = {
       selectedPersonaId,
       localConfig,
       activePersona,
-      activePersonaUseList,
-      activePersonaCollectPref,
+      localPersonaUseList,
+      localPersonaCollectPref,
       togglePersonaTag,
-      isPersonaTagActive,
+      savePersonaConfig,
+      resetPersonaConfig,
       savePluginConfig,
       resetPluginConfig,
       getFieldType,
@@ -258,7 +293,13 @@ export const ConfigPage = {
       filteredPreferenceCategories,
       tabKeys,
       providers,
-      embeddingProviders
+      embeddingProviders,
+      blacklistSearchQuery,
+      showBlacklistDropdown,
+      getPersonaName,
+      filteredBlacklistPersonas,
+      handleBlacklistBlur,
+      toggleBlacklistPersona
     };
   },
   template: `
@@ -320,7 +361,7 @@ export const ConfigPage = {
                 
                 <div class="multiselect-tag-container" style="display: flex; align-items: center; gap: 8px; background: var(--bg-element); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); min-height: 42px; width: 100%; flex-wrap: wrap; box-sizing: border-box; position: relative;">
                   <!-- Active pills -->
-                  <span v-for="tag in activePersonaUseList" :key="tag" class="active-tag-pill" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--primary-color); padding: 2px 8px; border-radius: 4px; font-size: 12.5px; font-weight: 500; user-select: none;">
+                  <span v-for="tag in localPersonaUseList" :key="tag" class="active-tag-pill" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--primary-color); padding: 2px 8px; border-radius: 4px; font-size: 12.5px; font-weight: 500; user-select: none;">
                     {{ tag }}
                     <span @click.stop="togglePersonaTag(tag)" style="cursor: pointer; font-weight: bold; font-size: 13px; color: var(--primary-color); line-height: 1; padding-left: 2px;" onmouseover="this.style.color='var(--danger-color)'" onmouseout="this.style.color='var(--primary-color)'">&times;</span>
                   </span>
@@ -349,7 +390,7 @@ export const ConfigPage = {
                       >
                         <input 
                           type="checkbox" 
-                          :checked="activePersonaUseList.includes(cat)" 
+                          :checked="localPersonaUseList.includes(cat)" 
                           style="width: 14px; height: 14px; cursor: pointer;" 
                           @click.stop
                           @change="togglePersonaTag(cat)"
@@ -367,11 +408,19 @@ export const ConfigPage = {
                 <span class="form-label" style="font-size: 12.5px;"><i class="fas fa-eye"></i> 专属收集偏好 (描述)</span>
                 <p class="form-hint" style="margin-top: -4px;">配置此人格偷取表情包时的偏好逻辑。支持输入自然语言（例如：“只收集沙雕熊猫头，或者带猫咪的表情，其他表情包不保存”）。</p>
                 <textarea 
-                  v-model="activePersonaCollectPref"
+                  v-model="localPersonaCollectPref"
                   class="form-control" 
                   placeholder="（可选）留空则使用默认配置。输入自然语言描述，系统将自动使用多模态大模型对聊天内容中出现的表情进行分类过滤与匹配。"
                   style="min-height: 80px;"
                 ></textarea>
+              </div>
+
+              <!-- Manual save/reset actions bar for persona settings -->
+              <div class="form-actions-bar" style="margin-top: 10px; position: static; box-shadow: none; border-radius: var(--radius-md); padding: 12px 0; background: transparent;">
+                <button class="btn-secondary" @click="resetPersonaConfig" :disabled="loading">重置</button>
+                <button class="btn-primary" @click="savePersonaConfig" :disabled="loading || !selectedPersonaId">
+                  <i class="fas fa-circle-check"></i> 保存人设设置
+                </button>
               </div>
             </div>
           </div>
@@ -402,11 +451,11 @@ export const ConfigPage = {
               </p>
 
               <!-- Object layout (grouped fields) -->
-              <div v-if="getFieldType(configSchema[key]) === 'object' && configSchema[key].items" class="config-form-grid">
+              <div v-if="getFieldType(configSchema[key], key) === 'object' && configSchema[key].items" class="config-form-grid">
                 <div v-for="(subField, subKey) in configSchema[key].items" :key="subKey" class="form-group" :class="{ 'full-width': subField.type === 'text' || subField.type === 'object' }">
                   
                   <!-- If nested object (like stardots, cloudflare_r2 config) -->
-                  <div v-if="getFieldType(subField) === 'object' && subField.items" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; background: var(--bg-element); width: 100%;">
+                  <div v-if="getFieldType(subField, subKey) === 'object' && subField.items" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; background: var(--bg-element); width: 100%;">
                     <span style="font-size: 13px; font-weight: 700; display: block; margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
                       {{ subField.description || subKey }}
                     </span>
@@ -435,12 +484,12 @@ export const ConfigPage = {
 
                   <!-- Regular sub-fields -->
                   <template v-else>
-                    <label class="form-label" v-if="getFieldType(subField) !== 'switch'">
+                    <label class="form-label" v-if="getFieldType(subField, subKey) !== 'switch'">
                       {{ subField.description || subKey }}
                     </label>
 
                     <!-- Switch/Toggle (Inline label) -->
-                    <div v-if="getFieldType(subField) === 'switch'" class="switch-container">
+                    <div v-if="getFieldType(subField, subKey) === 'switch'" class="switch-container">
                       <div class="switch-label-group">
                         <span class="form-label" style="font-size: 13px;">{{ subField.description || subKey }}</span>
                         <span v-if="subField.hint" class="form-hint">{{ subField.hint }}</span>
@@ -452,7 +501,7 @@ export const ConfigPage = {
                     </div>
 
                     <!-- Slider -->
-                    <div v-else-if="getFieldType(subField) === 'slider'" class="slider-container">
+                    <div v-else-if="getFieldType(subField, subKey) === 'slider'" class="slider-container">
                       <input 
                         type="range" 
                         :min="subField.slider.min || 1" 
@@ -465,12 +514,12 @@ export const ConfigPage = {
                     </div>
 
                     <!-- Dropdown / Select -->
-                    <select v-else-if="getFieldType(subField) === 'select'" v-model="localConfig[key][subKey]" class="form-control">
+                    <select v-else-if="getFieldType(subField, subKey) === 'select'" v-model="localConfig[key][subKey]" class="form-control">
                       <option v-for="opt in subField.options" :key="opt" :value="opt">{{ opt }}</option>
                     </select>
 
                     <!-- Provider ID Dropdown -->
-                    <select v-else-if="getFieldType(subField) === 'provider_select'" v-model="localConfig[key][subKey]" class="form-control">
+                    <select v-else-if="getFieldType(subField, subKey) === 'provider_select'" v-model="localConfig[key][subKey]" class="form-control">
                       <option value="">-- 请选择供应商 (留空默认) --</option>
                       <option v-for="prov in providers" :key="prov.id" :value="prov.id">
                         {{ prov.name }} ({{ prov.id }})
@@ -478,7 +527,7 @@ export const ConfigPage = {
                     </select>
 
                     <!-- Embedding Provider ID Dropdown or Input fallback -->
-                    <template v-else-if="getFieldType(subField) === 'embedding_provider_select'">
+                    <template v-else-if="getFieldType(subField, subKey) === 'embedding_provider_select'">
                       <select v-if="embeddingProviders.length > 0" v-model="localConfig[key][subKey]" class="form-control">
                         <option value="">-- 请选择 Embedding 供应商 (留空默认) --</option>
                         <option v-for="prov in embeddingProviders" :key="prov.id" :value="prov.id">
@@ -489,14 +538,13 @@ export const ConfigPage = {
                     </template>
 
                     <!-- Number -->
-                    <input v-else-if="getFieldType(subField) === 'number'" type="number" v-model.number="localConfig[key][subKey]" class="form-control" />
-
+                    <input v-else-if="getFieldType(subField, subKey) === 'number'" type="number" v-model.number="localConfig[key][subKey]" class="form-control" />
 
                     <!-- Textarea -->
-                    <textarea v-else-if="getFieldType(subField) === 'textarea'" v-model="localConfig[key][subKey]" class="form-control"></textarea>
+                    <textarea v-else-if="getFieldType(subField, subKey) === 'textarea'" v-model="localConfig[key][subKey]" class="form-control"></textarea>
 
                     <!-- Hint -->
-                    <p v-if="subField.hint && getFieldType(subField) !== 'switch'" class="form-hint">{{ subField.hint }}</p>
+                    <p v-if="subField.hint && getFieldType(subField, subKey) !== 'switch'" class="form-hint">{{ subField.hint }}</p>
                   </template>
 
                 </div>
@@ -506,7 +554,7 @@ export const ConfigPage = {
               <div v-else class="config-form-grid" style="grid-template-columns: 1fr;">
                 <div class="form-group" style="width: 100%;">
                   <!-- Switch -->
-                  <div v-if="getFieldType(configSchema[key]) === 'switch'" class="switch-container">
+                  <div v-if="getFieldType(configSchema[key], key) === 'switch'" class="switch-container">
                     <div class="switch-label-group">
                       <span class="form-label" style="font-size: 13px;">{{ configSchema[key].description || key }}</span>
                       <span v-if="configSchema[key].hint" class="form-hint">{{ configSchema[key].hint }}</span>
@@ -518,15 +566,15 @@ export const ConfigPage = {
                   </div>
 
                   <!-- Textarea -->
-                  <textarea v-else-if="getFieldType(configSchema[key]) === 'textarea'" v-model="localConfig[key]" class="form-control" style="min-height: 140px;"></textarea>
+                  <textarea v-else-if="getFieldType(configSchema[key], key) === 'textarea'" v-model="localConfig[key]" class="form-control" style="min-height: 140px;"></textarea>
 
                   <!-- Select -->
-                  <select v-else-if="getFieldType(configSchema[key]) === 'select'" v-model="localConfig[key]" class="form-control">
+                  <select v-else-if="getFieldType(configSchema[key], key) === 'select'" v-model="localConfig[key]" class="form-control">
                     <option v-for="opt in configSchema[key].options" :key="opt" :value="opt">{{ opt }}</option>
                   </select>
 
                   <!-- Provider ID Dropdown -->
-                  <select v-else-if="getFieldType(configSchema[key]) === 'provider_select'" v-model="localConfig[key]" class="form-control">
+                  <select v-else-if="getFieldType(configSchema[key], key) === 'provider_select'" v-model="localConfig[key]" class="form-control">
                     <option value="">-- 请选择供应商 (留空默认) --</option>
                     <option v-for="prov in providers" :key="prov.id" :value="prov.id">
                       {{ prov.name }} ({{ prov.id }})
@@ -534,7 +582,7 @@ export const ConfigPage = {
                   </select>
 
                   <!-- Embedding Provider ID Dropdown or Input fallback -->
-                  <template v-else-if="getFieldType(configSchema[key]) === 'embedding_provider_select'">
+                  <template v-else-if="getFieldType(configSchema[key], key) === 'embedding_provider_select'">
                     <select v-if="embeddingProviders.length > 0" v-model="localConfig[key]" class="form-control">
                       <option value="">-- 请选择 Embedding 供应商 (留空默认) --</option>
                       <option v-for="prov in embeddingProviders" :key="prov.id" :value="prov.id">
@@ -545,8 +593,7 @@ export const ConfigPage = {
                   </template>
 
                   <!-- List (Blacklist / Array of strings) -->
-                  <div v-else-if="getFieldType(configSchema[key]) === 'list'" class="list-editor">
-
+                  <div v-else-if="getFieldType(configSchema[key], key) === 'list'" class="list-editor">
                     <div v-for="(item, idx) in localConfig[key]" :key="idx" class="list-editor-item">
                       <input type="text" v-model="localConfig[key][idx]" class="form-control" />
                       <button class="btn-danger-outline" style="padding: 0 12px;" @click="localConfig[key].splice(idx, 1)">&times;</button>
@@ -554,6 +601,51 @@ export const ConfigPage = {
                     <button class="btn-secondary" style="align-self: flex-start; margin-top: 4px;" @click="localConfig[key].push('')">
                       <i class="fas fa-plus"></i> 添加条目
                     </button>
+                  </div>
+
+                  <!-- Persona Blacklist Multiselect Dropdown -->
+                  <div v-else-if="getFieldType(configSchema[key], key) === 'persona_blacklist_select'" class="persona-tags-select" style="position: relative; width: 100%;">
+                    <div class="multiselect-tag-container" style="display: flex; align-items: center; gap: 8px; background: var(--bg-element); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); min-height: 42px; width: 100%; flex-wrap: wrap; box-sizing: border-box; position: relative;">
+                      <!-- Active pills -->
+                      <span v-for="pId in localConfig[key]" :key="pId" class="active-tag-pill" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--primary-color); padding: 2px 8px; border-radius: 4px; font-size: 12.5px; font-weight: 500; user-select: none;">
+                        {{ getPersonaName(pId) }}
+                        <span @click.stop="toggleBlacklistPersona(pId)" style="cursor: pointer; font-weight: bold; font-size: 13px; color: var(--primary-color); line-height: 1; padding-left: 2px;" onmouseover="this.style.color='var(--danger-color)'" onmouseout="this.style.color='var(--primary-color)'">&times;</span>
+                      </span>
+                      
+                      <!-- Dropdown Input -->
+                      <div style="position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 160px;">
+                        <input 
+                          type="text" 
+                          v-model="blacklistSearchQuery" 
+                          @focus="showBlacklistDropdown = true"
+                          @blur="handleBlacklistBlur"
+                          placeholder="点击或检索选择禁用的人格..." 
+                          style="width: 100%; border: none; background: transparent; color: var(--text-primary); outline: none; font-size: 13px;"
+                        />
+                        
+                        <!-- Dropdown Menu -->
+                        <div v-show="showBlacklistDropdown" class="dropdown-menu" style="position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 1000; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); max-height: 200px; overflow-y: auto; min-width: 220px; padding: 4px 0; display: flex; flex-direction: column; gap: 2px;" @mousedown.prevent>
+                          <label 
+                            v-for="p in filteredBlacklistPersonas" 
+                            :key="p.id"
+                            style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
+                            onmouseover="this.style.background='var(--bg-secondary)'" 
+                            onmouseout="this.style.background='transparent'"
+                            @click="toggleBlacklistPersona(p.id)"
+                          >
+                            <input 
+                              type="checkbox" 
+                              :checked="localConfig[key] && localConfig[key].includes(p.id)" 
+                              style="width: 14px; height: 14px; cursor: pointer;" 
+                              @click.stop
+                              @change="toggleBlacklistPersona(p.id)"
+                            />
+                            <span style="flex: 1;">{{ p.name }} ({{ p.id }})</span>
+                          </label>
+                          <div v-if="filteredBlacklistPersonas.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 12.5px; text-align: center;">暂无匹配人格</div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Regular Inputs -->
@@ -576,4 +668,3 @@ export const ConfigPage = {
     </div>
   `
 };
-
