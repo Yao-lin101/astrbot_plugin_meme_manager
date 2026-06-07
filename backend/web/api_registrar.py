@@ -187,6 +187,7 @@ def register_apis(sender):
         delete_category,
         delete_emoji,
         edit_emoji,
+        generate_thumbnails_api,
         get_all_emojis,
         get_batch_analyze_status,
         get_config_schema,
@@ -221,6 +222,7 @@ def register_apis(sender):
 
     apis = [
         ("emoji", get_all_emojis, ["GET"]),
+        ("emoji/generate_thumbnails", generate_thumbnails_api, ["POST"]),
         ("emoji/add", add_emoji, ["POST"]),
         ("emoji/delete", delete_emoji, ["POST"]),
         ("emoji/analyze", analyze_single_emoji, ["POST"]),

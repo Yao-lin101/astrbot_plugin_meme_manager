@@ -237,6 +237,31 @@ export const ConfigPage = {
       fetchEmbeddingProviders();
     });
 
+    const generatingThumbnails = ref(false);
+    const generationResult = ref(null);
+
+    const triggerThumbnailGeneration = async () => {
+      generatingThumbnails.value = true;
+      generationResult.value = null;
+      try {
+        const res = await fetch("/api/emoji/generate_thumbnails", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        });
+        if (!res.ok) throw new Error("生成请求失败");
+        generationResult.value = await res.json();
+      } catch (e) {
+        console.error(e);
+        generationResult.value = {
+          status: "error",
+          failed: 1,
+          errors: [{ filename: "System Error", error: e.message }]
+        };
+      } finally {
+        generatingThumbnails.value = false;
+      }
+    };
+
     // Persona Blacklist Multiselect Helpers
     const getPersonaName = (pId) => {
       const p = props.systemPersonas.find(p => p.id === pId);
@@ -299,7 +324,10 @@ export const ConfigPage = {
       getPersonaName,
       filteredBlacklistPersonas,
       handleBlacklistBlur,
-      toggleBlacklistPersona
+      toggleBlacklistPersona,
+      generatingThumbnails,
+      generationResult,
+      triggerThumbnailGeneration
     };
   },
   template: `
@@ -645,6 +673,44 @@ export const ConfigPage = {
 
             </div>
           </template>
+
+          <!-- Manual Thumbnail generation section (only under compression tab) -->
+          <div v-if="activeSubTab === 'compression'" class="config-card">
+            <div class="config-card-title">
+              缩略图预生成 & 调试
+            </div>
+            <p class="form-hint" style="margin-top: -12px;">
+              手动扫描全库并生成表情包的缩略图缓存。这对于在新服务器上预先缓存表情，或者调试缩略图生成异常非常有用。
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 15px; background: var(--bg-element); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="font-size: 13.5px; color: var(--text-primary); margin: 0;">
+                  <strong>缩略图状态：</strong>
+                  <span v-if="generationResult" style="color: var(--primary-color); font-weight: bold;">
+                    总数 {{ generationResult.total }} | 成功 {{ generationResult.generated }} | 已存在 {{ generationResult.existed }} | 失败 {{ generationResult.failed }} (AVIF 支持: {{ generationResult.avif_supported ? '是' : '否' }})
+                  </span>
+                  <span v-else style="color: var(--text-secondary);">尚未进行手动预生成。</span>
+                </div>
+                <button type="button" class="btn-primary" :disabled="generatingThumbnails" @click="triggerThumbnailGeneration" style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer;">
+                  <i class="fas" :class="generatingThumbnails ? 'fa-spinner fa-spin' : 'fa-wand-magic-sparkles'"></i>
+                  {{ generatingThumbnails ? '正在生成...' : '立即预生成全部缩略图' }}
+                </button>
+              </div>
+
+              <!-- Error details if any failed -->
+              <div v-if="generationResult && generationResult.errors && generationResult.errors.length > 0" style="margin-top: 10px; border-top: 1px dashed var(--border-color); padding-top: 12px;">
+                <div style="font-size: 12.5px; font-weight: bold; color: var(--danger-color); margin-bottom: 8px;">
+                  生成失败列表 (共 {{ generationResult.failed }} 个)：
+                </div>
+                <div style="max-height: 150px; overflow-y: auto; background: rgba(239, 68, 68, 0.03); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: var(--radius-sm); padding: 8px; display: flex; flex-direction: column; gap: 4px;">
+                  <div v-for="err in generationResult.errors" :key="err.filename" style="font-size: 11.5px; color: var(--text-primary); display: flex; gap: 8px; margin: 0;">
+                    <span style="font-family: monospace; font-weight: bold; color: var(--danger-color); flex-shrink: 0;">{{ err.filename }}:</span>
+                    <span style="color: var(--text-secondary); word-break: break-all;">{{ err.error }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <!-- Save and Reset Action buttons sticky bar -->
           <div class="form-actions-bar">
