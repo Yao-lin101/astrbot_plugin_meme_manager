@@ -24,7 +24,7 @@ export const BatchAnalyzeModal = {
             <i class="fas fa-brain" style="color: var(--primary-color);"></i>
             批量重新分析表情包 (已选 {{ selectedCount }} 个)
           </span>
-          <button class="drawer-close-btn" @click="$emit('close')" :disabled="dialog.step === 'progress' && dialog.status.status === 'running'">&times;</button>
+          <button class="drawer-close-btn" @click="$emit('close')">&times;</button>
         </div>
 
         <!-- 阶段 1：配置界面 -->
@@ -40,6 +40,15 @@ export const BatchAnalyzeModal = {
                 </option>
               </select>
               <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">需要选择支持图片理解（多模态）的供应商实例，否则分析可能会失败。</p>
+            </div>
+
+            <div class="form-group" style="margin-bottom: 0;">
+              <label style="font-size: 14px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 8px;">并发数量 (1 - 5)</label>
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="range" min="1" max="5" v-model.number="dialog.concurrency" style="flex: 1; height: 6px; cursor: pointer; border-radius: 3px; accent-color: var(--primary-color);" />
+                <span style="font-size: 14px; font-weight: 600; min-width: 24px; text-align: center; color: var(--primary-color);">{{ dialog.concurrency }}</span>
+              </div>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">设置同时分析表情包的数量。提高并发会增加大模型请求的速率，注意防止触发限流。</p>
             </div>
 
             <div class="form-group" style="margin-bottom: 0;">
@@ -156,8 +165,8 @@ export const BatchAnalyzeModal = {
             </button>
           </template>
           <template v-else>
-            <button class="btn-secondary" @click="$emit('close')" :disabled="dialog.status.status === 'running'">
-              关闭
+            <button class="btn-secondary" @click="$emit('close')">
+              {{ dialog.status.status === 'running' ? '后台运行' : '关闭' }}
             </button>
             <button class="btn-danger" @click="$emit('cancel')" :disabled="dialog.status.status !== 'running'">
               取消分析

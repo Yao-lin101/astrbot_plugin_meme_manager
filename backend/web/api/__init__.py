@@ -1,4 +1,5 @@
 from .batch import (
+    analyze_single_emoji,
     batch_analyze_emojis,
     batch_convert_emoji_gif,
     batch_copy_emoji,
@@ -11,6 +12,7 @@ from .batch import (
     get_batch_analyze_status,
     get_prompt_template,
     get_providers,
+    get_embedding_providers,
     move_emoji,
 )
 from .category import (
@@ -19,6 +21,13 @@ from .category import (
     delete_category,
     rename_category,
     restore_category,
+)
+from .config import (
+    get_config_schema,
+    get_config_values,
+    get_ui_settings,
+    save_ui_settings,
+    update_config_values,
 )
 from .duplicates import check_duplicates, resolve_duplicates
 from .emoji import (
@@ -43,6 +52,7 @@ from .sync import (
 from .tag_merge import merge_tags, scan_similar_tags
 
 __all__ = [
+    "analyze_single_emoji",
     "batch_convert_emoji_gif",
     "batch_copy_emoji",
     "batch_delete_emoji",
@@ -51,6 +61,7 @@ __all__ = [
     "batch_move_emoji",
     "move_emoji",
     "get_providers",
+    "get_embedding_providers",
     "get_prompt_template",
     "batch_analyze_emojis",
     "batch_rename_emojis_to_tags",
@@ -82,4 +93,9 @@ __all__ = [
     "sync_to_remote",
     "scan_similar_tags",
     "merge_tags",
+    "get_config_schema",
+    "get_config_values",
+    "get_ui_settings",
+    "save_ui_settings",
+    "update_config_values",
 ]

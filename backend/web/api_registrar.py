@@ -110,6 +110,7 @@ async def serve_emoji(sender, category, filename):
 def register_apis(sender):
     """Register all Quart web endpoints for Meme Manager plugin."""
     from .api import (
+        analyze_single_emoji,
         add_emoji,
         batch_analyze_emojis,
         batch_convert_emoji_gif,
@@ -129,6 +130,8 @@ def register_apis(sender):
         edit_emoji,
         get_all_emojis,
         get_batch_analyze_status,
+        get_config_schema,
+        get_config_values,
         get_emoji_file_base64,
         get_emoji_info,
         get_emojis_by_category,
@@ -138,6 +141,7 @@ def register_apis(sender):
         get_personas,
         get_prompt_template,
         get_providers,
+        get_embedding_providers,
         get_sync_status,
         merge_tags,
         move_emoji,
@@ -149,6 +153,9 @@ def register_apis(sender):
         sync_config,
         sync_from_remote,
         sync_to_remote,
+        get_ui_settings,
+        save_ui_settings,
+        update_config_values,
     )
 
     PLUGIN_NAME = "astrbot_plugin_meme_manager"
@@ -157,6 +164,7 @@ def register_apis(sender):
         ("emoji", get_all_emojis, ["GET"]),
         ("emoji/add", add_emoji, ["POST"]),
         ("emoji/delete", delete_emoji, ["POST"]),
+        ("emoji/analyze", analyze_single_emoji, ["POST"]),
         ("emoji/batch_delete", batch_delete_emoji, ["POST"]),
         ("emoji/batch_convert_gif", batch_convert_emoji_gif, ["POST"]),
         ("emoji/batch_rename_to_tags", batch_rename_emojis_to_tags, ["POST"]),
@@ -188,12 +196,18 @@ def register_apis(sender):
         ("emoji/dup/resolve", resolve_duplicates, ["POST"]),
         ("emoji/<category>", get_emojis_by_category, ["GET"]),
         ("providers", get_providers, ["GET"]),
+        ("embedding_providers", get_embedding_providers, ["GET"]),
         ("prompt/template", get_prompt_template, ["GET"]),
         ("emoji/batch_analyze", batch_analyze_emojis, ["POST"]),
         ("emoji/batch_analyze/status", get_batch_analyze_status, ["GET"]),
         ("emoji/batch_analyze/cancel", cancel_batch_analyze, ["POST"]),
         ("tag_merge/scan", scan_similar_tags, ["GET"]),
         ("tag_merge/merge", merge_tags, ["POST"]),
+        ("config/schema", get_config_schema, ["GET"]),
+        ("config/values", get_config_values, ["GET"]),
+        ("config/update", update_config_values, ["POST"]),
+        ("ui_settings", get_ui_settings, ["GET"]),
+        ("ui_settings", save_ui_settings, ["POST"]),
     ]
 
     for route, handler, methods in apis:
