@@ -44,9 +44,7 @@ export const DuplicatePage = {
           <i class="fas fa-clone" style="color: var(--primary-color); margin-right: 6px;"></i>
           检查重复/相似表情包
         </div>
-        <p class="form-hint" style="margin-top: -10px; margin-bottom: 10px;">
-          通过比对全库表情包的视觉特征（哈希特征值），找出视觉上重复或高度相似的表情包，帮助您节省服务器空间并清理冗余数据。
-        </p>
+
 
         <!-- 控制面板 (控制阈值、开始扫描) -->
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 16px; background: var(--btn-default-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);">

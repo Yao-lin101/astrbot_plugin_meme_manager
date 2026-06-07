@@ -153,50 +153,7 @@ createApp({
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
     const otherDropdownVisible = ref(false);
-    const showUsePreferenceDropdown = ref(false);
-    const newPreferenceTagInput = ref("");
 
-    const personaUsePreferenceList = computed({
-      get() {
-        const pref = api.personaUsePreference.value;
-        if (!pref) return [];
-        return pref.split(',').map(s => s.trim()).filter(Boolean);
-      },
-      set(list) {
-        api.personaUsePreference.value = list.join(', ');
-        void api.savePersonaSettings();
-      }
-    });
-
-    const toggleUsePreferenceTag = (tag) => {
-      const list = [...personaUsePreferenceList.value];
-      const idx = list.indexOf(tag);
-      if (idx > -1) {
-        list.splice(idx, 1);
-      } else {
-        list.push(tag);
-      }
-      personaUsePreferenceList.value = list;
-    };
-
-    const addNewPreferenceTag = () => {
-      const val = newPreferenceTagInput.value.trim();
-      if (val) {
-        const list = [...personaUsePreferenceList.value];
-        if (!list.includes(val)) {
-          list.push(val);
-          personaUsePreferenceList.value = list;
-        }
-        newPreferenceTagInput.value = "";
-      }
-    };
-
-    const filteredPreferenceCategories = computed(() => {
-      const query = newPreferenceTagInput.value.trim().toLowerCase();
-      const categories = Object.keys(api.emojiData.value || {});
-      if (!query) return categories;
-      return categories.filter(cat => cat.toLowerCase().includes(query));
-    });
 
 
 
@@ -308,8 +265,6 @@ createApp({
       tagDescriptions: api.tagDescriptions,
       systemPersonas: api.systemPersonas,
       personaTags: api.personaTags,
-      personaUsePreference: api.personaUsePreference,
-      personaCollectPreference: api.personaCollectPreference,
       personaFilter: api.personaFilter,
       activeCategories: api.activeCategories,
       activeCategory,
@@ -380,12 +335,6 @@ createApp({
       // UI States & Navigation
       syncDrawerVisible,
       otherDropdownVisible,
-      showUsePreferenceDropdown,
-      newPreferenceTagInput,
-      personaUsePreferenceList,
-      toggleUsePreferenceTag,
-      addNewPreferenceTag,
-      filteredPreferenceCategories,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,

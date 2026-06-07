@@ -44,9 +44,7 @@ export const TagMergePage = {
           <i class="fas fa-object-group" style="color: var(--primary-color); margin-right: 6px;"></i>
           标签合并 / 清理
         </div>
-        <p class="form-hint" style="margin-top: -10px; margin-bottom: 10px;">
-          通过分析表情包标签的向量语义相似度，找出语义相近的标签进行合并。例如，合并“猫猫”和“小猫”可以更好地规范标签系统。
-        </p>
+
 
         <!-- 控制面板 (阈值 + 扫描) -->
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 16px; background: var(--btn-default-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
