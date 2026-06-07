@@ -461,15 +461,15 @@ export const ConfigPage = {
                   style="min-height: 80px;"
                 ></textarea>
               </div>
-
-              <!-- Manual save/reset actions bar for persona settings -->
-              <div class="form-actions-bar" style="margin-top: 10px; position: static; box-shadow: none; border-radius: var(--radius-md); padding: 12px 0; background: transparent;">
-                <button class="btn-secondary" @click="resetPersonaConfig" :disabled="loading">重置</button>
-                <button class="btn-primary" @click="savePersonaConfig" :disabled="loading || !selectedPersonaId">
-                  <i class="fas fa-circle-check"></i> 保存人设设置
-                </button>
-              </div>
             </div>
+          </div>
+
+          <!-- Manual save/reset actions bar for persona settings -->
+          <div v-if="activePersona" class="form-actions-bar">
+            <button class="btn-secondary" @click="resetPersonaConfig" :disabled="loading">重置</button>
+            <button class="btn-primary" @click="savePersonaConfig" :disabled="loading || !selectedPersonaId">
+              <i class="fas fa-circle-check"></i> 保存人设设置
+            </button>
           </div>
         </div>
       </div>
