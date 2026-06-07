@@ -1,6 +1,58 @@
 const { ref, reactive, nextTick, watch } = window.Vue;
 
+// Fallback in-memory storage to survive session state resets when localStorage is blocked/unavailable (e.g. cross-origin iframe)
+const memoryStorage = {};
+
 export function useModals(showToast) {
+  // Safe localStorage helper
+  let isLocalStorageAvailable = false;
+  try {
+    if (window.localStorage) {
+      localStorage.setItem('__probe', '1');
+      localStorage.removeItem('__probe');
+      isLocalStorageAvailable = true;
+    }
+  } catch (e) {}
+
+  const fetchUiSettings = async () => {
+    try {
+      const res = await fetch("/api/ui_settings");
+      if (res.ok) {
+        const data = await res.json();
+        Object.assign(memoryStorage, data);
+      }
+    } catch (e) {
+      console.error("Failed to load UI settings from server:", e);
+    }
+  };
+
+  const safeGetItem = (key) => {
+    if (isLocalStorageAvailable) {
+      try {
+        return localStorage.getItem(key);
+      } catch (e) {}
+    }
+    return memoryStorage[key] || null;
+  };
+
+  const safeSetItem = (key, value) => {
+    memoryStorage[key] = value;
+    if (isLocalStorageAvailable) {
+      try {
+        localStorage.setItem(key, value);
+      } catch (e) {}
+    }
+
+    // Persist to server backend asynchronously
+    fetch("/api/ui_settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(memoryStorage)
+    }).catch(err => {
+      console.error("Failed to persist UI settings to server:", err);
+    });
+  };
+
   const confirmDialog = reactive({
     visible: false,
     title: "",
@@ -61,6 +113,7 @@ export function useModals(showToast) {
     promptContent: "",
     isPromptManuallyEdited: false,
     pollTimer: null,
+    concurrency: 1,
     status: {
       status: "idle",
       total: 0,
@@ -94,6 +147,25 @@ export function useModals(showToast) {
       }
     }
   );
+
+  watch(
+    () => batchAnalyzeModal.selectedProvider,
+    (newVal) => {
+      if (newVal) {
+        safeSetItem("meme_mgr_batch_provider", newVal);
+      }
+    }
+  );
+
+  watch(
+    () => batchAnalyzeModal.concurrency,
+    (newVal) => {
+      if (newVal) {
+        safeSetItem("meme_mgr_batch_concurrency", newVal.toString());
+      }
+    }
+  );
+
 
   const confirm = (title, description, confirmLabel = "确认", confirmClass = "", imageUrl = "", localImageUrl = "") => {
     return new Promise((resolve) => {
@@ -217,14 +289,27 @@ export function useModals(showToast) {
     }
   };
 
-  const openBatchAnalyzeModal = async () => {
+  const fetchProviders = async () => {
     try {
       const res = await fetch("/api/providers");
       if (!res.ok) throw new Error("获取大模型提供商失败");
       batchAnalyzeModal.providers = await res.json();
+      
+      const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
+      if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
+        batchAnalyzeModal.selectedProvider = savedProvider;
+      } else if (batchAnalyzeModal.providers.length > 0 && !batchAnalyzeModal.selectedProvider) {
+        batchAnalyzeModal.selectedProvider = batchAnalyzeModal.providers[0].id;
+      }
     } catch (e) {
       console.error(e);
       showToast(e.message, "error", "获取供应商失败");
+    }
+  };
+
+  const openBatchAnalyzeModal = async () => {
+    await fetchProviders();
+    if (!batchAnalyzeModal.providers || batchAnalyzeModal.providers.length === 0) {
       return;
     }
 
@@ -245,11 +330,12 @@ export function useModals(showToast) {
     }
 
     batchAnalyzeModal.step = "config";
-    batchAnalyzeModal.selectedProvider = "";
     batchAnalyzeModal.analyzeTags = true;
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
     batchAnalyzeModal.isPromptManuallyEdited = false;
+    const savedConcurrency = parseInt(safeGetItem("meme_mgr_batch_concurrency") || "1", 10);
+    batchAnalyzeModal.concurrency = isNaN(savedConcurrency) ? 1 : Math.min(Math.max(savedConcurrency, 1), 5);
 
     try {
       const templateRes = await fetch("/api/prompt/template");
@@ -266,6 +352,14 @@ export function useModals(showToast) {
     updatePromptContent();
 
     batchAnalyzeModal.visible = true;
+
+    // Restore provider selection after DOM renders the select options
+    nextTick(() => {
+      const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
+      if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
+        batchAnalyzeModal.selectedProvider = savedProvider;
+      }
+    });
   };
 
   const closeBatchAnalyzeModal = () => {
@@ -292,7 +386,8 @@ export function useModals(showToast) {
           analyze_tags: batchAnalyzeModal.analyzeTags,
           analyze_description: batchAnalyzeModal.analyzeDescription,
           pass_existing_tags_as_ref: batchAnalyzeModal.passExistingTagsAsRef,
-          prompt_content: batchAnalyzeModal.promptContent
+          prompt_content: batchAnalyzeModal.promptContent,
+          concurrency: batchAnalyzeModal.concurrency
         })
       });
 
@@ -382,5 +477,9 @@ export function useModals(showToast) {
     closeBatchAnalyzeModal,
     startBatchAnalyze,
     cancelBatchAnalyze,
+    fetchUiSettings,
+    safeGetItem,
+    safeSetItem,
+    fetchProviders,
   };
 }

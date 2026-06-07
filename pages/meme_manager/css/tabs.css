@@ -1,0 +1,124 @@
+/* tabs.css - Primary and Secondary horizontal tabs with Material Design style and glassmorphism */
+
+.primary-tabs {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 6px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 20px;
+}
+
+.primary-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.primary-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.primary-tab.active {
+  color: var(--primary-color);
+  background: var(--bg-hover);
+}
+
+/* Material line indicator */
+.primary-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 3px;
+  background: var(--primary-gradient);
+  border-radius: 3px 3px 0 0;
+  transform: scaleX(0);
+  transition: var(--transition);
+}
+
+.primary-tab.active::after {
+  transform: scaleX(1);
+}
+
+/* Secondary Tabs (used inside Config Page) */
+.secondary-tabs-container {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 24px;
+  padding-bottom: 4px;
+  gap: 16px;
+}
+
+.secondary-tab {
+  background: transparent;
+  border: none;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+  border-radius: var(--radius-sm);
+}
+
+.secondary-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.secondary-tab.active {
+  color: var(--primary-color);
+  background: var(--bg-hover);
+}
+
+.secondary-tab::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 15%;
+  right: 15%;
+  height: 2px;
+  background: var(--primary-color);
+  transform: scaleX(0);
+  transition: var(--transition);
+}
+
+.secondary-tab.active::after {
+  transform: scaleX(1);
+}
+
+/* Tab content wrapper */
+.tab-content {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

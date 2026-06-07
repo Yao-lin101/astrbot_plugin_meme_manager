@@ -48,18 +48,28 @@ export const EmojiDetailModal = {
     getImageUrl: {
       type: Function,
       required: true
+    },
+    providers: {
+      type: Array,
+      default: () => []
+    },
+    selectedProvider: {
+      type: String,
+      default: ''
     }
   },
   emits: [
     'update:description',
     'update:drawer-tag-search-query',
+    'update:selected-provider',
     'close',
     'toggle-tag',
     'toggle-persona',
     'backspace',
     'create-tag',
     'navigate',
-    'save'
+    'save',
+    'analyze'
   ],
   data() {
     return {
@@ -82,6 +92,14 @@ export const EmojiDetailModal = {
       set(val) {
         this.$emit('update:drawer-tag-search-query', val);
       }
+    },
+    localSelectedProvider: {
+      get() {
+        return this.selectedProvider;
+      },
+      set(val) {
+        this.$emit('update:selected-provider', val);
+      }
     }
   },
   template: `
@@ -97,9 +115,48 @@ export const EmojiDetailModal = {
           <button class="drawer-close-btn" @click="$emit('close')">&times;</button>
         </div>
         <div class="drawer-body-layout">
-          <!-- 左侧大图预览 -->
-          <div class="drawer-preview-column">
-            <img :src="getImageUrl(activeEmoji)" :alt="activeEmoji" />
+          <!-- 左侧大图预览 + AI 助手 -->
+          <div class="drawer-preview-column" style="display: flex; flex-direction: column; gap: 16px; align-items: stretch; justify-content: flex-start; height: 100%; overflow-y: auto;">
+            <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 280px; background: var(--bg-app); border-radius: var(--radius-md); padding: 8px;">
+              <img :src="getImageUrl(activeEmoji)" :alt="activeEmoji" style="max-height: 100%; max-width: 100%; object-fit: contain;" />
+            </div>
+
+            <!-- AI 助手板块 -->
+            <div class="ai-assistant-section" style="border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+                <i class="fas fa-magic" style="color: var(--primary-color);"></i> AI 助手
+              </div>
+
+              <!-- AI 供应商下拉选择 -->
+              <div style="display: flex; flex-direction: column; gap: 4px;">
+                <label style="font-size: 11px; color: var(--text-secondary); text-transform: none; letter-spacing: normal; font-weight: normal;">选择多模态 AI 供应商</label>
+                <select v-model="localSelectedProvider" 
+                        :disabled="providers.length === 0"
+                        style="width: 100%; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: #ffffff; color: var(--text-primary); font-size: 12px; outline: none;">
+                  <option v-if="providers.length === 0" value="">加载中...</option>
+                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
+                </select>
+              </div>
+
+              <!-- AI 操作按钮 -->
+              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
+                <button class="btn-secondary" 
+                        @click="$emit('analyze', 'tags')" 
+                        style="width: 100%; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+                  <i class="fas fa-tags"></i> 分析标签
+                </button>
+                <button class="btn-secondary" 
+                        @click="$emit('analyze', 'desc_by_tags')" 
+                        style="width: 100%; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+                  <i class="fas fa-comment-dots"></i> 通过标签分析描述
+                </button>
+                <button class="btn-primary" 
+                        @click="$emit('analyze', 'full')" 
+                        style="width: 100%; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
+                  <i class="fas fa-brain"></i> 完整分析
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- 右侧编辑区域 -->

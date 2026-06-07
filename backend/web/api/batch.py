@@ -314,6 +314,30 @@ async def get_providers():
         return jsonify({"message": str(e)}), 500
 
 
+async def get_embedding_providers():
+    """获取所有可用的 Embedding 提供商"""
+    try:
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        context = plugin_config.get("context")
+        if context:
+            providers = context.get_all_embedding_providers()
+            result = []
+            for p in providers:
+                meta = p.meta()
+                result.append(
+                    {
+                        "id": meta.id,
+                        "name": getattr(p, "name", meta.id) or meta.id,
+                    }
+                )
+            return jsonify(result), 200
+        return jsonify([]), 200
+    except Exception as e:
+        logger.error(f"获取 Embedding 提供商列表失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
+
+
 async def get_prompt_template():
     """Get the meme analysis prompt template split into intro, tags, and desc."""
     try:
@@ -400,6 +424,16 @@ async def batch_analyze_emojis():
     analyze_description = data.get("analyze_description", True)
     pass_existing_tags_as_ref = data.get("pass_existing_tags_as_ref", False)
     prompt_content = data.get("prompt_content", "")
+    concurrency = data.get("concurrency", 1)
+
+    try:
+        concurrency = int(concurrency)
+        if concurrency < 1:
+            concurrency = 1
+        elif concurrency > 5:
+            concurrency = 5
+    except (TypeError, ValueError):
+        concurrency = 1
 
     if not isinstance(filenames, list) or not filenames:
         return jsonify({"message": "filenames 列表是必需的"}), 400
@@ -433,6 +467,7 @@ async def batch_analyze_emojis():
             pass_existing_tags_as_ref,
             prompt_content,
             sender,
+            concurrency,
         )
     )
 
@@ -456,6 +491,288 @@ async def cancel_batch_analyze():
     return jsonify({"message": "当前没有正在运行的任务"}), 200
 
 
+async def analyze_emoji_core(
+    filename: str,
+    provider_id: str,
+    analyze_tags: bool,
+    analyze_description: bool,
+    pass_existing_tags_as_ref: bool,
+    prompt_content: str,
+    sender,
+) -> dict:
+    """
+    Core logic to analyze a single emoji file using an LLM.
+    Returns a dict: {"status": "success", "tags": [...], "description": "..."}
+    """
+    import base64
+    import io
+    import json
+    import os
+    import re
+    import asyncio
+    from PIL import Image as PILImage
+    from ....config import MEMES_DIR
+    from ...db.database import get_db_conn
+
+    ANALYZE_TIMEOUT = 30
+    MAX_ATTEMPTS = 3
+
+    file_path = os.path.join(MEMES_DIR, filename)
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"文件不存在: {filename}")
+
+    with open(file_path, "rb") as f:
+        content = f.read()
+
+    try:
+        with PILImage.open(io.BytesIO(content)) as img_obj:
+            file_type = img_obj.format.lower()
+    except Exception:
+        file_type = "unknown"
+
+    mime_type = "image/jpeg"
+    if file_type == "png":
+        mime_type = "image/png"
+    elif file_type == "gif":
+        mime_type = "image/gif"
+    elif file_type == "webp":
+        mime_type = "image/webp"
+
+    b64_data = base64.b64encode(content).decode("utf-8")
+    image_data_uri = f"data:{mime_type};base64,{b64_data}"
+
+    # 查询现有数据，以便进行参考及后续的部分更新
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT emotions, description FROM memes WHERE filename = ?",
+        (filename,),
+    )
+    db_row = cursor.fetchone()
+    conn.close()
+
+    if db_row:
+        existing_emotions = db_row["emotions"] or ""
+        existing_desc = db_row["description"] or ""
+    else:
+        existing_emotions = ""
+        existing_desc = ""
+
+    guidelines = prompt_content
+    if not guidelines:
+        config_prompt = ""
+        if hasattr(sender, "config"):
+            config_prompt = (
+                sender.config.get("multimodal_config", {})
+                .get("multimodal_tag_prompt", "")
+                .strip()
+            )
+        guidelines = (
+            config_prompt
+            if config_prompt
+            else getattr(sender, "multimodal_tag_prompt", None)
+        )
+        if not guidelines:
+            guidelines = (
+                "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
+                "标签策略（重点优化）：\n"
+                "- 标签数量：4-6个精选标签，避免冗余\n"
+                "- 标签优先级（从高到低）：\n"
+                '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
+                '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
+                '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
+                '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
+                '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
+                "- 标签质量：\n"
+                "  * 使用通俗易懂的词汇\n"
+                "  * 考虑用户搜索习惯与词汇偏好\n"
+                "  * 平衡具体性与通用性\n"
+                "  * 避免过于专业或生僻的术语\n\n"
+                "描述：\n根据画面和标签结果进行简洁描述。"
+            )
+
+    if pass_existing_tags_as_ref and not analyze_tags and existing_emotions:
+        guidelines = (
+            f"{guidelines}\n\n"
+            f"【该表情包当前已有的标签】：{existing_emotions}\n"
+            f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
+        )
+
+    # 根据勾选条件，优化模型提示词
+    prompt = (
+        f"{guidelines}\n\n"
+        f"【输出格式要求（极其重要）】：\n"
+        f"- 请仅以 JSON 格式的字典对象返回，其中必须包含以下字段：\n"
+    )
+    if analyze_tags:
+        prompt += '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
+    if analyze_description:
+        prompt += '  2. `description` (字符串，对这张表情包画面的简洁描述，如 "一只猫猫摊在地上露出无语的表情")\n'
+
+    prompt += "例如：\n{\n"
+    if analyze_tags:
+        prompt += '  "tags": ["敷衍", "猫猫"]'
+        if analyze_description:
+            prompt += ",\n"
+    if analyze_description:
+        prompt += '  "description": "一只摊在地上表情无语 of 猫猫"\n'
+    prompt += (
+        "}\n"
+        "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
+    )
+
+    parsed_tags = []
+    parsed_desc = ""
+    last_error = None
+
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            llm_resp = await asyncio.wait_for(
+                sender.context.llm_generate(
+                    chat_provider_id=provider_id,
+                    prompt=prompt,
+                    image_urls=[image_data_uri],
+                ),
+                timeout=ANALYZE_TIMEOUT,
+            )
+
+            if not llm_resp or not llm_resp.completion_text:
+                raise ValueError("模型返回内容为空")
+
+            raw_text = llm_resp.completion_text.strip()
+            data = None
+            try:
+                data = json.loads(raw_text)
+            except Exception:
+                match = re.search(r"\{[\s\S]*\}", raw_text)
+                if match:
+                    try:
+                        data = json.loads(match.group(0))
+                    except Exception:
+                        pass
+
+            if not isinstance(data, dict):
+                raise ValueError(f"无法解析模型返回的结果: {raw_text}")
+
+            parsed_tags = []
+            parsed_desc = ""
+
+            if analyze_tags:
+                if "tags" in data:
+                    parsed_tags = [
+                        str(x).strip()
+                        for x in data["tags"]
+                        if str(x).strip() and len(str(x).strip()) <= 20
+                    ]
+                else:
+                    raise ValueError("模型返回中缺少 tags 字段")
+
+            if analyze_description:
+                if "description" in data:
+                    parsed_desc = str(data["description"]).strip()
+                else:
+                    raise ValueError("模型返回中缺少 description 字段")
+
+            # 本次尝试成功，跳出重试循环
+            last_error = None
+            break
+
+        except asyncio.CancelledError:
+            raise
+        except asyncio.TimeoutError:
+            last_error = TimeoutError(
+                f"模型分析超时（超过 {ANALYZE_TIMEOUT} 秒）"
+            )
+            logger.warning(
+                f"分析表情包超时: {filename}（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
+            )
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                f"分析表情包失败: {filename}, 错误: {e}"
+                f"（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
+            )
+
+        # 还有剩余尝试次数则指数退避后重试
+        if attempt < MAX_ATTEMPTS:
+            await asyncio.sleep(2 ** (attempt - 1))
+
+    if last_error is not None:
+        raise last_error
+
+    # 更新数据库
+    conn = get_db_conn()
+    cursor = conn.cursor()
+
+    final_emotions = (
+        ",".join(parsed_tags) if analyze_tags else existing_emotions
+    )
+    final_desc = parsed_desc if analyze_description else existing_desc
+
+    cursor.execute(
+        "UPDATE memes SET emotions = ?, description = ? WHERE filename = ?",
+        (final_emotions, final_desc, filename),
+    )
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "success",
+        "tags": parsed_tags if analyze_tags else (existing_emotions.split(",") if existing_emotions else []),
+        "description": final_desc,
+    }
+
+
+async def analyze_single_emoji():
+    """Single emoji AI analysis endpoint."""
+    try:
+        data = await request.get_json()
+        filename = data.get("filename")
+        provider_id = data.get("provider_id")
+        analyze_tags = data.get("analyze_tags", True)
+        analyze_description = data.get("analyze_description", True)
+        pass_existing_tags_as_ref = data.get("pass_existing_tags_as_ref", False)
+        prompt_content = data.get("prompt_content", "")
+
+        if not filename:
+            return jsonify({"message": "filename 是必需的"}), 400
+        if not provider_id:
+            return jsonify({"message": "provider_id 是必需的"}), 400
+
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        sender = plugin_config.get("sender")
+        if not sender:
+            return jsonify({"message": "未找到插件 Sender"}), 500
+
+        result = await analyze_emoji_core(
+            filename=filename,
+            provider_id=provider_id,
+            analyze_tags=analyze_tags,
+            analyze_description=analyze_description,
+            pass_existing_tags_as_ref=pass_existing_tags_as_ref,
+            prompt_content=prompt_content,
+            sender=sender,
+        )
+
+        # Trigger vectorization and reload
+        from .common import trigger_tag_vectorization
+        try:
+            trigger_tag_vectorization()
+        except Exception as e:
+            logger.error(f"分析后触发向量化失败: {e}")
+
+        try:
+            await sender.reload_emotions()
+        except Exception as e:
+            logger.error(f"分析后重新加载表情配置失败: {e}")
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        logger.error(f"分析单个表情包失败: {e}", exc_info=True)
+        return jsonify({"message": str(e)}), 500
+
+
 async def run_batch_analyze_task(
     filenames,
     provider_id,
@@ -464,27 +781,12 @@ async def run_batch_analyze_task(
     pass_existing_tags_as_ref,
     prompt_content,
     sender,
+    concurrency=1,
 ):
     """后台批量分析执行函数"""
     global batch_analyze_status, cancel_batch_analyze_flag
     import asyncio
-    import base64
-    import io
-    import json
-    import os
-    import re
-
-    from PIL import Image as PILImage
-
-    from ....config import MEMES_DIR
-    from ...db.database import get_db_conn
     from .common import trigger_tag_vectorization
-
-    # 单次 LLM 调用的超时与重试控制。
-    # 图片打标本应很快，但底层 provider 的默认 HTTP 超时往往长达数分钟，
-    # 因此这里用 asyncio.wait_for 主动收紧，并对失败（含超时）做有限次重试。
-    ANALYZE_TIMEOUT = 30  # 单次请求超时（秒）
-    MAX_ATTEMPTS = 3  # 最多尝试次数（首次 + 重试 2 次）
 
     # 在一开始，先将所有文件状态置为等待中
     batch_analyze_status["results"] = [
@@ -497,252 +799,53 @@ async def run_batch_analyze_task(
         for filename in filenames
     ]
 
-    try:
-        for idx, filename in enumerate(filenames):
-            if cancel_batch_analyze_flag:
-                logger.info("批量分析表情包任务被用户取消。")
-                # 将后续等待中的更新为已取消/失败
-                for r in batch_analyze_status["results"]:
-                    if r["status"] == "waiting":
-                        r["status"] = "error"
-                        r["error"] = "任务已被取消"
-                break
+    completed_count = 0
+    sem = asyncio.Semaphore(concurrency)
 
-            batch_analyze_status["current_index"] = idx + 1
-            batch_analyze_status["current_file"] = filename
+    async def analyze_single_file(idx, filename):
+        nonlocal completed_count
+        async with sem:
+            if cancel_batch_analyze_flag:
+                return
 
             # 更新当前文件的状态为分析中
+            batch_analyze_status["current_file"] = filename
             r_item = batch_analyze_status["results"][idx]
             r_item["status"] = "running"
 
             try:
-                file_path = os.path.join(MEMES_DIR, filename)
-                if not os.path.exists(file_path):
-                    raise FileNotFoundError(f"文件不存在: {filename}")
-
-                with open(file_path, "rb") as f:
-                    content = f.read()
-
-                try:
-                    with PILImage.open(io.BytesIO(content)) as img_obj:
-                        file_type = img_obj.format.lower()
-                except Exception:
-                    file_type = "unknown"
-
-                mime_type = "image/jpeg"
-                if file_type == "png":
-                    mime_type = "image/png"
-                elif file_type == "gif":
-                    mime_type = "image/gif"
-                elif file_type == "webp":
-                    mime_type = "image/webp"
-
-                b64_data = base64.b64encode(content).decode("utf-8")
-                image_data_uri = f"data:{mime_type};base64,{b64_data}"
-
-                # 查询现有数据，以便进行参考及后续的部分更新
-                conn = get_db_conn()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT emotions, description FROM memes WHERE filename = ?",
-                    (filename,),
+                res = await analyze_emoji_core(
+                    filename=filename,
+                    provider_id=provider_id,
+                    analyze_tags=analyze_tags,
+                    analyze_description=analyze_description,
+                    pass_existing_tags_as_ref=pass_existing_tags_as_ref,
+                    prompt_content=prompt_content,
+                    sender=sender,
                 )
-                db_row = cursor.fetchone()
-                conn.close()
-
-                if db_row:
-                    existing_emotions = db_row["emotions"] or ""
-                    existing_desc = db_row["description"] or ""
-                else:
-                    existing_emotions = ""
-                    existing_desc = ""
-
-                guidelines = prompt_content
-                if not guidelines:
-                    config_prompt = ""
-                    if hasattr(sender, "config"):
-                        config_prompt = (
-                            sender.config.get("multimodal_config", {})
-                            .get("multimodal_tag_prompt", "")
-                            .strip()
-                        )
-                    guidelines = (
-                        config_prompt
-                        if config_prompt
-                        else getattr(sender, "multimodal_tag_prompt", None)
-                    )
-                    if not guidelines:
-                        guidelines = (
-                            "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"
-                            "标签策略（重点优化）：\n"
-                            "- 标签数量：4-6个精选标签，避免冗余\n"
-                            "- 标签优先级（从高到低）：\n"
-                            '  * 角色/作品标签（最高优先级）：如果能识别角色或作品，必须包含。如"派蒙"、"原神"、"海绵宝宝"、"柴犬"\n'
-                            '  * 物品/主体标签（高优先级）：描述表情包的主体是什么。如"猫"、"狗"、"食物"、"机器人"\n'
-                            '  * 情感/表情标签（中优先级）：描述表情包表达的情感。如"开心"、"无语"、"生气"、"摆烂"、"震惊"\n'
-                            '  * 动作/状态标签（中优先级）：描述角色或物品的动作。如"奔跑"、"吃东西"、"睡觉"、"跳舞"\n'
-                            '  * 风格/形式标签（低优先级）：如"二次元"、"像素风"、"真人"、"手绘"\n'
-                            "- 标签质量：\n"
-                            "  * 使用通俗易懂的词汇\n"
-                            "  * 考虑用户搜索习惯与词汇偏好\n"
-                            "  * 平衡具体性与通用性\n"
-                            "  * 避免过于专业或生僻的术语\n\n"
-                            "描述：\n根据画面和标签结果进行简洁描述。"
-                        )
-
-                if pass_existing_tags_as_ref and not analyze_tags and existing_emotions:
-                    guidelines = (
-                        f"{guidelines}\n\n"
-                        f"【该表情包当前已有的标签】：{existing_emotions}\n"
-                        f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
-                    )
-
-                # 根据勾选条件，优化模型提示词
-                target_str = []
-                if analyze_tags:
-                    target_str.append("tags (数组，表情包对应的标签列表)")
-                if analyze_description:
-                    target_str.append(
-                        "description (字符串，对这张表情包画面的简洁描述)"
-                    )
-
-                prompt = (
-                    f"{guidelines}\n\n"
-                    f"【输出格式要求（极其重要）】：\n"
-                    f"- 请仅以 JSON 格式的字典对象返回，其中必须包含以下字段：\n"
-                )
-                if analyze_tags:
-                    prompt += '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
-                if analyze_description:
-                    prompt += '  2. `description` (字符串，对这张表情包画面的简洁描述，如 "一只猫猫摊在地上露出无语的表情")\n'
-
-                prompt += "例如：\n{\n"
-                if analyze_tags:
-                    prompt += '  "tags": ["敷衍", "猫猫"]'
-                    if analyze_description:
-                        prompt += ",\n"
-                if analyze_description:
-                    prompt += '  "description": "一只摊在地上表情无语的猫猫"\n'
-                prompt += (
-                    "}\n"
-                    "不要返回任何其他内容（如 markdown 代码块标记、解释等），只返回 JSON 串本身。"
-                )
-
-                # 调用模型 + 解析 + 字段校验，整段纳入有限次重试。
-                # 超时（asyncio.wait_for）、空返回、JSON 解析失败、缺字段都会触发重试。
-                parsed_tags = []
-                parsed_desc = ""
-                last_error = None
-
-                for attempt in range(1, MAX_ATTEMPTS + 1):
-                    try:
-                        llm_resp = await asyncio.wait_for(
-                            sender.context.llm_generate(
-                                chat_provider_id=provider_id,
-                                prompt=prompt,
-                                image_urls=[image_data_uri],
-                            ),
-                            timeout=ANALYZE_TIMEOUT,
-                        )
-
-                        if not llm_resp or not llm_resp.completion_text:
-                            raise ValueError("模型返回内容为空")
-
-                        raw_text = llm_resp.completion_text.strip()
-                        data = None
-                        try:
-                            data = json.loads(raw_text)
-                        except Exception:
-                            match = re.search(r"\{[\s\S]*\}", raw_text)
-                            if match:
-                                try:
-                                    data = json.loads(match.group(0))
-                                except Exception:
-                                    pass
-
-                        if not isinstance(data, dict):
-                            raise ValueError(f"无法解析模型返回的结果: {raw_text}")
-
-                        parsed_tags = []
-                        parsed_desc = ""
-
-                        if analyze_tags:
-                            if "tags" in data:
-                                parsed_tags = [
-                                    str(x).strip()
-                                    for x in data["tags"]
-                                    if str(x).strip() and len(str(x).strip()) <= 20
-                                ]
-                            else:
-                                raise ValueError("模型返回中缺少 tags 字段")
-
-                        if analyze_description:
-                            if "description" in data:
-                                parsed_desc = str(data["description"]).strip()
-                            else:
-                                raise ValueError("模型返回中缺少 description 字段")
-
-                        # 本次尝试成功，跳出重试循环
-                        last_error = None
-                        break
-
-                    except asyncio.CancelledError:
-                        # 用户取消，必须放行，不重试
-                        raise
-                    except asyncio.TimeoutError:
-                        last_error = TimeoutError(
-                            f"模型分析超时（超过 {ANALYZE_TIMEOUT} 秒）"
-                        )
-                        logger.warning(
-                            f"分析表情包超时: {filename}（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
-                        )
-                    except Exception as e:
-                        last_error = e
-                        logger.warning(
-                            f"分析表情包失败: {filename}, 错误: {e}"
-                            f"（第 {attempt}/{MAX_ATTEMPTS} 次尝试）"
-                        )
-
-                    # 还有剩余尝试次数则指数退避后重试
-                    if attempt < MAX_ATTEMPTS:
-                        await asyncio.sleep(2 ** (attempt - 1))
-
-                # 所有尝试均失败，抛出由外层统一记为 error
-                if last_error is not None:
-                    raise last_error
-
-                # 更新数据库
-                conn = get_db_conn()
-                cursor = conn.cursor()
-
-                final_emotions = (
-                    ",".join(parsed_tags) if analyze_tags else existing_emotions
-                )
-                final_desc = parsed_desc if analyze_description else existing_desc
-
-                cursor.execute(
-                    "UPDATE memes SET emotions = ?, description = ? WHERE filename = ?",
-                    (final_emotions, final_desc, filename),
-                )
-                conn.commit()
-                conn.close()
-
-                # 填充结果
                 r_item["status"] = "success"
-                r_item["tags"] = (
-                    parsed_tags
-                    if analyze_tags
-                    else (existing_emotions.split(",") if existing_emotions else [])
-                )
-                r_item["description"] = final_desc
-
+                r_item["tags"] = res["tags"]
+                r_item["description"] = res["description"]
             except Exception as e:
                 logger.error(f"分析表情包失败: {filename}, 错误: {e}", exc_info=True)
                 r_item["status"] = "error"
                 r_item["error"] = str(e)
 
+            completed_count += 1
+            batch_analyze_status["current_index"] = completed_count
+
             # 稍微间隔一下，避免请求太频繁
             await asyncio.sleep(0.5)
+
+    try:
+        tasks = [analyze_single_file(idx, filename) for idx, filename in enumerate(filenames)]
+        await asyncio.gather(*tasks)
+
+        if cancel_batch_analyze_flag:
+            for r in batch_analyze_status["results"]:
+                if r["status"] in ("waiting", "running"):
+                    r["status"] = "error"
+                    r["error"] = "任务已被取消"
 
     except asyncio.CancelledError:
         logger.info("批量分析表情包任务被用户强行取消 (asyncio.CancelledError)。")

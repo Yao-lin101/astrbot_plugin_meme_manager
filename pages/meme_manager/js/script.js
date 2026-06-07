@@ -7,8 +7,8 @@ import { useCategories } from './modules/categories.js';
 import { useEmojiActions } from './modules/emojiActions.js';
 import { useDedup } from './modules/dedup.js';
 import { useTagMerge } from './modules/tagMerge.js';
+import { useConfigApi } from './modules/configApi.js';
 
-import { SyncDrawer } from './components/SyncDrawer.js';
 import { ConfirmDialog } from './components/ConfirmDialog.js';
 import { DangerConfirmDialog } from './components/DangerConfirmDialog.js';
 import { CategoryRenameModal } from './components/CategoryRenameModal.js';
@@ -16,16 +16,17 @@ import { AddCategoryModal } from './components/AddCategoryModal.js';
 import { BatchPersonaModal } from './components/BatchPersonaModal.js';
 import { ImportModal } from './components/ImportModal.js';
 import { ContextMenu } from './components/ContextMenu.js';
-import { DuplicateModal } from './components/DuplicateModal.js';
-import { TagMergeModal } from './components/TagMergeModal.js';
 import { BatchAnalyzeModal } from './components/BatchAnalyzeModal.js';
 import { EmojiDetailModal } from './components/EmojiDetailModal.js';
+import { TagMergePage } from './components/TagMergePage.js';
+import { DuplicatePage } from './components/DuplicatePage.js';
+import { SyncPage } from './components/SyncPage.js';
+import { ConfigPage } from './components/ConfigPage.js';
 
 const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
 
 createApp({
   components: {
-    SyncDrawer,
     ConfirmDialog,
     DangerConfirmDialog,
     CategoryRenameModal,
@@ -33,10 +34,12 @@ createApp({
     BatchPersonaModal,
     ImportModal,
     ContextMenu,
-    DuplicateModal,
-    TagMergeModal,
     BatchAnalyzeModal,
-    EmojiDetailModal
+    EmojiDetailModal,
+    TagMergePage,
+    DuplicatePage,
+    SyncPage,
+    ConfigPage
   },
   setup() {
     // 1. Toasts
@@ -87,6 +90,7 @@ createApp({
       closeImportModal: modals.closeImportModal,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
       selectedEmotions: api.selectedEmotions,
+      batchAnalyzeModal: modals.batchAnalyzeModal,
     });
 
     // 7. Dedup
@@ -95,54 +99,43 @@ createApp({
     // 8. Tag Merge
     const tagMerge = useTagMerge(showToast, api.fetchEmojis, modals.confirm);
 
+    // 9. Config API
+    const configApi = useConfigApi(showToast);
+
     // Local UI states
+    const currentTab = ref('meme');
+    const switchTab = (tab) => {
+      currentTab.value = tab;
+      modals.safeSetItem('meme_mgr_tab', tab);
+    };
+
+    const savePersonaSettingsDirect = async ({ persona_id, meme_use_preference, meme_preference }) => {
+      try {
+        const res = await fetch("/api/persona_tags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            persona_id,
+            meme_use_preference,
+            meme_preference
+          })
+        });
+        if (!res.ok) throw new Error("保存专属配置失败");
+        api.personaTags.value[persona_id] = {
+          meme_use_preference,
+          meme_preference
+        };
+        showToast("保存人设配置成功~", "success", "人设管理");
+      } catch (e) {
+        console.error(e);
+        showToast(e.message, "error", "人设管理");
+      }
+    };
+
     const syncDrawerVisible = ref(false);
     const isDrawerInputFocused = ref(false);
     const otherDropdownVisible = ref(false);
-    const showUsePreferenceDropdown = ref(false);
-    const newPreferenceTagInput = ref("");
 
-    const personaUsePreferenceList = computed({
-      get() {
-        const pref = api.personaUsePreference.value;
-        if (!pref) return [];
-        return pref.split(',').map(s => s.trim()).filter(Boolean);
-      },
-      set(list) {
-        api.personaUsePreference.value = list.join(', ');
-        void api.savePersonaSettings();
-      }
-    });
-
-    const toggleUsePreferenceTag = (tag) => {
-      const list = [...personaUsePreferenceList.value];
-      const idx = list.indexOf(tag);
-      if (idx > -1) {
-        list.splice(idx, 1);
-      } else {
-        list.push(tag);
-      }
-      personaUsePreferenceList.value = list;
-    };
-
-    const addNewPreferenceTag = () => {
-      const val = newPreferenceTagInput.value.trim();
-      if (val) {
-        const list = [...personaUsePreferenceList.value];
-        if (!list.includes(val)) {
-          list.push(val);
-          personaUsePreferenceList.value = list;
-        }
-        newPreferenceTagInput.value = "";
-      }
-    };
-
-    const filteredPreferenceCategories = computed(() => {
-      const query = newPreferenceTagInput.value.trim().toLowerCase();
-      const categories = Object.keys(api.emojiData.value || {});
-      if (!query) return categories;
-      return categories.filter(cat => cat.toLowerCase().includes(query));
-    });
 
 
 
@@ -230,14 +223,19 @@ createApp({
       }
     };
 
-    // Lifecycle hooks
     onMounted(async () => {
       if (window.AstrBotPluginPage) {
         await window.AstrBotPluginPage.ready();
       }
+      // Load UI settings from server before other resource fetching to restore tab state
+      await modals.fetchUiSettings();
+      await modals.fetchProviders();
+      currentTab.value = modals.safeGetItem('meme_mgr_tab') || 'meme';
+
       await api.fetchPersonaTags();
       await api.fetchEmojis();
       await api.fetchPersonas();
+      await configApi.fetchConfig();
       void sync.checkSyncStatus(false);
       
       window.addEventListener("scroll", handleScroll);
@@ -254,8 +252,6 @@ createApp({
       tagDescriptions: api.tagDescriptions,
       systemPersonas: api.systemPersonas,
       personaTags: api.personaTags,
-      personaUsePreference: api.personaUsePreference,
-      personaCollectPreference: api.personaCollectPreference,
       personaFilter: api.personaFilter,
       activeCategories: api.activeCategories,
       activeCategory,
@@ -326,12 +322,6 @@ createApp({
       // UI States & Navigation
       syncDrawerVisible,
       otherDropdownVisible,
-      showUsePreferenceDropdown,
-      newPreferenceTagInput,
-      personaUsePreferenceList,
-      toggleUsePreferenceTag,
-      addNewPreferenceTag,
-      filteredPreferenceCategories,
       selectCategory,
       hasPreviousEmoji,
       hasNextEmoji,
@@ -371,6 +361,7 @@ createApp({
       toggleTagInDrawer: emojiActions.toggleTagInDrawer,
       togglePersonaInDrawer: emojiActions.togglePersonaInDrawer,
       saveEmojiAttributes: emojiActions.saveEmojiAttributes,
+      runSingleEmojiAnalysis: emojiActions.runSingleEmojiAnalysis,
       deleteEmoji: emojiActions.deleteEmoji,
       batchDeleteSelected: emojiActions.batchDeleteSelected,
       batchConvertToGif: emojiActions.batchConvertToGif,
@@ -422,6 +413,15 @@ createApp({
       toggleTagInGroup: tagMerge.toggleTagInGroup,
       mergeSelectedGroups: tagMerge.mergeSelectedGroups,
       totalMergeCount: tagMerge.totalMergeCount,
+
+      // Primary Tabs & Configurations
+      currentTab,
+      switchTab,
+      savePersonaSettingsDirect,
+      pluginSchema: configApi.configSchema,
+      pluginConfig: configApi.configValues,
+      pluginConfigLoading: configApi.loading,
+      savePluginConfig: configApi.saveConfig,
     };
   },
 }).mount("#app");
