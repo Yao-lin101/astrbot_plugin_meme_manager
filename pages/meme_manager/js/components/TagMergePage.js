@@ -40,11 +40,6 @@ export const TagMergePage = {
   template: `
     <div class="config-container">
       <div class="config-card">
-        <div class="config-card-title">
-          <i class="fas fa-object-group" style="color: var(--primary-color); margin-right: 6px;"></i>
-          标签合并 / 清理
-        </div>
-
 
         <!-- 控制面板 (阈值 + 扫描) -->
         <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; padding: 16px; background: var(--btn-default-bg); border: 1px solid var(--border-color); border-radius: var(--radius-md);">
