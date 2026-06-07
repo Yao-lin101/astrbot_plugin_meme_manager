@@ -212,19 +212,17 @@
   color: #ffffff;
 }
 
-.close-sidebar-btn {
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  font-size: 20px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  margin-left: auto;
+/* Drawer backdrop overlay */
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.15); /* Premium soft dark backdrop */
+  backdrop-filter: blur(2px); /* Premium soft blur */
+  z-index: 998;
+  animation: fadeIn 0.2s ease-out;
 }
 
 /* Sidebar floating toggle button */
@@ -237,14 +235,13 @@
   color: #ffffff;
   border: none;
   border-radius: var(--radius-md) 0 0 var(--radius-md);
-  padding: 14px 10px;
+  padding: 16px 12px;
   cursor: pointer;
   z-index: 999;
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.15);
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
 }
 
@@ -257,14 +254,5 @@
 }
 
 .sidebar-floating-toggle i {
-  font-size: 14px;
-}
-
-.sidebar-floating-toggle .toggle-text {
-  writing-mode: vertical-rl;
-  text-orientation: upright;
-  letter-spacing: 2px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
+  font-size: 16px;
 }
