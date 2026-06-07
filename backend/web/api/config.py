@@ -107,7 +107,7 @@ async def get_ui_settings():
         settings_path = PLUGIN_DATA_DIR / "ui_settings.json"
         if not settings_path.exists():
             return jsonify({}), 200
-        with open(settings_path, "r", encoding="utf-8") as f:
+        with open(settings_path, encoding="utf-8") as f:
             data = json.load(f)
         return jsonify(data), 200
     except Exception as e:

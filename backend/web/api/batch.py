@@ -779,7 +779,6 @@ async def run_batch_analyze_task(
     global batch_analyze_status, cancel_batch_analyze_flag
     import asyncio
 
-
     # 在一开始，先将所有文件状态置为等待中
     batch_analyze_status["results"] = [
         {

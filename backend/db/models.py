@@ -6,7 +6,7 @@ from pathlib import Path
 from quart import current_app
 from werkzeug.utils import secure_filename
 
-from ...config import MEMES_DIR
+from ...config import MEMES_DIR, PLUGIN_DATA_DIR
 from ...utils import compress_image, get_config_value
 from .database import get_db_conn
 
@@ -36,6 +36,29 @@ class SimilarEmojiError(DuplicateEmojiError):
 
 def _is_supported_image(filename: str) -> bool:
     return filename.lower().endswith(IMAGE_EXTENSIONS)
+
+
+def delete_emoji_thumbnail(filename: str):
+    """删除表情包对应的缩略图"""
+    try:
+        for ext in (".avif", ".webp"):
+            thumb_path = Path(PLUGIN_DATA_DIR) / "thumbnails" / (filename + ext)
+            if thumb_path.exists():
+                thumb_path.unlink()
+    except Exception as e:
+        logger.warning(f"删除缩略图失败 for {filename}: {e}")
+
+
+def clear_all_emoji_thumbnails():
+    """清除所有缩略图缓存"""
+    try:
+        thumb_dir = Path(PLUGIN_DATA_DIR) / "thumbnails"
+        if thumb_dir.exists():
+            import shutil
+
+            shutil.rmtree(thumb_dir)
+    except Exception as e:
+        logger.warning(f"清空缩略图缓存失败: {e}")
 
 
 def _calculate_file_hash(content: bytes) -> str:
@@ -361,6 +384,7 @@ def delete_emoji_from_category(category, image_file):
         file_path = Path(MEMES_DIR) / filename
         if file_path.exists():
             file_path.unlink()
+        delete_emoji_thumbnail(filename)
         return True
     else:
         # 更新数据库分类
@@ -560,6 +584,7 @@ def clear_category_emojis(category: str) -> dict[str, object]:
             file_path = Path(MEMES_DIR) / filename
             if file_path.exists():
                 file_path.unlink()
+            delete_emoji_thumbnail(filename)
         else:
             cursor.execute(
                 "UPDATE memes SET emotions = ? WHERE filename = ?",
@@ -589,6 +614,8 @@ def clear_all_emojis() -> dict[str, object]:
         file_path = Path(MEMES_DIR) / filename
         if file_path.exists():
             file_path.unlink()
+
+    clear_all_emoji_thumbnails()
 
     cursor.execute("DELETE FROM memes")
     conn.commit()
@@ -710,6 +737,7 @@ def batch_convert_to_gif(image_files: list[str]) -> dict[str, object]:
 
             # 删除旧文件
             file_path.unlink()
+            delete_emoji_thumbnail(filename)
 
             converted_files.append({"original": filename, "converted": new_filename})
 

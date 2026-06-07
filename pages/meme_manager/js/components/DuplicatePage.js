@@ -95,7 +95,7 @@ export const DuplicatePage = {
                 <div v-for="meme in group.memes" :key="meme.filename" class="dedup-meme-card" :class="meme.action" style="border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 12px; display: flex; gap: 12px; transition: var(--transition); background: var(--bg-card); position: relative;">
                   
                   <!-- Thumbnail -->
-                  <div style="width: 80px; height: 80px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.02); border-radius: 6px; border: 1px solid var(--border-color);" :style="{ backgroundImage: 'url(' + getImageUrl(meme.filename) + ')' }"></div>
+                  <div style="width: 80px; height: 80px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.02); border-radius: 6px; border: 1px solid var(--border-color);" :style="{ backgroundImage: 'url(' + getImageUrl(meme.filename, true) + ')' }"></div>
                   
                   <!-- Info & Action -->
                   <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between; min-width: 0;">

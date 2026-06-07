@@ -139,8 +139,18 @@ createApp({
 
 
 
-    const getImageUrl = (emoji) => {
+    const fullyLoadedEmojis = ref({});
+    const markEmojiFullyLoaded = (emoji) => {
+      if (emoji) {
+        fullyLoadedEmojis.value[emoji] = true;
+      }
+    };
+
+    const getImageUrl = (emoji, isThumbnail = false) => {
       if (!emoji) return '';
+      if (isThumbnail && !fullyLoadedEmojis.value[emoji]) {
+        return `/api/file/meme_manager/memes/file/thumbnail/${encodeURIComponent(emoji)}`;
+      }
       return `/api/file/meme_manager/memes/file/${encodeURIComponent(emoji)}`;
     };
 
@@ -387,6 +397,7 @@ createApp({
       handleBackspace: emojiActions.handleBackspace,
       isDrawerInputFocused,
       getImageUrl,
+      markEmojiFullyLoaded,
 
       // Dedup
       duplicateModal: dedup.duplicateModal,

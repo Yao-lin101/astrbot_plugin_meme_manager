@@ -10,9 +10,9 @@ from .batch import (
     batch_rename_emojis_to_tags,
     cancel_batch_analyze,
     get_batch_analyze_status,
+    get_embedding_providers,
     get_prompt_template,
     get_providers,
-    get_embedding_providers,
     move_emoji,
 )
 from .category import (
@@ -32,8 +32,11 @@ from .config import (
 from .duplicates import check_duplicates, resolve_duplicates
 from .emoji import (
     add_emoji,
+    clear_all_thumbnails_api,
+    clear_orphaned_thumbnails_api,
     delete_emoji,
     edit_emoji,
+    generate_thumbnails_api,
     get_all_emojis,
     get_emoji_file_base64,
     get_emoji_info,
@@ -75,9 +78,12 @@ __all__ = [
     "check_duplicates",
     "resolve_duplicates",
     "add_emoji",
+    "clear_all_thumbnails_api",
+    "clear_orphaned_thumbnails_api",
     "delete_emoji",
     "edit_emoji",
     "get_all_emojis",
+    "generate_thumbnails_api",
     "get_emoji_file_base64",
     "get_emoji_info",
     "get_emojis_by_category",
