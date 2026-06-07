@@ -246,6 +246,7 @@
 }
 
 .sidebar-floating-toggle:hover {
+  background: var(--primary-hover) !important;
   opacity: 0.95;
 }
 
