@@ -1,174 +1,177 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AstrBot 表情包管理系统</title>
-    <script>
-      (function() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const theme = urlParams.get('theme');
-        if (theme === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-        } else if (theme === 'light') {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
-      })();
-    </script>
 
-    <script>
-      // Mock window.fetch to communicate through the AstrBotPluginPage message bridge
-      window.fetch = async function(url, options = {}) {
-        const B = window.AstrBotPluginPage;
-        if (!B) {
-          return Promise.reject(new Error("Bridge not available"));
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AstrBot 表情包管理系统</title>
+  <script>
+    (function () {
+      const urlParams = new URLSearchParams(window.location.search);
+      const theme = urlParams.get('theme');
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+      }
+    })();
+  </script>
+
+  <script>
+    // Mock window.fetch to communicate through the AstrBotPluginPage message bridge
+    window.fetch = async function (url, options = {}) {
+      const B = window.AstrBotPluginPage;
+      if (!B) {
+        return Promise.reject(new Error("Bridge not available"));
+      }
+      await B.ready();
+
+      let endpoint = url;
+      if (typeof endpoint === 'string') {
+        if (endpoint.startsWith('/api/')) {
+          endpoint = endpoint.substring(5);
+        } else if (endpoint.startsWith('api/')) {
+          endpoint = endpoint.substring(4);
         }
-        await B.ready();
-        
-        let endpoint = url;
-        if (typeof endpoint === 'string') {
-          if (endpoint.startsWith('/api/')) {
-            endpoint = endpoint.substring(5);
-          } else if (endpoint.startsWith('api/')) {
-            endpoint = endpoint.substring(4);
-          }
-        }
-        
-        const method = (options.method || 'GET').toUpperCase();
-        try {
-          let resData;
-          if (method === 'GET') {
-            let params = {};
-            const urlParts = endpoint.split('?');
-            const pathPart = urlParts[0];
-            if (urlParts.length > 1) {
-              const searchParams = new URLSearchParams(urlParts[1]);
-              for (const [key, value] of searchParams.entries()) {
-                params[key] = value;
-              }
+      }
+
+      const method = (options.method || 'GET').toUpperCase();
+      try {
+        let resData;
+        if (method === 'GET') {
+          let params = {};
+          const urlParts = endpoint.split('?');
+          const pathPart = urlParts[0];
+          if (urlParts.length > 1) {
+            const searchParams = new URLSearchParams(urlParts[1]);
+            for (const [key, value] of searchParams.entries()) {
+              params[key] = value;
             }
-            resData = await B.apiGet(pathPart, params);
-          } else if (method === 'POST') {
-            const body = options.body;
-            if (body instanceof FormData) {
-              const category = body.get('category');
-              const file = body.get('image_file');
-              const ignore_similarity = body.get('ignore_similarity');
-              if (file) {
-                const base64Data = await new Promise((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onload = () => resolve(reader.result);
-                  reader.onerror = reject;
-                  reader.readAsDataURL(file);
-                });
-                const payload = {
-                  category: category,
-                  filename: file.name,
-                  base64_data: base64Data
-                };
-                if (ignore_similarity !== null && ignore_similarity !== undefined) {
-                  payload.ignore_similarity = ignore_similarity;
-                }
-                resData = await B.apiPost("emoji/add", payload);
-              } else {
-                throw new Error("No file in FormData");
+          }
+          resData = await B.apiGet(pathPart, params);
+        } else if (method === 'POST') {
+          const body = options.body;
+          if (body instanceof FormData) {
+            const category = body.get('category');
+            const file = body.get('image_file');
+            const ignore_similarity = body.get('ignore_similarity');
+            if (file) {
+              const base64Data = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+              });
+              const payload = {
+                category: category,
+                filename: file.name,
+                base64_data: base64Data
+              };
+              if (ignore_similarity !== null && ignore_similarity !== undefined) {
+                payload.ignore_similarity = ignore_similarity;
+              }
+              resData = await B.apiPost("emoji/add", payload);
+            } else {
+              throw new Error("No file in FormData");
+            }
+          } else {
+            let jsonBody = {};
+            if (typeof body === 'string') {
+              try {
+                jsonBody = JSON.parse(body);
+              } catch (e) {
+                jsonBody = body;
               }
             } else {
-              let jsonBody = {};
-              if (typeof body === 'string') {
-                try {
-                  jsonBody = JSON.parse(body);
-                } catch (e) {
-                  jsonBody = body;
-                }
-              } else {
-                jsonBody = body || {};
-              }
-              resData = await B.apiPost(endpoint, jsonBody);
+              jsonBody = body || {};
             }
+            resData = await B.apiPost(endpoint, jsonBody);
           }
-          
-          if (resData && resData.is_duplicate) {
-            return {
-              ok: false,
-              status: 409,
-              json: async () => resData,
-              text: async () => JSON.stringify(resData)
-            };
-          }
-          
-          return {
-            ok: true,
-            status: 200,
-            json: async () => resData,
-            text: async () => typeof resData === 'string' ? resData : JSON.stringify(resData)
-          };
-        } catch (error) {
-          console.error(`Mock fetch failed for ${url}:`, error);
-          let status = 500;
-          if (error.message && error.message.includes("status code 409")) {
-            status = 409;
-          } else if (error.message && error.message.includes("status code 400")) {
-            status = 400;
-          } else if (error.message && error.message.includes("status code 404")) {
-            status = 404;
-          }
+        }
+
+        if (resData && resData.is_duplicate) {
           return {
             ok: false,
-            status: status,
-            json: async () => ({ message: error.message || "Request failed" }),
-            text: async () => error.message || "Request failed"
+            status: 409,
+            json: async () => resData,
+            text: async () => JSON.stringify(resData)
           };
         }
-      };
-    </script>
-    <link rel="stylesheet" href="css/global.css" />
-    <link rel="stylesheet" href="css/sync.css" />
-    <link rel="stylesheet" href="css/toolbar.css" />
-    <link rel="stylesheet" href="css/sidebar.css" />
-    <link rel="stylesheet" href="css/emoji-grid.css" />
-    <link rel="stylesheet" href="css/modals.css" />
-    <link rel="stylesheet" href="css/context-menu.css" />
-    <link rel="stylesheet" href="css/toasts.css" />
-    <link rel="stylesheet" href="css/dedup.css" />
-    <link rel="stylesheet" href="css/tag-merge.css" />
-    <link rel="stylesheet" href="css/login.css" />
-    <link rel="stylesheet" href="css/tabs.css" />
-    <link rel="stylesheet" href="css/config.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.js"></script>
-    <style>
-      [v-cloak] {
-        display: none !important;
+
+        return {
+          ok: true,
+          status: 200,
+          json: async () => resData,
+          text: async () => typeof resData === 'string' ? resData : JSON.stringify(resData)
+        };
+      } catch (error) {
+        console.error(`Mock fetch failed for ${url}:`, error);
+        let status = 500;
+        if (error.message && error.message.includes("status code 409")) {
+          status = 409;
+        } else if (error.message && error.message.includes("status code 400")) {
+          status = 400;
+        } else if (error.message && error.message.includes("status code 404")) {
+          status = 404;
+        }
+        return {
+          ok: false,
+          status: status,
+          json: async () => ({ message: error.message || "Request failed" }),
+          text: async () => error.message || "Request failed"
+        };
       }
-    </style>
-  </head>
-  <body>
-    <div id="app" class="layout-container" v-cloak @click="closeContextMenu(); otherDropdownVisible = false; showUsePreferenceDropdown = false">
+    };
+  </script>
+  <link rel="stylesheet" href="css/global.css" />
+  <link rel="stylesheet" href="css/sync.css" />
+  <link rel="stylesheet" href="css/toolbar.css" />
+  <link rel="stylesheet" href="css/sidebar.css" />
+  <link rel="stylesheet" href="css/emoji-grid.css" />
+  <link rel="stylesheet" href="css/modals.css" />
+  <link rel="stylesheet" href="css/context-menu.css" />
+  <link rel="stylesheet" href="css/toasts.css" />
+  <link rel="stylesheet" href="css/dedup.css" />
+  <link rel="stylesheet" href="css/tag-merge.css" />
+  <link rel="stylesheet" href="css/login.css" />
+  <link rel="stylesheet" href="css/tabs.css" />
+  <link rel="stylesheet" href="css/config.css" />
+  <link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
+  <script src="vendor/vue.global.prod.js"></script>
+  <style>
+    [v-cloak] {
+      display: none !important;
+    }
+  </style>
+</head>
 
-      <main class="main-content">
-        <!-- 一级 Tab 导航栏 -->
-        <nav class="primary-tabs">
-          <button class="primary-tab" :class="{ active: currentTab === 'meme' }" @click="switchTab('meme')">
-            <i class="fas fa-images"></i>表情管理
-          </button>
-          <button class="primary-tab" :class="{ active: currentTab === 'tagMerge' }" @click="switchTab('tagMerge')">
-            <i class="fas fa-object-group"></i>标签合并
-          </button>
-          <button class="primary-tab" :class="{ active: currentTab === 'dedup' }" @click="switchTab('dedup')">
-            <i class="fas fa-clone"></i>重复检测
-          </button>
-          <button class="primary-tab" :class="{ active: currentTab === 'sync' }" @click="switchTab('sync')">
-            <i class="fas fa-arrows-spin"></i>同步管理
-          </button>
-          <button class="primary-tab" :class="{ active: currentTab === 'config' }" @click="switchTab('config')">
-            <i class="fas fa-gears"></i>配置管理
-          </button>
-        </nav>
+<body>
+  <div id="app" class="layout-container" v-cloak
+    @click="closeContextMenu(); otherDropdownVisible = false; showUsePreferenceDropdown = false">
 
-        <!-- 表情管理 Tab 内容 -->
-        <div v-show="currentTab === 'meme'">
-          <!-- 批量操作与工具栏 -->
+    <main class="main-content">
+      <!-- 一级 Tab 导航栏 -->
+      <nav class="primary-tabs">
+        <button class="primary-tab" :class="{ active: currentTab === 'meme' }" @click="switchTab('meme')">
+          <i class="fas fa-images"></i>表情管理
+        </button>
+        <button class="primary-tab" :class="{ active: currentTab === 'tagMerge' }" @click="switchTab('tagMerge')">
+          <i class="fas fa-object-group"></i>标签合并
+        </button>
+        <button class="primary-tab" :class="{ active: currentTab === 'dedup' }" @click="switchTab('dedup')">
+          <i class="fas fa-clone"></i>重复检测
+        </button>
+        <button class="primary-tab" :class="{ active: currentTab === 'sync' }" @click="switchTab('sync')">
+          <i class="fas fa-arrows-spin"></i>同步管理
+        </button>
+        <button class="primary-tab" :class="{ active: currentTab === 'config' }" @click="switchTab('config')">
+          <i class="fas fa-gears"></i>配置管理
+        </button>
+      </nav>
+
+      <!-- 表情管理 Tab 内容 -->
+      <div v-show="currentTab === 'meme'">
+        <!-- 批量操作与工具栏 -->
         <div class="page-toolbar">
           <div class="selection-toolbar">
             <div class="filter-group" style="display: flex; align-items: center; gap: 15px;">
@@ -191,30 +194,47 @@
               <span v-if="selectionEnabled" id="selection-summary" class="active-selection">
                 已选中 {{ selectedEmojis.size }} 个
               </span>
-              
-              <button id="batch-persona-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="openBatchPersonaModal">
+
+              <button id="batch-persona-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0"
+                @click="openBatchPersonaModal">
                 <i class="fas fa-user-gear icon"></i>设置人格
               </button>
-              
-              <button id="batch-analyze-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0" @click="openBatchAnalyzeModal">
+
+              <button id="batch-analyze-btn" class="btn-secondary" :disabled="selectedEmojis.size === 0"
+                @click="openBatchAnalyzeModal">
                 <i class="fas fa-brain icon"></i>批量重新分析
               </button>
-              
-              <button id="batch-delete-btn" class="btn-danger" :disabled="selectedEmojis.size === 0" @click="batchDeleteSelected">
+
+              <button id="batch-delete-btn" class="btn-danger" :disabled="selectedEmojis.size === 0"
+                @click="batchDeleteSelected">
                 <i class="fas fa-trash-can icon"></i>删除
               </button>
 
               <!-- 其他操作下拉菜单 -->
               <div class="dropdown-wrapper" style="position: relative; display: inline-block;">
-                <button class="btn-secondary dropdown-trigger" @click.stop="otherDropdownVisible = !otherDropdownVisible" style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 500; transition: var(--transition);">
-                  <i class="fas fa-ellipsis-h icon"></i>其他 <i class="fas fa-chevron-down" style="font-size: 10px; margin-left: 2px;"></i>
+                <button class="btn-secondary dropdown-trigger"
+                  @click.stop="otherDropdownVisible = !otherDropdownVisible"
+                  style="display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; font-size: 13px; font-weight: 500; transition: var(--transition);">
+                  <i class="fas fa-ellipsis-h icon"></i>其他 <i class="fas fa-chevron-down"
+                    style="font-size: 10px; margin-left: 2px;"></i>
                 </button>
-                <div class="dropdown-menu" v-show="otherDropdownVisible" style="position: absolute; right: 0; top: 100%; margin-top: 6px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 100; min-width: 160px; display: flex; flex-direction: column; padding: 4px 0; overflow: hidden;">
+                <div class="dropdown-menu" v-show="otherDropdownVisible"
+                  style="position: absolute; right: 0; top: 100%; margin-top: 6px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 100; min-width: 160px; display: flex; flex-direction: column; padding: 4px 0; overflow: hidden;">
 
-                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchConvertToGif(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0"
+                    @click="batchConvertToGif(); otherDropdownVisible = false"
+                    style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;"
+                    :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }"
+                    onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'"
+                    onmouseout="this.style.background='transparent'">
                     <i class="fas fa-file-image" style="width: 16px; color: var(--text-secondary);"></i> 转换为 GIF
                   </button>
-                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0" @click="batchRenameToTags(); otherDropdownVisible = false" style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;" :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }" onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'" onmouseout="this.style.background='transparent'">
+                  <button class="dropdown-item" :disabled="selectedEmojis.size === 0"
+                    @click="batchRenameToTags(); otherDropdownVisible = false"
+                    style="background: transparent; border: none; padding: 10px 16px; text-align: left; font-size: 13px; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; gap: 8px; transition: background 0.2s; width: 100%;"
+                    :style="{ opacity: selectedEmojis.size === 0 ? 0.5 : 1, cursor: selectedEmojis.size === 0 ? 'not-allowed' : 'pointer' }"
+                    onmouseover="if(selectedEmojis.size > 0) this.style.background='var(--bg-secondary)'"
+                    onmouseout="this.style.background='transparent'">
                     <i class="fas fa-tags" style="width: 16px; color: var(--text-secondary);"></i> 更名为标签集合
                   </button>
                 </div>
@@ -230,141 +250,149 @@
           <!-- 左侧：主要内容 (分类表情网格) -->
           <div class="main-workspace">
             <div id="emoji-categories">
-          <div v-if="activeCategory" class="category active" :id="'category-' + activeCategory">
-            <div class="category-title">
-              <div class="category-header">
-                <div class="category-title-main">
-                  <div class="category-name">{{ activeCategoriesDisplayName }}</div>
-                  <span class="category-selection-summary">
-                    {{ selectionEnabled ? '已选 ' + getVisibleSelectedCount(activeCategoryEmojisList, activeCategory) + ' / ' + activeCategoryEmojisList.length : '勾选表情包即可进行批量操作' }}
-                  </span>
-                </div>
-                <div class="category-actions" v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'">
-                  <button class="btn-secondary" @click="openRenameCategory(activeCategory)">重命名标签</button>
-                  <button class="btn-secondary" @click="openImportModal">导入已存表情</button>
-                  <button class="btn-secondary" 
-                          :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
-                          @click="selectEmojisWithoutDescription(activeCategory, null)">
-                    勾选无描述
-                  </button>
-                  <button class="btn-secondary" 
-                          :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
-                          @click="toggleCategorySelection(activeCategory, null)">
-                    {{ isAllSelectedInCategory(activeCategory, null) ? '取消选择' : '全选' }}
-                  </button>
-                  <button class="btn-danger-outline icon-only-btn" :title="'删除分类 ' + activeCategory" @click="deleteCategory(activeCategory)">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </div>
-                <div class="category-actions" v-else>
-                  <button class="btn-secondary" 
-                          :disabled="activeCategoryEmojisList.length === 0"
-                          @click="selectEmojisWithoutDescription(activeCategory, activeCategoryEmojisList)">
-                    勾选无描述
-                  </button>
-                  <button class="btn-secondary" 
-                          :disabled="activeCategoryEmojisList.length === 0"
-                          @click="toggleCategorySelection(activeCategory, activeCategoryEmojisList)">
-                    {{ isAllSelectedInCategory(activeCategory, activeCategoryEmojisList) ? '取消选择' : '全选' }}
-                  </button>
-                </div>
-              </div>
-              <p class="description" v-if="activeCategories.includes('all')">展示当前过滤人格下的所有表情包</p>
-              <p class="description" v-else-if="activeCategories.length > 1">展示同时包含 「{{ activeCategoriesDisplayName }}」 标签的表情包交集</p>
-            </div>
-
-            <!-- 表情包 Grid 网格 -->
-            <!-- 上传区域 (横跨顶部的 Banner 样式) -->
-            <div v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'"
-                 class="emoji-upload-banner" 
-                 @click="triggerFileInput(activeCategory)"
-                 @dragover.prevent
-                 @drop.prevent="onUploadDrop($event, activeCategory)"
-                 :class="{ uploading: uploadStateByCategory.has(activeCategory) }">
-              <div class="emoji-upload-icon">
-                <i :class="uploadStateByCategory.has(activeCategory) ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-arrow-up'"></i>
-              </div>
-              <div class="emoji-upload-title">
-                {{ uploadStateByCategory.has(activeCategory) ? '正在上传...' : '上传表情包到当前分类' }}
-              </div>
-              <div class="emoji-upload-hint">
-                <span v-if="uploadStateByCategory.has(activeCategory)">
-                  {{ uploadStateByCategory.get(activeCategory).text }}
-                </span>
-                <span v-else>点击或拖拽图片到此处，支持批量上传</span>
-              </div>
-              <div v-if="uploadStateByCategory.has(activeCategory)" class="emoji-upload-progress" style="width: 200px; margin-top: 5px;">
-                <span class="emoji-upload-progress-bar" :style="{ width: uploadStateByCategory.get(activeCategory).progress + '%' }"></span>
-              </div>
-              <input type="file" :id="'file-input-' + activeCategory" style="display: none;" accept="image/*" multiple @change="onFileSelected($event, activeCategory)" />
-            </div>
-
-            <!-- 空状态展示 -->
-            <div v-if="activeCategoryTimeGroups.length === 0" style="padding: 60px; text-align: center; color: var(--text-secondary);">
-              <i class="far fa-face-smile" style="font-size: 32px; margin-bottom: 12px; color: var(--border-color);"></i>
-              <p>没有符合当前组合标签 of 表情包</p>
-            </div>
-
-            <!-- 表情包分级网格 -->
-            <div v-else class="emoji-time-groups">
-              <div v-for="group in activeCategoryTimeGroups" :key="group.title" class="time-group-section" style="margin-bottom: 24px;">
-                <h3 class="time-group-header" style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                  <i class="far fa-clock"></i> {{ group.title }}
-                  <span class="group-count" style="font-size: 10px; padding: 2px 6px; background: var(--tag-pill-bg); border-radius: 10px; color: var(--text-secondary);">
-                    {{ group.list.length }}
-                  </span>
-                </h3>
-                
-                <div class="emoji-grid">
-                  <template v-for="emoji in group.list" :key="emoji">
-                    <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
-                      <div class="emoji-item" 
-                           :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
-                           :style="{ backgroundImage: 'url(' + getImageUrl(emoji) + ')' }"
-                           :draggable="activeCategories.length === 1 && activeCategories[0] !== 'all'" 
-                           @dragstart="onDragStart($event, emoji, activeCategory)"
-                           @click="onEmojiClick(activeCategory, emoji)"
-                           @contextmenu.prevent="activeCategories.length === 1 && activeCategories[0] !== 'all' && openContextMenu($event, activeCategory, emoji)">
-                        
-                        <!-- 选中标记按钮 -->
-                        <button type="button" class="selection-indicator" aria-label="选择表情包" @click.stop="toggleEmojiSelection(activeCategory, emoji)"></button>
-                        
-                        <!-- 删除按钮 -->
-                         <button class="delete-btn" @click.stop="deleteEmoji(activeCategory, emoji)">&times;</button>
-                      </div>
-
-                      <!-- 表情包卡片底部多标签 -->
-                      <div class="emoji-tags">
-                        <span v-for="t in getEmojiTags(emoji)" :key="t" class="tag-pill">
-                          {{ t }}
-                        </span>
-                      </div>
+              <div v-if="activeCategory" class="category active" :id="'category-' + activeCategory">
+                <div class="category-title">
+                  <div class="category-header">
+                    <div class="category-title-main">
+                      <div class="category-name">{{ activeCategoriesDisplayName }}</div>
+                      <span class="category-selection-summary">
+                        {{ selectionEnabled ? '已选 ' + getVisibleSelectedCount(activeCategoryEmojisList, activeCategory)
+                        + ' / ' + activeCategoryEmojisList.length : '勾选表情包即可进行批量操作' }}
+                      </span>
                     </div>
-                  </template>
+                    <div class="category-actions" v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'">
+                      <button class="btn-secondary" @click="openRenameCategory(activeCategory)">重命名标签</button>
+                      <button class="btn-secondary" @click="openImportModal">导入已存表情</button>
+                      <button class="btn-secondary"
+                        :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
+                        @click="selectEmojisWithoutDescription(activeCategory, null)">
+                        勾选无描述
+                      </button>
+                      <button class="btn-secondary"
+                        :disabled="!emojiData[activeCategory] || emojiData[activeCategory].length === 0"
+                        @click="toggleCategorySelection(activeCategory, null)">
+                        {{ isAllSelectedInCategory(activeCategory, null) ? '取消选择' : '全选' }}
+                      </button>
+                      <button class="btn-danger-outline icon-only-btn" :title="'删除分类 ' + activeCategory"
+                        @click="deleteCategory(activeCategory)">
+                        <i class="fas fa-trash"></i>
+                      </button>
+                    </div>
+                    <div class="category-actions" v-else>
+                      <button class="btn-secondary" :disabled="activeCategoryEmojisList.length === 0"
+                        @click="selectEmojisWithoutDescription(activeCategory, activeCategoryEmojisList)">
+                        勾选无描述
+                      </button>
+                      <button class="btn-secondary" :disabled="activeCategoryEmojisList.length === 0"
+                        @click="toggleCategorySelection(activeCategory, activeCategoryEmojisList)">
+                        {{ isAllSelectedInCategory(activeCategory, activeCategoryEmojisList) ? '取消选择' : '全选' }}
+                      </button>
+                    </div>
+                  </div>
+                  <p class="description" v-if="activeCategories.includes('all')">展示当前过滤人格下的所有表情包</p>
+                  <p class="description" v-else-if="activeCategories.length > 1">展示同时包含 「{{ activeCategoriesDisplayName
+                    }}」 标签的表情包交集</p>
+                </div>
+
+                <!-- 表情包 Grid 网格 -->
+                <!-- 上传区域 (横跨顶部的 Banner 样式) -->
+                <div v-if="activeCategories.length === 1 && activeCategories[0] !== 'all'" class="emoji-upload-banner"
+                  @click="triggerFileInput(activeCategory)" @dragover.prevent
+                  @drop.prevent="onUploadDrop($event, activeCategory)"
+                  :class="{ uploading: uploadStateByCategory.has(activeCategory) }">
+                  <div class="emoji-upload-icon">
+                    <i
+                      :class="uploadStateByCategory.has(activeCategory) ? 'fas fa-spinner fa-spin' : 'fas fa-cloud-arrow-up'"></i>
+                  </div>
+                  <div class="emoji-upload-title">
+                    {{ uploadStateByCategory.has(activeCategory) ? '正在上传...' : '上传表情包到当前分类' }}
+                  </div>
+                  <div class="emoji-upload-hint">
+                    <span v-if="uploadStateByCategory.has(activeCategory)">
+                      {{ uploadStateByCategory.get(activeCategory).text }}
+                    </span>
+                    <span v-else>点击或拖拽图片到此处，支持批量上传</span>
+                  </div>
+                  <div v-if="uploadStateByCategory.has(activeCategory)" class="emoji-upload-progress"
+                    style="width: 200px; margin-top: 5px;">
+                    <span class="emoji-upload-progress-bar"
+                      :style="{ width: uploadStateByCategory.get(activeCategory).progress + '%' }"></span>
+                  </div>
+                  <input type="file" :id="'file-input-' + activeCategory" style="display: none;" accept="image/*"
+                    multiple @change="onFileSelected($event, activeCategory)" />
+                </div>
+
+                <!-- 空状态展示 -->
+                <div v-if="activeCategoryTimeGroups.length === 0"
+                  style="padding: 60px; text-align: center; color: var(--text-secondary);">
+                  <i class="far fa-face-smile"
+                    style="font-size: 32px; margin-bottom: 12px; color: var(--border-color);"></i>
+                  <p>没有符合当前组合标签 of 表情包</p>
+                </div>
+
+                <!-- 表情包分级网格 -->
+                <div v-else class="emoji-time-groups">
+                  <div v-for="group in activeCategoryTimeGroups" :key="group.title" class="time-group-section"
+                    style="margin-bottom: 24px;">
+                    <h3 class="time-group-header"
+                      style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                      <i class="far fa-clock"></i> {{ group.title }}
+                      <span class="group-count"
+                        style="font-size: 10px; padding: 2px 6px; background: var(--tag-pill-bg); border-radius: 10px; color: var(--text-secondary);">
+                        {{ group.list.length }}
+                      </span>
+                    </h3>
+
+                    <div class="emoji-grid">
+                      <template v-for="emoji in group.list" :key="emoji">
+                        <div class="emoji-card" :class="{ active: activeDetailEmoji === emoji }" :data-emoji="emoji">
+                          <div class="emoji-item"
+                            :class="{ selected: isEmojiSelected(activeCategory, emoji), 'selection-mode': selectionEnabled }"
+                            :style="{ backgroundImage: 'url(' + getImageUrl(emoji, true) + ')' }"
+                            :draggable="activeCategories.length === 1 && activeCategories[0] !== 'all'"
+                            @dragstart="onDragStart($event, emoji, activeCategory)"
+                            @click="onEmojiClick(activeCategory, emoji)"
+                            @contextmenu.prevent="activeCategories.length === 1 && activeCategories[0] !== 'all' && openContextMenu($event, activeCategory, emoji)">
+
+                            <!-- 选中标记按钮 -->
+                            <button type="button" class="selection-indicator" aria-label="选择表情包"
+                              @click.stop="toggleEmojiSelection(activeCategory, emoji)"></button>
+
+                            <!-- 删除按钮 -->
+                            <button class="delete-btn" @click.stop="deleteEmoji(activeCategory, emoji)">&times;</button>
+                          </div>
+
+                          <!-- 表情包卡片底部多标签 -->
+                          <div class="emoji-tags">
+                            <span v-for="t in getEmojiTags(emoji)" :key="t" class="tag-pill">
+                              {{ t }}
+                            </span>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 右侧：固定垂直标签列表 -->
-      <aside class="tags-sidebar">
+          <!-- 右侧：固定垂直标签列表 -->
+          <aside class="tags-sidebar">
             <div class="tags-sidebar-header">
               <i class="fas fa-tags"></i>
               <h3>标签分类</h3>
             </div>
-            
+
             <!-- Active filter chips above the search wrapper -->
-            <div v-if="activeCategories.length > 0 && !activeCategories.includes('all')" 
-                 class="sidebar-active-tags" 
-                 style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 4px;">
-              <span v-for="cat in activeCategories" 
-                    :key="cat" 
-                    class="active-tag-pill" 
-                    style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: #2563eb; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500;">
+            <div v-if="activeCategories.length > 0 && !activeCategories.includes('all')" class="sidebar-active-tags"
+              style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; padding: 0 4px;">
+              <span v-for="cat in activeCategories" :key="cat" class="active-tag-pill"
+                style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: #2563eb; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 500;">
                 {{ cat }}
-                <span @click.stop="selectCategory(cat)" style="cursor: pointer; font-weight: bold; font-size: 12px; color: #2563eb; line-height: 1; padding: 0 2px; transition: color 0.2s;" onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#2563eb'">&times;</span>
+                <span @click.stop="selectCategory(cat)"
+                  style="cursor: pointer; font-weight: bold; font-size: 12px; color: #2563eb; line-height: 1; padding: 0 2px; transition: color 0.2s;"
+                  onmouseover="this.style.color='#ef4444'" onmouseout="this.style.color='#2563eb'">&times;</span>
               </span>
             </div>
 
@@ -374,205 +402,119 @@
               <button v-if="tabSearchQuery" @click="tabSearchQuery = ''" class="clear-btn">&times;</button>
             </div>
 
-            <button class="reset-tabs-btn-vertical" 
-                    v-if="!activeCategories.includes('all') && activeCategories.length > 0"
-                    @click="selectCategory('all')">
+            <button class="reset-tabs-btn-vertical"
+              v-if="!activeCategories.includes('all') && activeCategories.length > 0" @click="selectCategory('all')">
               <i class="fas fa-rotate-left"></i> 重置筛选
             </button>
 
             <div class="emoji-tabs-vertical">
-              <button v-for="category in filteredCategories" 
-                      :key="category" 
-                      class="emoji-tab-btn-vertical" 
-                      :class="{ active: activeCategories.includes(category) }" 
-                      @click="selectCategory(category)"
-                      @dragover.prevent
-                      @drop="onDropEmoji($event, category)">
+              <button v-for="category in filteredCategories" :key="category" class="emoji-tab-btn-vertical"
+                :class="{ active: activeCategories.includes(category) }" @click="selectCategory(category)"
+                @dragover.prevent @drop="onDropEmoji($event, category)">
                 <span class="tab-name">{{ category }}</span>
                 <span class="tab-badge-vertical">{{ emojiData[category] ? emojiData[category].length : 0 }}</span>
               </button>
             </div>
           </aside>
         </div>
-        </div> <!-- Closes v-show="currentTab === 'meme'" -->
+      </div> <!-- Closes v-show="currentTab === 'meme'" -->
 
-        <!-- 标签合并全页面 Tab 内容 -->
-        <div v-show="currentTab === 'tagMerge'" class="tab-content">
-          <tag-merge-page
-            :dialog="tagMergeModal"
-            :similarity-threshold="tagMergeSimilarityThreshold"
-            @update:similarity-threshold="tagMergeSimilarityThreshold = $event"
-            :tag-merge-groups="tagMergeGroups"
-            :tag-merge-total-tags="tagMergeTotalTags"
-            :tag-merge-tags-without-vector="tagMergeTagsWithoutVector"
-            :total-merge-count="totalMergeCount"
-            @scan="scanSimilarTags"
-            @set-representative="setRepresentativeTag"
-            @toggle-tag="toggleTagInGroup"
-            @merge="mergeSelectedGroups"
-          ></tag-merge-page>
+      <!-- 标签合并全页面 Tab 内容 -->
+      <div v-show="currentTab === 'tagMerge'" class="tab-content">
+        <tag-merge-page :dialog="tagMergeModal" :similarity-threshold="tagMergeSimilarityThreshold"
+          @update:similarity-threshold="tagMergeSimilarityThreshold = $event" :tag-merge-groups="tagMergeGroups"
+          :tag-merge-total-tags="tagMergeTotalTags" :tag-merge-tags-without-vector="tagMergeTagsWithoutVector"
+          :total-merge-count="totalMergeCount" @scan="scanSimilarTags" @set-representative="setRepresentativeTag"
+          @toggle-tag="toggleTagInGroup" @merge="mergeSelectedGroups"></tag-merge-page>
+      </div>
+
+      <!-- 重复检测全页面 Tab 内容 -->
+      <div v-show="currentTab === 'dedup'" class="tab-content">
+        <duplicate-page :dialog="duplicateModal" :similarity-threshold="similarityThreshold"
+          @update:similarity-threshold="similarityThreshold = $event" :duplicate-groups="duplicateGroups"
+          :total-deletes-count="totalDeletesCount" :get-image-url="getImageUrl" :format-bytes="formatBytes"
+          @scan="scanDuplicates" @toggle-action="toggleMemeAction" @resolve="resolveDuplicates"></duplicate-page>
+      </div>
+
+      <!-- 同步管理全页面 Tab 内容 -->
+      <div v-show="currentTab === 'sync'" class="tab-content">
+        <sync-page :checking="syncChecking" :status="syncStatus" :img-host-syncing="imgHostSyncing"
+          :img-host-status="imgHostStatus" @check-status="checkSyncStatus" @sync-config="syncConfig"
+          @remove-config="removeFromConfig" @refresh-img-host="checkImgHostSyncStatus" @sync-to-remote="syncToRemote"
+          @sync-from-remote="syncFromRemote"></sync-page>
+      </div>
+
+      <!-- 配置管理全页面 Tab 内容 -->
+      <div v-show="currentTab === 'config'" class="tab-content">
+        <config-page :system-personas="systemPersonas" :persona-tags="personaTags"
+          :all-categories="Object.keys(emojiData)" :config-schema="pluginSchema" :config-values="pluginConfig"
+          :loading="pluginConfigLoading" @save-config="savePluginConfig"
+          @save-persona-settings="savePersonaSettingsDirect"></config-page>
+      </div>
+
+    </main>
+
+
+
+    <!-- 确认操作模态框 -->
+    <confirm-dialog :dialog="confirmDialog" @confirm="handleConfirm"></confirm-dialog>
+
+    <!-- 敏感操作确认模态框 -->
+    <danger-confirm-dialog :dialog="dangerConfirmDialog" @start-countdown="startDangerCountdown"
+      @confirm="handleDangerConfirm" @cancel="cancelDangerConfirm"></danger-confirm-dialog>
+
+    <!-- 批量修改允许人格限制模态框 -->
+    <batch-persona-modal :dialog="batchPersonaModal" :system-personas="systemPersonas"
+      :selected-count="selectedEmojis.size" @toggle-persona="togglePersonaInBatch" @close="closeBatchPersonaModal"
+      @save="saveBatchPersonas"></batch-persona-modal>
+
+    <!-- 批量重新分析标签和描述模态框 -->
+    <batch-analyze-modal :dialog="batchAnalyzeModal" :selected-count="selectedEmojis.size" :get-image-url="getImageUrl"
+      @close="closeBatchAnalyzeModal" @start="startBatchAnalyze" @cancel="cancelBatchAnalyze"></batch-analyze-modal>
+
+    <!-- 类别重命名模态框 -->
+    <category-rename-modal :dialog="renameCategoryModal" @close="renameCategoryModal.visible = false"
+      @save="saveRenameCategory"></category-rename-modal>
+
+    <!-- 添加类别模态框 -->
+    <add-category-modal :form="addCategoryForm" @close="addCategoryForm.visible = false"
+      @save="saveNewCategory"></add-category-modal>
+
+    <!-- 表情包编辑属性模态框 -->
+    <emoji-detail-modal :active-emoji="activeDetailEmoji" :metadata="detailMetadata"
+      :description="detailEmojiDescription" @update:description="detailEmojiDescription = $event"
+      :loading="detailDrawerLoading" :selected-emotions="selectedEmotions" :selected-personas="selectedPersonas"
+      :system-personas="systemPersonas" :drawer-tag-search-query="drawerTagSearchQuery"
+      @update:drawer-tag-search-query="drawerTagSearchQuery = $event" :filtered-drawer-tags="filteredDrawerTags"
+      :has-previous-emoji="hasPreviousEmoji" :has-next-emoji="hasNextEmoji" :get-image-url="getImageUrl"
+      :providers="batchAnalyzeModal.providers" :selected-provider="batchAnalyzeModal.selectedProvider"
+      @update:selected-provider="batchAnalyzeModal.selectedProvider = $event" @close="closeDetailDrawer"
+      @image-loaded="markEmojiFullyLoaded" @toggle-tag="toggleTagInDrawer" @toggle-persona="togglePersonaInDrawer"
+      @backspace="handleBackspace" @create-tag="handleCreateTagInDrawer" @navigate="navigateToSiblingEmoji"
+      @save="saveEmojiAttributes" @analyze="runSingleEmojiAnalysis"></emoji-detail-modal>
+
+    <!-- 批量导入已有表情包模态框 -->
+    <import-modal :dialog="importModal" :active-category="activeCategory" :importable-emojis-list="importableEmojisList"
+      :get-image-url="getImageUrl" @toggle-emoji="toggleImportEmoji" @close="closeImportModal"
+      @submit="submitImport"></import-modal>
+
+    <!-- 右键/长按批量快捷菜单 -->
+    <context-menu :menu="contextMenu" @delete="contextMenuDelete" @move="contextMenuMove" @copy="contextMenuCopy"
+      @convert-gif="contextMenuConvertToGif" @paste="contextMenuPaste"></context-menu>
+
+    <!-- 吐司通知容器 -->
+    <div class="toast-container">
+      <div v-for="toast in toasts" :key="toast.id" class="toast show" :class="toast.type">
+        <div class="toast-content">
+          <div class="toast-title">{{ toast.title || '系统提示' }}</div>
+          <div class="toast-body">{{ toast.message }}</div>
         </div>
-
-        <!-- 重复检测全页面 Tab 内容 -->
-        <div v-show="currentTab === 'dedup'" class="tab-content">
-          <duplicate-page
-            :dialog="duplicateModal"
-            :similarity-threshold="similarityThreshold"
-            @update:similarity-threshold="similarityThreshold = $event"
-            :duplicate-groups="duplicateGroups"
-            :total-deletes-count="totalDeletesCount"
-            :get-image-url="getImageUrl"
-            :format-bytes="formatBytes"
-            @scan="scanDuplicates"
-            @toggle-action="toggleMemeAction"
-            @resolve="resolveDuplicates"
-          ></duplicate-page>
-        </div>
-
-        <!-- 同步管理全页面 Tab 内容 -->
-        <div v-show="currentTab === 'sync'" class="tab-content">
-          <sync-page
-            :checking="syncChecking"
-            :status="syncStatus"
-            :img-host-syncing="imgHostSyncing"
-            :img-host-status="imgHostStatus"
-            @check-status="checkSyncStatus"
-            @sync-config="syncConfig"
-            @remove-config="removeFromConfig"
-            @refresh-img-host="checkImgHostSyncStatus"
-            @sync-to-remote="syncToRemote"
-            @sync-from-remote="syncFromRemote"
-          ></sync-page>
-        </div>
-
-        <!-- 配置管理全页面 Tab 内容 -->
-        <div v-show="currentTab === 'config'" class="tab-content">
-          <config-page
-            :system-personas="systemPersonas"
-            :persona-tags="personaTags"
-            :all-categories="Object.keys(emojiData)"
-            :config-schema="pluginSchema"
-            :config-values="pluginConfig"
-            :loading="pluginConfigLoading"
-            @save-config="savePluginConfig"
-            @save-persona-settings="savePersonaSettingsDirect"
-          ></config-page>
-        </div>
-
-      </main>
-
-
-
-      <!-- 确认操作模态框 -->
-      <confirm-dialog
-        :dialog="confirmDialog"
-        @confirm="handleConfirm"
-      ></confirm-dialog>
-
-      <!-- 敏感操作确认模态框 -->
-      <danger-confirm-dialog
-        :dialog="dangerConfirmDialog"
-        @start-countdown="startDangerCountdown"
-        @confirm="handleDangerConfirm"
-        @cancel="cancelDangerConfirm"
-      ></danger-confirm-dialog>
-
-      <!-- 批量修改允许人格限制模态框 -->
-      <batch-persona-modal
-        :dialog="batchPersonaModal"
-        :system-personas="systemPersonas"
-        :selected-count="selectedEmojis.size"
-        @toggle-persona="togglePersonaInBatch"
-        @close="closeBatchPersonaModal"
-        @save="saveBatchPersonas"
-      ></batch-persona-modal>
-
-      <!-- 批量重新分析标签和描述模态框 -->
-      <batch-analyze-modal
-        :dialog="batchAnalyzeModal"
-        :selected-count="selectedEmojis.size"
-        :get-image-url="getImageUrl"
-        @close="closeBatchAnalyzeModal"
-        @start="startBatchAnalyze"
-        @cancel="cancelBatchAnalyze"
-      ></batch-analyze-modal>
-
-      <!-- 类别重命名模态框 -->
-      <category-rename-modal
-        :dialog="renameCategoryModal"
-        @close="renameCategoryModal.visible = false"
-        @save="saveRenameCategory"
-      ></category-rename-modal>
-
-      <!-- 添加类别模态框 -->
-      <add-category-modal
-        :form="addCategoryForm"
-        @close="addCategoryForm.visible = false"
-        @save="saveNewCategory"
-      ></add-category-modal>
-
-      <!-- 表情包编辑属性模态框 -->
-      <emoji-detail-modal
-        :active-emoji="activeDetailEmoji"
-        :metadata="detailMetadata"
-        :description="detailEmojiDescription"
-        @update:description="detailEmojiDescription = $event"
-        :loading="detailDrawerLoading"
-        :selected-emotions="selectedEmotions"
-        :selected-personas="selectedPersonas"
-        :system-personas="systemPersonas"
-        :drawer-tag-search-query="drawerTagSearchQuery"
-        @update:drawer-tag-search-query="drawerTagSearchQuery = $event"
-        :filtered-drawer-tags="filteredDrawerTags"
-        :has-previous-emoji="hasPreviousEmoji"
-        :has-next-emoji="hasNextEmoji"
-        :get-image-url="getImageUrl"
-        :providers="batchAnalyzeModal.providers"
-        :selected-provider="batchAnalyzeModal.selectedProvider"
-        @update:selected-provider="batchAnalyzeModal.selectedProvider = $event"
-        @close="closeDetailDrawer"
-        @toggle-tag="toggleTagInDrawer"
-        @toggle-persona="togglePersonaInDrawer"
-        @backspace="handleBackspace"
-        @create-tag="handleCreateTagInDrawer"
-        @navigate="navigateToSiblingEmoji"
-        @save="saveEmojiAttributes"
-        @analyze="runSingleEmojiAnalysis"
-      ></emoji-detail-modal>
-
-      <!-- 批量导入已有表情包模态框 -->
-      <import-modal
-        :dialog="importModal"
-        :active-category="activeCategory"
-        :importable-emojis-list="importableEmojisList"
-        :get-image-url="getImageUrl"
-        @toggle-emoji="toggleImportEmoji"
-        @close="closeImportModal"
-        @submit="submitImport"
-      ></import-modal>
-
-      <!-- 右键/长按批量快捷菜单 -->
-      <context-menu
-        :menu="contextMenu"
-        @delete="contextMenuDelete"
-        @move="contextMenuMove"
-        @copy="contextMenuCopy"
-        @convert-gif="contextMenuConvertToGif"
-        @paste="contextMenuPaste"
-      ></context-menu>
-
-      <!-- 吐司通知容器 -->
-      <div class="toast-container">
-        <div v-for="toast in toasts" :key="toast.id" class="toast show" :class="toast.type">
-          <div class="toast-content">
-            <div class="toast-title">{{ toast.title || '系统提示' }}</div>
-            <div class="toast-body">{{ toast.message }}</div>
-          </div>
-          <button type="button" class="toast-close" @click="removeToast(toast.id)">&times;</button>
-        </div>
+        <button type="button" class="toast-close" @click="removeToast(toast.id)">&times;</button>
       </div>
     </div>
-    <script src="/api/plugin/page/bridge-sdk.js"></script>
-    <script type="module" src="js/script.js"></script>
-  </body>
+  </div>
+  <script src="/api/plugin/page/bridge-sdk.js"></script>
+  <script type="module" src="js/script.js"></script>
+</body>
+
 </html>

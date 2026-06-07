@@ -39,7 +39,7 @@ export const ImportModal = {
                  style="margin: 0;">
               <div class="emoji-item" 
                    :class="{ selected: dialog.selectedEmojis.has(emoji), 'selection-mode': true }"
-                   :style="{ backgroundImage: 'url(' + getImageUrl(emoji) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
+                   :style="{ backgroundImage: 'url(' + getImageUrl(emoji, true) + ')', width: '100%', height: '100px', borderRadius: '6px' }"
                    @click="$emit('toggle-emoji', emoji)">
                  <button type="button" class="selection-indicator" aria-label="选择表情包"></button>
               </div>
