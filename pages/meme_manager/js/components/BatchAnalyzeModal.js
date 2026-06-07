@@ -24,7 +24,7 @@ export const BatchAnalyzeModal = {
             <i class="fas fa-brain" style="color: var(--primary-color);"></i>
             批量重新分析表情包 (已选 {{ selectedCount }} 个)
           </span>
-          <button class="drawer-close-btn" @click="$emit('close')" :disabled="dialog.step === 'progress' && dialog.status.status === 'running'">&times;</button>
+          <button class="drawer-close-btn" @click="$emit('close')">&times;</button>
         </div>
 
         <!-- 阶段 1：配置界面 -->
@@ -165,8 +165,8 @@ export const BatchAnalyzeModal = {
             </button>
           </template>
           <template v-else>
-            <button class="btn-secondary" @click="$emit('close')" :disabled="dialog.status.status === 'running'">
-              关闭
+            <button class="btn-secondary" @click="$emit('close')">
+              {{ dialog.status.status === 'running' ? '后台运行' : '关闭' }}
             </button>
             <button class="btn-danger" @click="$emit('cancel')" :disabled="dialog.status.status !== 'running'">
               取消分析
