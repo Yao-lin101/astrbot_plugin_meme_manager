@@ -233,7 +233,7 @@ export const EmojiDetailModal = {
                 </label>
                 <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
                   <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="$emit('toggle-persona', p.id)" style="width: 14px; height: 14px;" />
-                  <span>{{ p.name }} ({{ p.id }})</span>
+                  <span>{{ p.name === p.id ? p.name : p.name + ' (' + p.id + ')' }}</span>
                 </label>
               </div>
             </div>

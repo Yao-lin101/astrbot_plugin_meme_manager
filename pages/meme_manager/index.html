@@ -180,7 +180,7 @@
                 <select id="persona-filter" v-model="personaFilter" @change="fetchEmojis">
                   <option value="">全部可用</option>
                   <option v-for="p in systemPersonas" :key="p.id" :value="p.id">
-                    {{ p.name }} ({{ p.id }})
+                    {{ p.name === p.id ? p.name : p.name + ' (' + p.id + ')' }}
                   </option>
                 </select>
               </div>
