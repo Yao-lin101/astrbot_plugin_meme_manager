@@ -113,6 +113,7 @@ export function useModals(showToast) {
     promptContent: "",
     isPromptManuallyEdited: false,
     pollTimer: null,
+    concurrency: 1,
     status: {
       status: "idle",
       total: 0,
@@ -152,6 +153,15 @@ export function useModals(showToast) {
     (newVal) => {
       if (newVal) {
         safeSetItem("meme_mgr_batch_provider", newVal);
+      }
+    }
+  );
+
+  watch(
+    () => batchAnalyzeModal.concurrency,
+    (newVal) => {
+      if (newVal) {
+        safeSetItem("meme_mgr_batch_concurrency", newVal.toString());
       }
     }
   );
@@ -324,6 +334,8 @@ export function useModals(showToast) {
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
     batchAnalyzeModal.isPromptManuallyEdited = false;
+    const savedConcurrency = parseInt(safeGetItem("meme_mgr_batch_concurrency") || "1", 10);
+    batchAnalyzeModal.concurrency = isNaN(savedConcurrency) ? 1 : Math.min(Math.max(savedConcurrency, 1), 5);
 
     try {
       const templateRes = await fetch("/api/prompt/template");
@@ -374,7 +386,8 @@ export function useModals(showToast) {
           analyze_tags: batchAnalyzeModal.analyzeTags,
           analyze_description: batchAnalyzeModal.analyzeDescription,
           pass_existing_tags_as_ref: batchAnalyzeModal.passExistingTagsAsRef,
-          prompt_content: batchAnalyzeModal.promptContent
+          prompt_content: batchAnalyzeModal.promptContent,
+          concurrency: batchAnalyzeModal.concurrency
         })
       });
 

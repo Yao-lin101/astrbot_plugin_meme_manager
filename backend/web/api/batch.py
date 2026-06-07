@@ -424,6 +424,16 @@ async def batch_analyze_emojis():
     analyze_description = data.get("analyze_description", True)
     pass_existing_tags_as_ref = data.get("pass_existing_tags_as_ref", False)
     prompt_content = data.get("prompt_content", "")
+    concurrency = data.get("concurrency", 1)
+
+    try:
+        concurrency = int(concurrency)
+        if concurrency < 1:
+            concurrency = 1
+        elif concurrency > 5:
+            concurrency = 5
+    except (TypeError, ValueError):
+        concurrency = 1
 
     if not isinstance(filenames, list) or not filenames:
         return jsonify({"message": "filenames 列表是必需的"}), 400
@@ -457,6 +467,7 @@ async def batch_analyze_emojis():
             pass_existing_tags_as_ref,
             prompt_content,
             sender,
+            concurrency,
         )
     )
 
@@ -770,6 +781,7 @@ async def run_batch_analyze_task(
     pass_existing_tags_as_ref,
     prompt_content,
     sender,
+    concurrency=1,
 ):
     """后台批量分析执行函数"""
     global batch_analyze_status, cancel_batch_analyze_flag
@@ -787,21 +799,17 @@ async def run_batch_analyze_task(
         for filename in filenames
     ]
 
-    try:
-        for idx, filename in enumerate(filenames):
-            if cancel_batch_analyze_flag:
-                logger.info("批量分析表情包任务被用户取消。")
-                # 将后续等待中的更新为已取消/失败
-                for r in batch_analyze_status["results"]:
-                    if r["status"] == "waiting":
-                        r["status"] = "error"
-                        r["error"] = "任务已被取消"
-                break
+    completed_count = 0
+    sem = asyncio.Semaphore(concurrency)
 
-            batch_analyze_status["current_index"] = idx + 1
-            batch_analyze_status["current_file"] = filename
+    async def analyze_single_file(idx, filename):
+        nonlocal completed_count
+        async with sem:
+            if cancel_batch_analyze_flag:
+                return
 
             # 更新当前文件的状态为分析中
+            batch_analyze_status["current_file"] = filename
             r_item = batch_analyze_status["results"][idx]
             r_item["status"] = "running"
 
@@ -823,8 +831,21 @@ async def run_batch_analyze_task(
                 r_item["status"] = "error"
                 r_item["error"] = str(e)
 
+            completed_count += 1
+            batch_analyze_status["current_index"] = completed_count
+
             # 稍微间隔一下，避免请求太频繁
             await asyncio.sleep(0.5)
+
+    try:
+        tasks = [analyze_single_file(idx, filename) for idx, filename in enumerate(filenames)]
+        await asyncio.gather(*tasks)
+
+        if cancel_batch_analyze_flag:
+            for r in batch_analyze_status["results"]:
+                if r["status"] in ("waiting", "running"):
+                    r["status"] = "error"
+                    r["error"] = "任务已被取消"
 
     except asyncio.CancelledError:
         logger.info("批量分析表情包任务被用户强行取消 (asyncio.CancelledError)。")
