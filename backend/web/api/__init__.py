@@ -21,7 +21,13 @@ from .category import (
     rename_category,
     restore_category,
 )
-from .config import get_config_schema, get_config_values, update_config_values
+from .config import (
+    get_config_schema,
+    get_config_values,
+    get_ui_settings,
+    save_ui_settings,
+    update_config_values,
+)
 from .duplicates import check_duplicates, resolve_duplicates
 from .emoji import (
     add_emoji,
@@ -87,5 +93,7 @@ __all__ = [
     "merge_tags",
     "get_config_schema",
     "get_config_values",
+    "get_ui_settings",
+    "save_ui_settings",
     "update_config_values",
 ]

@@ -152,6 +152,8 @@ def register_apis(sender):
         sync_config,
         sync_from_remote,
         sync_to_remote,
+        get_ui_settings,
+        save_ui_settings,
         update_config_values,
     )
 
@@ -202,6 +204,8 @@ def register_apis(sender):
         ("config/schema", get_config_schema, ["GET"]),
         ("config/values", get_config_values, ["GET"]),
         ("config/update", update_config_values, ["POST"]),
+        ("ui_settings", get_ui_settings, ["GET"]),
+        ("ui_settings", save_ui_settings, ["POST"]),
     ]
 
     for route, handler, methods in apis:
