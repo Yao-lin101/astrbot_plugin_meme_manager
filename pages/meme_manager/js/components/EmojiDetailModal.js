@@ -105,12 +105,7 @@ export const EmojiDetailModal = {
   },
   template: `
     <div v-if="activeEmoji" class="emoji-detail-modal" role="dialog" aria-modal="true" @click.self="$emit('close')">
-      <div class="emoji-detail-modal-card" :class="{ loading: loading }">
-        <!-- Loading Overlay -->
-        <div v-if="loading" class="loading-overlay">
-          <i class="fas fa-circle-notch fa-spin fa-2x"></i>
-        </div>
-
+      <div class="emoji-detail-modal-card">
         <div class="drawer-header">
           <span class="drawer-title">编辑属性: {{ activeEmoji }}</span>
           <button class="drawer-close-btn" @click="$emit('close')">&times;</button>
