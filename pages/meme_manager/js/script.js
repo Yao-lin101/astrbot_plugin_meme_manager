@@ -101,11 +101,30 @@ createApp({
     // 9. Config API
     const configApi = useConfigApi(showToast);
 
+    // Safe localStorage wrapper to handle sandboxed iframe environments
+    const safeLocalStorage = {
+      getItem(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch (e) {
+          console.warn("localStorage is disabled or sandboxed:", e);
+          return null;
+        }
+      },
+      setItem(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch (e) {
+          console.warn("localStorage is disabled or sandboxed:", e);
+        }
+      }
+    };
+
     // Local UI states
-    const currentTab = ref(localStorage.getItem('meme_mgr_tab') || 'meme');
+    const currentTab = ref(safeLocalStorage.getItem('meme_mgr_tab') || 'meme');
     const switchTab = (tab) => {
       currentTab.value = tab;
-      localStorage.setItem('meme_mgr_tab', tab);
+      safeLocalStorage.setItem('meme_mgr_tab', tab);
     };
 
     const savePersonaSettingsDirect = async ({ persona_id, meme_use_preference, meme_preference }) => {
