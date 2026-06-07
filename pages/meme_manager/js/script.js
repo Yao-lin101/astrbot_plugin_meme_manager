@@ -101,21 +101,33 @@ createApp({
     // 9. Config API
     const configApi = useConfigApi(showToast);
 
-    // Safe localStorage wrapper to handle sandboxed iframe environments
+    // Probe localStorage availability once quietly to avoid repeated console warnings/stacktraces
+    let isLocalStorageAvailable = false;
+    try {
+      if (window.localStorage) {
+        localStorage.setItem('__probe', '1');
+        localStorage.removeItem('__probe');
+        isLocalStorageAvailable = true;
+      }
+    } catch (e) {
+      // Quietly ignore, localStorage is not available (e.g. sandboxed iframe)
+    }
+
     const safeLocalStorage = {
       getItem(key) {
+        if (!isLocalStorageAvailable) return null;
         try {
           return localStorage.getItem(key);
         } catch (e) {
-          console.warn("localStorage is disabled or sandboxed:", e);
           return null;
         }
       },
       setItem(key, value) {
+        if (!isLocalStorageAvailable) return;
         try {
           localStorage.setItem(key, value);
         } catch (e) {
-          console.warn("localStorage is disabled or sandboxed:", e);
+          // ignore
         }
       }
     };
