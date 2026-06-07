@@ -311,3 +311,64 @@
   border-color: var(--primary-color);
   background: rgba(59, 130, 246, 0.03);
 }
+
+@media (max-width: 768px) {
+  .emoji-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)) !important;
+    gap: 8px !important;
+  }
+  
+  .emoji-card {
+    padding: 4px !important;
+    gap: 4px !important;
+    border-radius: var(--radius-sm) !important;
+  }
+  
+  .emoji-tags {
+    display: none !important;
+  }
+  
+  .emoji-item {
+    border-radius: 4px !important;
+  }
+  
+  .selection-indicator {
+    width: 14px !important;
+    height: 14px !important;
+    top: 4px !important;
+    left: 4px !important;
+    border-width: 1px !important;
+  }
+  
+  .emoji-item.selected .selection-indicator::after {
+    font-size: 6px !important;
+  }
+  
+  .delete-btn {
+    width: 14px !important;
+    height: 14px !important;
+    top: 4px !important;
+    right: 4px !important;
+    font-size: 10px !important;
+  }
+  
+  .category-actions {
+    width: 100%;
+    margin-top: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: 6px !important;
+  }
+  
+  .category-actions button {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    height: 28px;
+  }
+  
+  .category-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px !important;
+  }
+}
