@@ -1,6 +1,32 @@
 const { ref, reactive, nextTick, watch } = window.Vue;
 
 export function useModals(showToast) {
+  // Safe localStorage helper
+  let isLocalStorageAvailable = false;
+  try {
+    if (window.localStorage) {
+      localStorage.setItem('__probe', '1');
+      localStorage.removeItem('__probe');
+      isLocalStorageAvailable = true;
+    }
+  } catch (e) {}
+
+  const safeGetItem = (key) => {
+    if (!isLocalStorageAvailable) return null;
+    try {
+      return localStorage.getItem(key);
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const safeSetItem = (key, value) => {
+    if (!isLocalStorageAvailable) return;
+    try {
+      localStorage.setItem(key, value);
+    } catch (e) {}
+  };
+
   const confirmDialog = reactive({
     visible: false,
     title: "",
@@ -94,6 +120,16 @@ export function useModals(showToast) {
       }
     }
   );
+
+  watch(
+    () => batchAnalyzeModal.selectedProvider,
+    (newVal) => {
+      if (newVal) {
+        safeSetItem("meme_mgr_batch_provider", newVal);
+      }
+    }
+  );
+
 
   const confirm = (title, description, confirmLabel = "确认", confirmClass = "", imageUrl = "", localImageUrl = "") => {
     return new Promise((resolve) => {
@@ -245,7 +281,13 @@ export function useModals(showToast) {
     }
 
     batchAnalyzeModal.step = "config";
-    batchAnalyzeModal.selectedProvider = "";
+    // Load persisted provider from localStorage
+    const savedProvider = safeGetItem("meme_mgr_batch_provider") || "";
+    if (savedProvider && batchAnalyzeModal.providers.some(p => p.id === savedProvider)) {
+      batchAnalyzeModal.selectedProvider = savedProvider;
+    } else {
+      batchAnalyzeModal.selectedProvider = "";
+    }
     batchAnalyzeModal.analyzeTags = true;
     batchAnalyzeModal.analyzeDescription = true;
     batchAnalyzeModal.passExistingTagsAsRef = false;
