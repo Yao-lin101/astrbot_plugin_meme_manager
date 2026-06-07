@@ -323,6 +323,9 @@
     gap: 4px !important;
     border-radius: var(--radius-sm) !important;
   }
+  .emoji-card:hover {
+    transform: none !important;
+  }
   
   .emoji-tags {
     display: none !important;
