@@ -145,11 +145,38 @@
     margin-top: 0 !important;
   }
   
+  .selection-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  
   .filter-group {
-    gap: 8px !important;
+    width: 100%;
+    margin: 0;
   }
   
   .persona-filter-wrapper {
-    gap: 4px !important;
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px !important;
+  }
+  
+  .persona-filter-wrapper select {
+    flex: 1;
+    max-width: unset !important;
+  }
+  
+  .selection-toolbar-actions {
+    width: 100%;
+    display: flex;
+    gap: 8px !important;
+  }
+  
+  .selection-toolbar-actions button {
+    flex: 1;
+    height: 36px;
   }
 }

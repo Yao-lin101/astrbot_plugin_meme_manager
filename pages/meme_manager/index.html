@@ -175,9 +175,6 @@
         <div class="page-toolbar">
           <div class="selection-toolbar">
             <div class="filter-group" style="display: flex; align-items: center; gap: 15px;">
-              <button class="btn-secondary mobile-sidebar-toggle-btn" @click.stop="mobileSidebarOpen = true">
-                <i class="fas fa-tags icon"></i>标签
-              </button>
               <div class="persona-filter-wrapper">
                 <label for="persona-filter"><i class="fas fa-user-gear icon"></i>过滤人格:</label>
                 <select id="persona-filter" v-model="personaFilter" @change="fetchEmojis">
@@ -189,6 +186,10 @@
               </div>
             </div>
             <div class="selection-toolbar-actions" style="display: flex; align-items: center; gap: 8px;">
+              <!-- 移动端标签切换按钮 -->
+              <button class="btn-secondary mobile-sidebar-toggle-btn" @click.stop="mobileSidebarOpen = true">
+                <i class="fas fa-tags icon"></i>标签
+              </button>
               <!-- 添加标签按钮 (常驻) -->
               <button id="add-category-btn-top" class="btn-secondary" @click="addCategoryForm.visible = true">
                 <i class="fas fa-plus icon"></i>添加标签
