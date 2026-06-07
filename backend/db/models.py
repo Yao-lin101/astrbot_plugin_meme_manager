@@ -41,9 +41,10 @@ def _is_supported_image(filename: str) -> bool:
 def delete_emoji_thumbnail(filename: str):
     """删除表情包对应的缩略图"""
     try:
-        thumb_path = Path(PLUGIN_DATA_DIR) / "thumbnails" / (filename + ".avif")
-        if thumb_path.exists():
-            thumb_path.unlink()
+        for ext in (".avif", ".webp"):
+            thumb_path = Path(PLUGIN_DATA_DIR) / "thumbnails" / (filename + ext)
+            if thumb_path.exists():
+                thumb_path.unlink()
     except Exception as e:
         logger.warning(f"删除缩略图失败 for {filename}: {e}")
 
