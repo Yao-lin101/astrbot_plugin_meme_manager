@@ -129,6 +129,8 @@ def register_apis(sender):
         edit_emoji,
         get_all_emojis,
         get_batch_analyze_status,
+        get_config_schema,
+        get_config_values,
         get_emoji_file_base64,
         get_emoji_info,
         get_emojis_by_category,
@@ -149,6 +151,7 @@ def register_apis(sender):
         sync_config,
         sync_from_remote,
         sync_to_remote,
+        update_config_values,
     )
 
     PLUGIN_NAME = "astrbot_plugin_meme_manager"
@@ -194,6 +197,9 @@ def register_apis(sender):
         ("emoji/batch_analyze/cancel", cancel_batch_analyze, ["POST"]),
         ("tag_merge/scan", scan_similar_tags, ["GET"]),
         ("tag_merge/merge", merge_tags, ["POST"]),
+        ("config/schema", get_config_schema, ["GET"]),
+        ("config/values", get_config_values, ["GET"]),
+        ("config/update", update_config_values, ["POST"]),
     ]
 
     for route, handler, methods in apis:

@@ -144,24 +144,29 @@
   <body>
     <div id="app" class="layout-container" v-cloak @click="closeContextMenu(); otherDropdownVisible = false; showUsePreferenceDropdown = false">
 
-      <!-- 主要工作区 (通栏大气的仪表盘布局) -->
       <main class="main-content">
-        <!-- 同步控制中心抽屉 (折叠显示) -->
-        <sync-drawer
-          :visible="syncDrawerVisible"
-          :checking="syncChecking"
-          :status="syncStatus"
-          :img-host-syncing="imgHostSyncing"
-          :img-host-status="imgHostStatus"
-          @check-status="checkSyncStatus"
-          @sync-config="syncConfig"
-          @remove-config="removeFromConfig"
-          @refresh-img-host="checkImgHostSyncStatus"
-          @sync-to-remote="syncToRemote"
-          @sync-from-remote="syncFromRemote"
-        ></sync-drawer>
+        <!-- 一级 Tab 导航栏 -->
+        <nav class="primary-tabs">
+          <button class="primary-tab" :class="{ active: currentTab === 'meme' }" @click="switchTab('meme')">
+            <i class="fas fa-images"></i>表情管理
+          </button>
+          <button class="primary-tab" :class="{ active: currentTab === 'tagMerge' }" @click="switchTab('tagMerge')">
+            <i class="fas fa-object-group"></i>标签合并
+          </button>
+          <button class="primary-tab" :class="{ active: currentTab === 'dedup' }" @click="switchTab('dedup')">
+            <i class="fas fa-clone"></i>重复检测
+          </button>
+          <button class="primary-tab" :class="{ active: currentTab === 'sync' }" @click="switchTab('sync')">
+            <i class="fas fa-arrows-spin"></i>同步管理
+          </button>
+          <button class="primary-tab" :class="{ active: currentTab === 'config' }" @click="switchTab('config')">
+            <i class="fas fa-gears"></i>配置管理
+          </button>
+        </nav>
 
-        <!-- 批量操作与工具栏 -->
+        <!-- 表情管理 Tab 内容 -->
+        <div v-show="currentTab === 'meme'">
+          <!-- 批量操作与工具栏 -->
         <div class="page-toolbar">
           <div class="selection-toolbar">
             <div class="filter-group" style="display: flex; align-items: center; gap: 15px;">
@@ -433,39 +438,74 @@
             </div>
           </aside>
         </div>
+        </div> <!-- Closes v-show="currentTab === 'meme'" -->
+
+        <!-- 标签合并全页面 Tab 内容 -->
+        <div v-show="currentTab === 'tagMerge'" class="tab-content">
+          <tag-merge-page
+            :dialog="tagMergeModal"
+            :similarity-threshold="tagMergeSimilarityThreshold"
+            @update:similarity-threshold="val => tagMergeSimilarityThreshold = val"
+            :tag-merge-groups="tagMergeGroups"
+            :tag-merge-total-tags="tagMergeTotalTags"
+            :tag-merge-tags-without-vector="tagMergeTagsWithoutVector"
+            :total-merge-count="totalMergeCount"
+            @scan="scanSimilarTags"
+            @set-representative="setRepresentativeTag"
+            @toggle-tag="toggleTagInGroup"
+            @merge="mergeSelectedGroups"
+          ></tag-merge-page>
+        </div>
+
+        <!-- 重复检测全页面 Tab 内容 -->
+        <div v-show="currentTab === 'dedup'" class="tab-content">
+          <duplicate-page
+            :dialog="duplicateModal"
+            :similarity-threshold="similarityThreshold"
+            @update:similarity-threshold="val => similarityThreshold = val"
+            :duplicate-groups="duplicateGroups"
+            :total-deletes-count="totalDeletesCount"
+            :get-image-url="getImageUrl"
+            :format-bytes="formatBytes"
+            @scan="scanDuplicates"
+            @toggle-action="toggleMemeAction"
+            @resolve="resolveDuplicates"
+          ></duplicate-page>
+        </div>
+
+        <!-- 同步管理全页面 Tab 内容 -->
+        <div v-show="currentTab === 'sync'" class="tab-content">
+          <sync-page
+            :checking="syncChecking"
+            :status="syncStatus"
+            :img-host-syncing="imgHostSyncing"
+            :img-host-status="imgHostStatus"
+            @check-status="checkSyncStatus"
+            @sync-config="syncConfig"
+            @remove-config="removeFromConfig"
+            @refresh-img-host="checkImgHostSyncStatus"
+            @sync-to-remote="syncToRemote"
+            @sync-from-remote="syncFromRemote"
+          ></sync-page>
+        </div>
+
+        <!-- 配置管理全页面 Tab 内容 -->
+        <div v-show="currentTab === 'config'" class="tab-content">
+          <config-page
+            :system-personas="systemPersonas"
+            :persona-tags="personaTags"
+            :all-categories="Object.keys(emojiData)"
+            :config-schema="pluginSchema"
+            :config-values="pluginConfig"
+            :loading="pluginConfigLoading"
+            @save-config="savePluginConfig"
+            @save-persona-settings="savePersonaSettingsDirect"
+          ></config-page>
+        </div>
 
       </main>
 
-      <!-- 检查重复表情模态框 -->
-      <duplicate-modal
-        :dialog="duplicateModal"
-        :similarity-threshold="similarityThreshold"
-        @update:similarity-threshold="val => similarityThreshold = val"
-        :duplicate-groups="duplicateGroups"
-        :total-deletes-count="totalDeletesCount"
-        :get-image-url="getImageUrl"
-        :format-bytes="formatBytes"
-        @scan="scanDuplicates"
-        @toggle-action="toggleMemeAction"
-        @resolve="resolveDuplicates"
-        @close="closeDuplicateModal"
-      ></duplicate-modal>
 
-      <!-- 标签合并/清理模态框 -->
-      <tag-merge-modal
-        :dialog="tagMergeModal"
-        :similarity-threshold="tagMergeSimilarityThreshold"
-        @update:similarity-threshold="val => tagMergeSimilarityThreshold = val"
-        :tag-merge-groups="tagMergeGroups"
-        :tag-merge-total-tags="tagMergeTotalTags"
-        :tag-merge-tags-without-vector="tagMergeTagsWithoutVector"
-        :total-merge-count="totalMergeCount"
-        @scan="scanSimilarTags"
-        @set-representative="setRepresentativeTag"
-        @toggle-tag="toggleTagInGroup"
-        @merge="mergeSelectedGroups"
-        @close="closeTagMergeModal"
-      ></tag-merge-modal>
 
       <!-- 确认操作模态框 -->
       <confirm-dialog

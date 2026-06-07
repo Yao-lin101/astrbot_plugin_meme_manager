@@ -20,6 +20,7 @@ from .category import (
     rename_category,
     restore_category,
 )
+from .config import get_config_schema, get_config_values, update_config_values
 from .duplicates import check_duplicates, resolve_duplicates
 from .emoji import (
     add_emoji,
@@ -82,4 +83,7 @@ __all__ = [
     "sync_to_remote",
     "scan_similar_tags",
     "merge_tags",
+    "get_config_schema",
+    "get_config_values",
+    "update_config_values",
 ]
