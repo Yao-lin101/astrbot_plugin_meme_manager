@@ -116,7 +116,7 @@ export const BatchAnalyzeModal = {
               
               <!-- 表情缩略图 -->
               <div style="width: 60px; height: 60px; flex-shrink: 0; background-size: contain; background-position: center; background-repeat: no-repeat; background-color: rgba(0,0,0,0.02); border-radius: 4px; border: 1px solid var(--border-color);"
-                   :style="{ backgroundImage: 'url(' + getImageUrl(res.filename) + ')' }"></div>
+                   :style="{ backgroundImage: 'url(' + getImageUrl(res.filename, true) + ')' }"></div>
               
               <!-- 分析状态与详情 -->
               <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px;">

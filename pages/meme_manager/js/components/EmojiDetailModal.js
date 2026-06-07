@@ -63,6 +63,7 @@ export const EmojiDetailModal = {
     'update:drawer-tag-search-query',
     'update:selected-provider',
     'close',
+    'image-loaded',
     'toggle-tag',
     'toggle-persona',
     'backspace',
@@ -118,7 +119,7 @@ export const EmojiDetailModal = {
           <!-- 左侧大图预览 + AI 助手 -->
           <div class="drawer-preview-column" style="display: flex; flex-direction: column; gap: 16px; align-items: stretch; justify-content: flex-start; height: 100%; overflow-y: auto;">
             <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 280px; background: var(--bg-app); border-radius: var(--radius-md); padding: 8px;">
-              <img :src="getImageUrl(activeEmoji)" :alt="activeEmoji" style="max-height: 100%; max-width: 100%; object-fit: contain;" />
+              <img :src="getImageUrl(activeEmoji)" :alt="activeEmoji" @load="$emit('image-loaded', activeEmoji)" style="max-height: 100%; max-width: 100%; object-fit: contain;" />
             </div>
 
             <!-- AI 助手板块 -->
