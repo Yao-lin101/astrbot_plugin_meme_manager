@@ -191,7 +191,6 @@ createApp({
     });
 
     const selectCategory = (category) => {
-      mobileSidebarOpen.value = false;
       if (category === 'all') {
         api.activeCategories.value = ['all'];
       } else {
