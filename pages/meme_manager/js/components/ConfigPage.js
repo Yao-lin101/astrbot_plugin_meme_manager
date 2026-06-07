@@ -380,23 +380,18 @@ export const ConfigPage = {
                     
                     <!-- Dropdown Menu -->
                     <div v-show="showUsePreferenceDropdown" class="dropdown-menu" style="position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 1000; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); max-height: 200px; overflow-y: auto; min-width: 220px; padding: 4px 0; display: flex; flex-direction: column; gap: 2px;" @mousedown.prevent>
-                      <label 
+                      <div 
                         v-for="cat in filteredPreferenceCategories" 
                         :key="cat"
-                        style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
-                        onmouseover="this.style.background='var(--bg-secondary)'" 
-                        onmouseout="this.style.background='transparent'"
+                        style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
+                        :style="{ background: localPersonaUseList.includes(cat) ? 'rgba(59, 130, 246, 0.08)' : 'transparent', color: localPersonaUseList.includes(cat) ? 'var(--primary-color)' : 'var(--text-primary)' }"
+                        @mouseover="$event.currentTarget.style.background = 'var(--bg-hover)'"
+                        @mouseleave="$event.currentTarget.style.background = localPersonaUseList.includes(cat) ? 'rgba(59, 130, 246, 0.08)' : 'transparent'"
                         @click="togglePersonaTag(cat)"
                       >
-                        <input 
-                          type="checkbox" 
-                          :checked="localPersonaUseList.includes(cat)" 
-                          style="width: 14px; height: 14px; cursor: pointer;" 
-                          @click.stop
-                          @change="togglePersonaTag(cat)"
-                        />
                         <span style="flex: 1;">{{ cat }}</span>
-                      </label>
+                        <i v-if="localPersonaUseList.includes(cat)" class="fas fa-check" style="color: var(--primary-color); font-size: 12px;"></i>
+                      </div>
                       <div v-if="filteredPreferenceCategories.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 12.5px; text-align: center;">暂无匹配标签，按回车直接新增</div>
                     </div>
                   </div>
@@ -625,23 +620,18 @@ export const ConfigPage = {
                         
                         <!-- Dropdown Menu -->
                         <div v-show="showBlacklistDropdown" class="dropdown-menu" style="position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 1000; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); max-height: 200px; overflow-y: auto; min-width: 220px; padding: 4px 0; display: flex; flex-direction: column; gap: 2px;" @mousedown.prevent>
-                          <label 
+                          <div 
                             v-for="p in filteredBlacklistPersonas" 
                             :key="p.id"
-                            style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
-                            onmouseover="this.style.background='var(--bg-secondary)'" 
-                            onmouseout="this.style.background='transparent'"
+                            style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
+                            :style="{ background: (localConfig[key] && localConfig[key].includes(p.id)) ? 'rgba(59, 130, 246, 0.08)' : 'transparent', color: (localConfig[key] && localConfig[key].includes(p.id)) ? 'var(--primary-color)' : 'var(--text-primary)' }"
+                            @mouseover="$event.currentTarget.style.background = 'var(--bg-hover)'"
+                            @mouseleave="$event.currentTarget.style.background = (localConfig[key] && localConfig[key].includes(p.id)) ? 'rgba(59, 130, 246, 0.08)' : 'transparent'"
                             @click="toggleBlacklistPersona(p.id)"
                           >
-                            <input 
-                              type="checkbox" 
-                              :checked="localConfig[key] && localConfig[key].includes(p.id)" 
-                              style="width: 14px; height: 14px; cursor: pointer;" 
-                              @click.stop
-                              @change="toggleBlacklistPersona(p.id)"
-                            />
                             <span style="flex: 1;">{{ p.name }} ({{ p.id }})</span>
-                          </label>
+                            <i v-if="localConfig[key] && localConfig[key].includes(p.id)" class="fas fa-check" style="color: var(--primary-color); font-size: 12px;"></i>
+                          </div>
                           <div v-if="filteredBlacklistPersonas.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 12.5px; text-align: center;">暂无匹配人格</div>
                         </div>
                       </div>
