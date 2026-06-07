@@ -215,11 +215,11 @@ export const EmojiDetailModal = {
               <label>允许的人格限制 (留空或勾选全部表示全局可用)</label>
               <div class="drawer-personas-list">
                 <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                  <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="$emit('toggle-persona', '*')" style="width: 14px; height: 14px;" />
+                  <input type="checkbox" value="*" :checked="selectedPersonas.includes('*')" @change="$emit('toggle-persona', '*')"/>
                   <span>全局可用 (*)</span>
                 </label>
                 <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-                  <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="$emit('toggle-persona', p.id)" style="width: 14px; height: 14px;" />
+                  <input type="checkbox" :value="p.id" :checked="selectedPersonas.includes(p.id) && !selectedPersonas.includes('*')" @change="$emit('toggle-persona', p.id)"/>
                   <span>{{ p.name === p.id ? p.name : p.name + ' (' + p.id + ')' }}</span>
                 </label>
               </div>

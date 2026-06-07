@@ -55,11 +55,11 @@ export const BatchAnalyzeModal = {
               <label style="font-size: 14px; font-weight: 600; color: var(--text-primary); display: block; margin-bottom: 8px;">分析内容选择</label>
               <div style="display: flex; flex-direction: column; gap: 12px;">
                 <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
-                  <input type="checkbox" v-model="dialog.analyzeTags" style="width: 16px; height: 16px;" />
+                  <input type="checkbox" v-model="dialog.analyzeTags" />
                   <span>重新分析标签 (完全覆盖现有标签)</span>
                 </label>
                 <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
-                  <input type="checkbox" v-model="dialog.analyzeDescription" style="width: 16px; height: 16px;" />
+                  <input type="checkbox" v-model="dialog.analyzeDescription" />
                   <span>重新分析描述 (覆盖现有描述)</span>
                 </label>
               </div>
@@ -67,7 +67,7 @@ export const BatchAnalyzeModal = {
 
             <div v-show="dialog.analyzeDescription && !dialog.analyzeTags" class="form-group" style="margin-bottom: 0; padding-left: 12px; border-left: 2px solid var(--primary-color, #3b82f6);">
               <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); font-size: 13px;">
-                <input type="checkbox" v-model="dialog.passExistingTagsAsRef" style="width: 16px; height: 16px;" />
+                <input type="checkbox" v-model="dialog.passExistingTagsAsRef" />
                 <span>传入现有标签作为分析参考</span>
               </label>
             </div>

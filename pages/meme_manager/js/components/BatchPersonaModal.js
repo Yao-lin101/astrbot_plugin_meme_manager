@@ -24,11 +24,11 @@ export const BatchPersonaModal = {
         
         <div class="drawer-personas-list" style="margin: 20px 0; text-align: left; max-height: 250px; overflow-y: auto; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px;">
           <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-            <input type="checkbox" value="*" :checked="dialog.personas.includes('*')" @change="$emit('toggle-persona', '*')" style="width: 14px; height: 14px;" />
+            <input type="checkbox" value="*" :checked="dialog.personas.includes('*')" @change="$emit('toggle-persona', '*')" />
             <span>全局可用 (*)</span>
           </label>
           <label v-for="p in systemPersonas" :key="p.id" style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px; cursor: pointer; color: var(--text-primary); text-transform: none; letter-spacing: normal;">
-            <input type="checkbox" :value="p.id" :checked="dialog.personas.includes(p.id) && !dialog.personas.includes('*')" @change="$emit('toggle-persona', p.id)" style="width: 14px; height: 14px;" />
+            <input type="checkbox" :value="p.id" :checked="dialog.personas.includes(p.id) && !dialog.personas.includes('*')" @change="$emit('toggle-persona', p.id)" />
             <span>{{ p.name === p.id ? p.name : p.name + ' (' + p.id + ')' }}</span>
           </label>
         </div>

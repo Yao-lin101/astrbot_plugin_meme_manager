@@ -15,7 +15,7 @@ export const DangerConfirmDialog = {
 
         <div v-if="dialog.stage === 'ack'" class="danger-modal-check">
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary);">
-            <input type="checkbox" @change="$emit('start-countdown')" style="width: 14px; height: 14px;" />
+            <input type="checkbox" @change="$emit('start-countdown')" />
             <span>我已了解此操作的风险和影响</span>
           </label>
         </div>
