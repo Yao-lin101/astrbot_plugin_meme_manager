@@ -42,30 +42,44 @@ def wrap_api_handler(sender, handler):
     async def wrapper(*args, **kwargs):
         from quart import current_app
 
+        logger.info("Meme Manager API wrapper: wrapper called!")
         # Register the dynamic unauthenticated serve_emoji route on app startup/first request
         app = current_app._get_current_object()
         route_name_thumb = "meme_manager_serve_emoji_thumbnail"
         route_name_orig = "meme_manager_serve_emoji"
         if route_name_orig not in app.view_functions:
+            logger.info("Meme Manager API wrapper: registering routes!")
+            try:
 
-            async def serve_emoji_wrapper(category, filename):
-                return await serve_emoji(sender, category, filename, is_thumbnail=False)
+                async def serve_emoji_wrapper(category, filename):
+                    return await serve_emoji(
+                        sender, category, filename, is_thumbnail=False
+                    )
 
-            async def serve_emoji_thumb_wrapper(category, filename):
-                return await serve_emoji(sender, category, filename, is_thumbnail=True)
+                async def serve_emoji_thumb_wrapper(category, filename):
+                    return await serve_emoji(
+                        sender, category, filename, is_thumbnail=True
+                    )
 
-            app.add_url_rule(
-                "/api/file/meme_manager/memes/<category>/thumbnail/<filename>",
-                endpoint=route_name_thumb,
-                view_func=serve_emoji_thumb_wrapper,
-                methods=["GET"],
-            )
+                app.add_url_rule(
+                    "/api/file/meme_manager/memes/<category>/thumbnail/<filename>",
+                    endpoint=route_name_thumb,
+                    view_func=serve_emoji_thumb_wrapper,
+                    methods=["GET"],
+                )
 
-            app.add_url_rule(
-                "/api/file/meme_manager/memes/<category>/<filename>",
-                endpoint=route_name_orig,
-                view_func=serve_emoji_wrapper,
-                methods=["GET"],
+                app.add_url_rule(
+                    "/api/file/meme_manager/memes/<category>/<filename>",
+                    endpoint=route_name_orig,
+                    view_func=serve_emoji_wrapper,
+                    methods=["GET"],
+                )
+                logger.info("Meme Manager API wrapper: routes registered successfully!")
+            except Exception as e:
+                logger.error(f"Meme Manager API wrapper error registering routes: {e}")
+        else:
+            logger.info(
+                "Meme Manager API wrapper: routes already in app.view_functions"
             )
 
         current_app.config["PLUGIN_CONFIG"] = {
