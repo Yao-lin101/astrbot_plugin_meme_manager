@@ -110,7 +110,7 @@ export const ImportModal = {
               <div class="tags-search-wrapper" style="flex: 1; margin: 0; position: relative; display: flex; align-items: center;">
                 <i class="fas fa-search search-icon" style="position: absolute; left: 10px; color: var(--text-secondary); font-size: 12px;"></i>
                 <input type="text" v-model="tagSearchQuery" placeholder="搜索过滤标签..." class="form-control" 
-                  style="width: 100%; height: 32px; font-size: 12.5px; padding: 4px 8px 4px 28px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--bg-element); color: var(--text-primary);" />
+                  style="width: 100%; height: 32px; font-size: 12.5px; padding: 4px 8px 4px 28px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-primary);" />
                 <button v-if="tagSearchQuery" @click="tagSearchQuery = ''" class="clear-btn" 
                   style="position: absolute; right: 8px; background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; height: 100%; width: 20px;">&times;</button>
               </div>

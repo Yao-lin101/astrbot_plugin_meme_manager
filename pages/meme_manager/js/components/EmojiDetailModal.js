@@ -159,7 +159,7 @@ export const EmojiDetailModal = {
                      padding: '4px 8px', 
                      border: '1px solid ' + (isDrawerInputFocused ? 'var(--primary-color)' : 'var(--border-color)'), 
                      borderRadius: 'var(--radius-sm)', 
-                     background: '#ffffff', 
+                     background: 'var(--input-bg)', 
                      display: 'flex', 
                      flexWrap: 'wrap', 
                      alignItems: 'center', 
@@ -206,7 +206,7 @@ export const EmojiDetailModal = {
               <textarea id="drawer-description-input" 
                         v-model="localDescription" 
                         class="form-control" 
-                        style="width: 100%; height: 60px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: #ffffff; color: var(--text-primary); resize: vertical; font-family: inherit; font-size: 13px;" 
+                        style="width: 100%; height: 60px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-primary); resize: vertical; font-family: inherit; font-size: 13px;" 
                         placeholder="请输入表情包的简短描述..."></textarea>
             </div>
 
