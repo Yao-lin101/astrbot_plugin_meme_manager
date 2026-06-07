@@ -156,6 +156,19 @@ export const ConfigPage = {
       }
     };
 
+    // Filter categories to exclude 'all'
+    const filteredCategories = computed(() => {
+      return props.allCategories.filter(c => c !== 'all');
+    });
+
+    // Helper to get preference tags list for a persona safely
+    const getPersonaTagsList = (personaId) => {
+      const tagsObj = props.personaTags[personaId];
+      const pref = tagsObj ? (tagsObj.meme_use_preference || tagsObj.tag || '') : '';
+      if (!pref) return [];
+      return pref.split(',').map(s => s.trim()).filter(Boolean);
+    };
+
     // Helper functions for rendering forms
     const getFieldType = (field) => {
       if (field.type === 'object') return 'object';
@@ -183,7 +196,9 @@ export const ConfigPage = {
       isPersonaTagActive,
       savePluginConfig,
       resetPluginConfig,
-      getFieldType
+      getFieldType,
+      filteredCategories,
+      getPersonaTagsList
     };
   },
   template: `
@@ -233,13 +248,13 @@ export const ConfigPage = {
                 <span style="font-size: 11px; color: var(--text-secondary);">专属发图偏好标签:</span>
                 <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; max-height: 52px; overflow: hidden;">
                   <span 
-                    v-for="tag in (personaTags[p.id]?.meme_use_preference || '').split(',').map(s=>s.trim()).filter(Boolean)" 
+                    v-for="tag in getPersonaTagsList(p.id)" 
                     :key="tag"
                     style="font-size: 10px; background: rgba(59, 130, 246, 0.06); color: var(--primary-color); border: 1px solid rgba(59, 130, 246, 0.15); padding: 1px 6px; border-radius: 4px;"
                   >
                     {{ tag }}
                   </span>
-                  <span v-if="!(personaTags[p.id]?.meme_use_preference)" style="font-size: 10px; color: var(--text-secondary); font-style: italic;">暂未配置发图偏好</span>
+                  <span v-if="!getPersonaTagsList(p.id).length" style="font-size: 10px; color: var(--text-secondary); font-style: italic;">暂未配置发图偏好</span>
                 </div>
               </div>
             </div>
@@ -290,7 +305,7 @@ export const ConfigPage = {
               
               <div class="tags-capsule-grid" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; background: var(--bg-element); max-height: 160px;">
                 <button 
-                  v-for="cat in allCategories.filter(c => c !== 'all')" 
+                  v-for="cat in filteredCategories" 
                   :key="cat"
                   class="tag-capsule-btn"
                   :class="{ active: isPersonaTagActive(cat) }"
@@ -299,7 +314,7 @@ export const ConfigPage = {
                   <i v-if="isPersonaTagActive(cat)" class="fas fa-check" style="margin-right: 2px;"></i>
                   {{ cat }}
                 </button>
-                <div v-if="allCategories.length <= 1" style="color: var(--text-secondary); font-size: 12px; width: 100%; text-align: center; font-style: italic;">
+                <div v-if="filteredCategories.length === 0" style="color: var(--text-secondary); font-size: 12px; width: 100%; text-align: center; font-style: italic;">
                   暂无可用表情标签，请先去表情管理页添加表情并打上标签
                 </div>
               </div>
@@ -321,7 +336,7 @@ export const ConfigPage = {
       </div>
 
       <!-- Tab 2: 插件配置 -->
-      <div v-slot:default v-if="activeSubTab === 'plugin'" class="tab-content">
+      <div v-if="activeSubTab === 'plugin'" class="tab-content">
         <div v-if="loading" style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 0; color: var(--text-secondary); gap: 12px;">
           <i class="fas fa-spinner fa-spin fa-2x" style="color: var(--primary-color);"></i>
           <p style="font-size: 14px;">正在加载配置数据...</p>
