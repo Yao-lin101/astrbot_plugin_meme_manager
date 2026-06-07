@@ -283,7 +283,8 @@ export const ConfigPage = {
     // Persona Blacklist Multiselect Helpers
     const getPersonaName = (pId) => {
       const p = props.systemPersonas.find(p => p.id === pId);
-      return p ? `${p.name} (${pId})` : pId;
+      if (!p) return pId;
+      return p.name === pId ? p.name : `${p.name} (${pId})`;
     };
 
     const filteredBlacklistPersonas = computed(() => {
@@ -397,7 +398,7 @@ export const ConfigPage = {
             <div class="form-group" style="margin-bottom: 0;">
               <label class="form-label" for="persona-select">选择人格</label>
               <select id="persona-select" v-model="selectedPersonaId" class="form-control" style="max-width: 300px;">
-                <option v-for="p in systemPersonas" :key="p.id" :value="p.id">{{ p.name }} (ID: {{ p.id }})</option>
+                <option v-for="p in systemPersonas" :key="p.id" :value="p.id">{{ p.name === p.id ? p.name : p.name + ' (ID: ' + p.id + ')' }}</option>
               </select>
             </div>
 
@@ -680,7 +681,7 @@ export const ConfigPage = {
                             @mouseleave="$event.currentTarget.style.background = (localConfig[key] && localConfig[key].includes(p.id)) ? 'rgba(59, 130, 246, 0.08)' : 'transparent'"
                             @click="toggleBlacklistPersona(p.id)"
                           >
-                            <span style="flex: 1;">{{ p.name }} ({{ p.id }})</span>
+                            <span style="flex: 1;">{{ p.name === p.id ? p.name : p.name + ' (' + p.id + ')' }}</span>
                             <i v-if="localConfig[key] && localConfig[key].includes(p.id)" class="fas fa-check" style="color: var(--primary-color); font-size: 12px;"></i>
                           </div>
                           <div v-if="filteredBlacklistPersonas.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 12.5px; text-align: center;">暂无匹配人格</div>
