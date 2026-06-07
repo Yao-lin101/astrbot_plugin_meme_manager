@@ -34,8 +34,8 @@ export const ConfigPage = {
   setup(props, { emit }) {
     const activeSubTab = ref('persona');
     const selectedPersonaId = ref('');
-    const showNewTagInput = ref(false);
-    const newTagValue = ref('');
+    const newPreferenceTagInput = ref('');
+    const showUsePreferenceDropdown = ref(false);
 
     // Local copy of plugin configuration values for editing
     const localConfig = ref({});
@@ -123,8 +123,8 @@ export const ConfigPage = {
       });
     };
 
-    const addCustomPersonaTag = () => {
-      const tag = newTagValue.value.trim();
+    const addNewPreferenceTag = () => {
+      const tag = newPreferenceTagInput.value.trim();
       if (tag) {
         const list = [...activePersonaUseList.value];
         if (!list.includes(tag)) {
@@ -135,10 +135,22 @@ export const ConfigPage = {
             meme_preference: activePersonaCollectPref.value
           });
         }
-        newTagValue.value = '';
-        showNewTagInput.value = false;
+        newPreferenceTagInput.value = '';
       }
     };
+
+    const handleInputBlur = () => {
+      setTimeout(() => {
+        showUsePreferenceDropdown.value = false;
+      }, 200);
+    };
+
+    const filteredPreferenceCategories = computed(() => {
+      const query = newPreferenceTagInput.value.trim().toLowerCase();
+      const categories = props.allCategories.filter(c => c !== 'all');
+      if (!query) return categories;
+      return categories.filter(cat => cat.toLowerCase().includes(query));
+    });
 
     // Helper to check if a category is active for the current persona
     const isPersonaTagActive = (tag) => {
@@ -185,20 +197,22 @@ export const ConfigPage = {
     return {
       activeSubTab,
       selectedPersonaId,
-      showNewTagInput,
-      newTagValue,
       localConfig,
       activePersona,
       activePersonaUseList,
       activePersonaCollectPref,
       togglePersonaTag,
-      addCustomPersonaTag,
       isPersonaTagActive,
       savePluginConfig,
       resetPluginConfig,
       getFieldType,
       filteredCategories,
-      getPersonaTagsList
+      getPersonaTagsList,
+      newPreferenceTagInput,
+      showUsePreferenceDropdown,
+      addNewPreferenceTag,
+      handleInputBlur,
+      filteredPreferenceCategories
     };
   },
   template: `
@@ -220,116 +234,81 @@ export const ConfigPage = {
           <p>未在系统检测到任何注册人格，请前往主系统“人格管理”页面添加人格。</p>
         </div>
         
-        <div v-else style="display: flex; flex-direction: column; gap: 24px;">
-          <!-- Left: Persona Cards Grid -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
-            <div 
-              v-for="p in systemPersonas" 
-              :key="p.id" 
-              class="persona-card" 
-              :style="{ 
-                cursor: 'pointer', 
-                border: selectedPersonaId === p.id ? '2px solid var(--primary-color)' : '1px solid var(--border-color)',
-                background: selectedPersonaId === p.id ? 'var(--bg-hover)' : 'var(--bg-card)'
-              }"
-              @click="selectedPersonaId = p.id"
-            >
-              <div class="persona-header" style="border: none; padding-bottom: 0;">
-                <div class="persona-avatar">
-                  {{ p.name.substring(0, 1) }}
-                </div>
-                <div class="persona-info">
-                  <span class="persona-name">{{ p.name }}</span>
-                  <span class="persona-id">ID: {{ p.id }}</span>
-                </div>
-              </div>
-              
-              <div style="margin-top: 8px;">
-                <span style="font-size: 11px; color: var(--text-secondary);">专属发图偏好标签:</span>
-                <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; max-height: 52px; overflow: hidden;">
-                  <span 
-                    v-for="tag in getPersonaTagsList(p.id)" 
-                    :key="tag"
-                    style="font-size: 10px; background: rgba(59, 130, 246, 0.06); color: var(--primary-color); border: 1px solid rgba(59, 130, 246, 0.15); padding: 1px 6px; border-radius: 4px;"
-                  >
-                    {{ tag }}
-                  </span>
-                  <span v-if="!getPersonaTagsList(p.id).length" style="font-size: 10px; color: var(--text-secondary); font-style: italic;">暂未配置发图偏好</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Active Persona Editing Card -->
-          <div v-if="activePersona" class="config-card">
-            <div class="persona-header">
-              <div class="persona-avatar" style="width: 44px; height: 44px; font-size: 20px;">
-                {{ activePersona.name.substring(0, 1) }}
-              </div>
-              <div class="persona-info">
-                <span class="persona-name" style="font-size: 16px;">{{ activePersona.name }}</span>
-                <span class="persona-id">人格 ID: {{ activePersona.id }}</span>
-              </div>
+        <div v-else style="display: flex; flex-direction: column; gap: 20px;">
+          <!-- 核心选择器及配置卡片 -->
+          <div class="config-card">
+            <!-- 选择人格 -->
+            <div class="form-group" style="margin-bottom: 0;">
+              <label class="form-label" for="persona-select">选择人格</label>
+              <select id="persona-select" v-model="selectedPersonaId" class="form-control" style="max-width: 300px;">
+                <option v-for="p in systemPersonas" :key="p.id" :value="p.id">{{ p.name }} (ID: {{ p.id }})</option>
+              </select>
             </div>
 
-            <!-- System Prompt Preview -->
-            <div style="display: flex; flex-direction: column; gap: 6px;">
-              <span class="form-label" style="font-size: 12.5px;"><i class="fas fa-terminal"></i> 人格提示词预设</span>
-              <div class="persona-prompt-preview">{{ activePersona.prompt || '暂无系统提示词内容' }}</div>
-            </div>
-
-            <!-- Tags selection (Checkbox capsules) -->
-            <div class="persona-tags-select">
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+            <!-- 具体配置 (若有选中的人格) -->
+            <div v-if="activePersona" style="display: flex; flex-direction: column; gap: 20px; border-top: 1px solid var(--border-color); padding-top: 20px; margin-top: 20px;">
+              <!-- Tags selection (Search & Select Dropdown) -->
+              <div class="persona-tags-select" style="position: relative;">
                 <span class="form-label" style="font-size: 12.5px;">
                   <i class="fas fa-tags"></i> 专属发图偏好 (标签多选)
                 </span>
-                <div style="position: relative;">
-                  <button v-if="!showNewTagInput" class="btn-secondary" style="padding: 2px 8px; font-size: 11px;" @click="showNewTagInput = true">
-                    <i class="fas fa-plus"></i> 添加自定义标签
-                  </button>
-                  <div v-else style="display: flex; gap: 4px; align-items: center;">
+                <p class="form-hint" style="margin-top: -4px;">配置该人格发言时，以更高权重优先推荐发送的表情分类标签。</p>
+                
+                <div class="multiselect-tag-container" style="display: flex; align-items: center; gap: 8px; background: var(--bg-element); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); min-height: 42px; width: 100%; flex-wrap: wrap; box-sizing: border-box; position: relative;">
+                  <!-- Active pills -->
+                  <span v-for="tag in activePersonaUseList" :key="tag" class="active-tag-pill" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--primary-color); padding: 2px 8px; border-radius: 4px; font-size: 12.5px; font-weight: 500; user-select: none;">
+                    {{ tag }}
+                    <span @click.stop="togglePersonaTag(tag)" style="cursor: pointer; font-weight: bold; font-size: 13px; color: var(--primary-color); line-height: 1; padding-left: 2px;" onmouseover="this.style.color='var(--danger-color)'" onmouseout="this.style.color='var(--primary-color)'">&times;</span>
+                  </span>
+                  
+                  <!-- Dropdown Input -->
+                  <div style="position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 160px;">
                     <input 
                       type="text" 
-                      v-model="newTagValue" 
-                      placeholder="标签名称..." 
-                      style="font-size: 11px; padding: 2px 6px; border: 1px solid var(--border-color); border-radius: 4px; outline: none; background: var(--input-bg); color: var(--text-primary);" 
-                      @keyup.enter="addCustomPersonaTag"
+                      v-model="newPreferenceTagInput" 
+                      @focus="showUsePreferenceDropdown = true"
+                      @blur="handleInputBlur"
+                      @keyup.enter="addNewPreferenceTag" 
+                      placeholder="输入以检索或回车添加新标签..." 
+                      style="width: 100%; border: none; background: transparent; color: var(--text-primary); outline: none; font-size: 13px;"
                     />
-                    <button class="btn-primary" style="padding: 2px 8px; font-size: 11px;" @click="addCustomPersonaTag">确认</button>
-                    <button class="btn-secondary" style="padding: 2px 8px; font-size: 11px;" @click="showNewTagInput = false">&times;</button>
+                    
+                    <!-- Dropdown Menu -->
+                    <div v-show="showUsePreferenceDropdown" class="dropdown-menu" style="position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 1000; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); max-height: 200px; overflow-y: auto; min-width: 220px; padding: 4px 0; display: flex; flex-direction: column; gap: 2px;" @mousedown.prevent>
+                      <label 
+                        v-for="cat in filteredPreferenceCategories" 
+                        :key="cat"
+                        style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
+                        onmouseover="this.style.background='var(--bg-secondary)'" 
+                        onmouseout="this.style.background='transparent'"
+                        @click="togglePersonaTag(cat)"
+                      >
+                        <input 
+                          type="checkbox" 
+                          :checked="activePersonaUseList.includes(cat)" 
+                          style="width: 14px; height: 14px; cursor: pointer;" 
+                          @click.stop
+                          @change="togglePersonaTag(cat)"
+                        />
+                        <span style="flex: 1;">{{ cat }}</span>
+                      </label>
+                      <div v-if="filteredPreferenceCategories.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 12.5px; text-align: center;">暂无匹配标签，按回车直接新增</div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <p class="form-hint" style="margin-top: -4px;">勾选表情分类标签，被勾选的表情会在该人格发言时，以更高的权重被大模型优先推荐发送。</p>
-              
-              <div class="tags-capsule-grid" style="border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; background: var(--bg-element); max-height: 160px;">
-                <button 
-                  v-for="cat in filteredCategories" 
-                  :key="cat"
-                  class="tag-capsule-btn"
-                  :class="{ active: isPersonaTagActive(cat) }"
-                  @click="togglePersonaTag(cat)"
-                >
-                  <i v-if="isPersonaTagActive(cat)" class="fas fa-check" style="margin-right: 2px;"></i>
-                  {{ cat }}
-                </button>
-                <div v-if="filteredCategories.length === 0" style="color: var(--text-secondary); font-size: 12px; width: 100%; text-align: center; font-style: italic;">
-                  暂无可用表情标签，请先去表情管理页添加表情并打上标签
-                </div>
-              </div>
-            </div>
 
-            <!-- Collect preference description (textarea) -->
-            <div class="form-group">
-              <span class="form-label" style="font-size: 12.5px;"><i class="fas fa-eye"></i> 专属收集偏好 (描述)</span>
-              <p class="form-hint" style="margin-top: -4px;">配置此人格偷取表情包时的偏好逻辑。支持输入自然语言（例如：“只收集沙雕熊猫头，或者带猫咪的表情，其他表情包不保存”）。</p>
-              <textarea 
-                v-model="activePersonaCollectPref"
-                class="form-control" 
-                placeholder="（可选）留空则使用默认配置。输入自然语言描述，系统将自动使用多模态大模型对聊天内容中出现的表情进行分类过滤与匹配。"
-                style="min-height: 80px;"
-              ></textarea>
+              <!-- Collect preference description (textarea) -->
+              <div class="form-group" style="margin-bottom: 0;">
+                <span class="form-label" style="font-size: 12.5px;"><i class="fas fa-eye"></i> 专属收集偏好 (描述)</span>
+                <p class="form-hint" style="margin-top: -4px;">配置此人格偷取表情包时的偏好逻辑。支持输入自然语言（例如：“只收集沙雕熊猫头，或者带猫咪的表情，其他表情包不保存”）。</p>
+                <textarea 
+                  v-model="activePersonaCollectPref"
+                  class="form-control" 
+                  placeholder="（可选）留空则使用默认配置。输入自然语言描述，系统将自动使用多模态大模型对聊天内容中出现的表情进行分类过滤与匹配。"
+                  style="min-height: 80px;"
+                ></textarea>
+              </div>
             </div>
           </div>
         </div>
