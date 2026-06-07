@@ -90,8 +90,7 @@ export const ImportModal = {
           <span class="drawer-title">导入已存表情到标签「{{ activeCategory }}」</span>
           <button class="drawer-close-btn" @click="$emit('close')">&times;</button>
         </div>
-        <div class="drawer-content" style="max-height: 50vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
-          <p style="margin-bottom: 5px; color: var(--text-secondary);">请选择要追加到当前分类的表情包（已选中 {{ dialog.selectedEmojis.size }} 个）：</p>
+        <div class="drawer-content" style="max-height: 60vh; overflow-y: auto; display: flex; flex-direction: column; gap: 12px;">
           
           <!-- 标签筛选及多选框 -->
           <div class="filter-section" style="margin-bottom: 10px;">
@@ -181,8 +180,11 @@ export const ImportModal = {
           </div>
         </div>
         <div class="drawer-actions" style="margin-top: 20px;">
-          <button class="btn-secondary" @click="$emit('close')">取消</button>
-          <button class="btn-primary" :disabled="dialog.selectedEmojis.size === 0" @click="$emit('submit')">确认导入</button>
+          <span style="color: var(--text-secondary); font-size: 13px;">请选择要追加的表情包（已选中 {{ dialog.selectedEmojis.size }} 个）</span>
+          <div class="action-group">
+            <button class="btn-secondary" @click="$emit('close')">取消</button>
+            <button class="btn-primary" :disabled="dialog.selectedEmojis.size === 0" @click="$emit('submit')">确认导入</button>
+          </div>
         </div>
       </div>
     </div>
