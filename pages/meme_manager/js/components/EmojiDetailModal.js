@@ -117,44 +117,36 @@ export const EmojiDetailModal = {
         </div>
         <div class="drawer-body-layout">
           <!-- 左侧大图预览 + AI 助手 -->
-          <div class="drawer-preview-column" style="display: flex; flex-direction: column; gap: 16px; align-items: stretch; justify-content: flex-start; height: 100%; overflow-y: auto;">
-            <div style="flex: 1; display: flex; align-items: center; justify-content: center; min-height: 200px; max-height: 280px; background: var(--bg-app); border-radius: var(--radius-md); padding: 8px;">
-              <img :src="getImageUrl(activeEmoji)" :alt="activeEmoji" @load="$emit('image-loaded', activeEmoji)" style="max-height: 100%; max-width: 100%; object-fit: contain;" />
+          <div class="drawer-preview-column">
+            <div class="drawer-image-wrapper">
+              <img :src="getImageUrl(activeEmoji)" :alt="activeEmoji" @load="$emit('image-loaded', activeEmoji)" />
             </div>
 
             <!-- AI 助手板块 -->
-            <div class="ai-assistant-section" style="border-top: 1px solid var(--border-color); padding-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+            <div class="ai-assistant-section">
               <div style="font-size: 11px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.05em; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
                 <i class="fas fa-magic" style="color: var(--primary-color);"></i> AI 助手
               </div>
 
               <!-- AI 供应商下拉选择 -->
-              <div style="display: flex; flex-direction: column; gap: 4px;">
-                <label style="font-size: 11px; color: var(--text-secondary); text-transform: none; letter-spacing: normal; font-weight: normal;">选择多模态 AI 供应商</label>
-                <select v-model="localSelectedProvider" 
-                        :disabled="providers.length === 0"
-                        style="width: 100%; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: #ffffff; color: var(--text-primary); font-size: 12px; outline: none;">
+              <div class="ai-provider-select-wrapper">
+                <label style="font-size: 11px; color: var(--text-secondary); font-weight: normal; text-transform: none; letter-spacing: normal;">供应商:</label>
+                <select v-model="localSelectedProvider" :disabled="providers.length === 0">
                   <option v-if="providers.length === 0" value="">加载中...</option>
                   <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
                 </select>
               </div>
 
               <!-- AI 操作按钮 -->
-              <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 4px;">
-                <button class="btn-secondary" 
-                        @click="$emit('analyze', 'tags')" 
-                        style="width: 100%; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
-                  <i class="fas fa-tags"></i> 分析标签
+              <div class="ai-action-buttons-group">
+                <button class="btn-secondary" @click="$emit('analyze', 'tags')" title="分析标签">
+                  <i class="fas fa-tags"></i> 标签
                 </button>
-                <button class="btn-secondary" 
-                        @click="$emit('analyze', 'desc_by_tags')" 
-                        style="width: 100%; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
-                  <i class="fas fa-comment-dots"></i> 通过标签分析描述
+                <button class="btn-secondary" @click="$emit('analyze', 'desc_by_tags')" title="通过标签分析描述">
+                  <i class="fas fa-comment-dots"></i> 描述
                 </button>
-                <button class="btn-primary" 
-                        @click="$emit('analyze', 'full')" 
-                        style="width: 100%; padding: 7px 12px; font-size: 12px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;">
-                  <i class="fas fa-brain"></i> 完整分析
+                <button class="btn-primary" @click="$emit('analyze', 'full')" title="完整分析">
+                  <i class="fas fa-brain"></i> 完整
                 </button>
               </div>
             </div>
