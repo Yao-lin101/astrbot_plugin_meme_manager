@@ -186,8 +186,8 @@
               </div>
             </div>
             <div class="selection-toolbar-actions" style="display: flex; align-items: center; gap: 8px;">
-              <!-- 移动端标签切换按钮 -->
-              <button class="btn-secondary mobile-sidebar-toggle-btn" @click.stop="mobileSidebarOpen = true">
+              <!-- 标签切换按钮 -->
+              <button class="btn-secondary sidebar-toggle-btn" @click.stop="mobileSidebarOpen = true">
                 <i class="fas fa-tags icon"></i>标签
               </button>
               <!-- 添加标签按钮 (常驻) -->
@@ -384,7 +384,7 @@
           </div>
 
           <!-- 右侧：固定垂直标签列表 -->
-          <aside class="tags-sidebar" :class="{ open: mobileSidebarOpen }">
+          <aside class="tags-sidebar" :class="{ open: mobileSidebarOpen }" @click.stop>
             <div class="tags-sidebar-header">
               <i class="fas fa-tags"></i>
               <h3>标签分类</h3>
