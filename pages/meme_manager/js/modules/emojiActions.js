@@ -784,7 +784,7 @@ export function useEmojiActions({
     detailDrawerLoading.value = true;
 
     try {
-      if (mode === 'desc_by_tags') {
+      if (mode === 'desc_by_tags' || mode === 'tags_desc_by_tags') {
         const saved = await saveEmojiAttributes(false);
         if (!saved) {
           return; // Abort analysis if save failed or was canceled
@@ -799,9 +799,9 @@ export function useEmojiActions({
         }
       }
 
-      const analyze_tags = mode === 'tags' || mode === 'full';
-      const analyze_description = mode === 'desc_by_tags' || mode === 'full';
-      const pass_existing_tags_as_ref = mode === 'desc_by_tags';
+      const analyze_tags = mode === 'tags_desc_by_tags' || mode === 'full';
+      const analyze_description = mode === 'desc_by_tags' || mode === 'tags_desc_by_tags' || mode === 'full';
+      const pass_existing_tags_as_ref = mode === 'desc_by_tags' || mode === 'tags_desc_by_tags';
 
       let parts = [];
       if (batchAnalyzeModal.promptTemplate.intro) {
