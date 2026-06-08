@@ -25,6 +25,8 @@ export function useEmojiActions({
   const selectedPersonas = ref([]);
   const detailEmojiDescription = ref("");
   const detailDrawerLoading = ref(false);
+  const aiAnalysisLoading = ref(false);
+  const aiAnalysisMode = ref('');
 
   // Upload state tracking
   const uploadStateByCategory = ref(new Map());
@@ -154,7 +156,7 @@ export function useEmojiActions({
   const saveEmojiAttributes = async (closeAfterSave = true) => {
     if (selectedEmotions.value.length === 0) {
       showToast("请至少选择一个标签。", "warning", "保存提示");
-      return;
+      return false;
     }
 
     const personas = selectedPersonas.value.length === 0 ? ["*"] : selectedPersonas.value;
@@ -178,8 +180,10 @@ export function useEmojiActions({
         closeDetailDrawer();
       }
       await fetchEmojis();
+      return true;
     } catch (e) {
       showToast(e.message, "error", "保存失败");
+      return false;
     }
   };
 
@@ -775,9 +779,18 @@ export function useEmojiActions({
       return;
     }
 
+    aiAnalysisLoading.value = true;
+    aiAnalysisMode.value = mode;
     detailDrawerLoading.value = true;
 
     try {
+      if (mode === 'desc_by_tags') {
+        const saved = await saveEmojiAttributes(false);
+        if (!saved) {
+          return; // Abort analysis if save failed or was canceled
+        }
+      }
+
       // Ensure prompt templates are loaded
       if (!batchAnalyzeModal.promptTemplate || !batchAnalyzeModal.promptTemplate.intro) {
         const templateRes = await fetch("/api/prompt/template");
@@ -838,6 +851,8 @@ export function useEmojiActions({
       showToast(e.message, "error", "AI 分析失败");
     } finally {
       detailDrawerLoading.value = false;
+      aiAnalysisLoading.value = false;
+      aiAnalysisMode.value = '';
     }
   };
 
@@ -861,6 +876,8 @@ export function useEmojiActions({
     selectedEmotions,
     selectedPersonas,
     detailDrawerLoading,
+    aiAnalysisLoading,
+    aiAnalysisMode,
     uploadStateByCategory,
     contextMenu,
     clipboardItems,

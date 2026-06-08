@@ -388,6 +388,8 @@ createApp({
       selectedEmotions: api.selectedEmotions,
       selectedPersonas: emojiActions.selectedPersonas,
       detailDrawerLoading: emojiActions.detailDrawerLoading,
+      aiAnalysisLoading: emojiActions.aiAnalysisLoading,
+      aiAnalysisMode: emojiActions.aiAnalysisMode,
       uploadStateByCategory: emojiActions.uploadStateByCategory,
       contextMenu: emojiActions.contextMenu,
       clipboardItems: emojiActions.clipboardItems,

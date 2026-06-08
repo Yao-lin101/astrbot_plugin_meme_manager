@@ -447,7 +447,8 @@
       @update:selected-provider="batchAnalyzeModal.selectedProvider = $event" @close="closeDetailDrawer"
       @image-loaded="markEmojiFullyLoaded" @toggle-tag="toggleTagInDrawer" @toggle-persona="togglePersonaInDrawer"
       @backspace="handleBackspace" @create-tag="handleCreateTagInDrawer" @navigate="navigateToSiblingEmoji"
-      @save="saveEmojiAttributes" @analyze="runSingleEmojiAnalysis"></emoji-detail-modal>
+      @save="saveEmojiAttributes" @analyze="runSingleEmojiAnalysis"
+      :ai-analysis-loading="aiAnalysisLoading" :ai-analysis-mode="aiAnalysisMode"></emoji-detail-modal>
 
     <!-- 批量导入已有表情包模态框 -->
     <import-modal :dialog="importModal" :active-category="activeCategory" :importable-emojis-list="importableEmojisList"
