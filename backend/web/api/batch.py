@@ -592,12 +592,26 @@ async def analyze_emoji_core(
                 "描述：\n根据画面和标签结果进行简洁描述。"
             )
 
-    if pass_existing_tags_as_ref and not analyze_tags and existing_emotions:
-        guidelines = (
-            f"{guidelines}\n\n"
-            f"【该表情包当前已有的标签】：{existing_emotions}\n"
-            f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
-        )
+    if pass_existing_tags_as_ref and existing_emotions:
+        if analyze_tags:
+            if analyze_description:
+                guidelines = (
+                    f"{guidelines}\n\n"
+                    f"【该表情包当前已有的标签】：{existing_emotions}\n"
+                    f"请结合并参考这些已有标签，补全并扩展出更加完整和准确的标签列表（包含已有的和新补充的标签），并根据画面和所有标签生成简洁描述。"
+                )
+            else:
+                guidelines = (
+                    f"{guidelines}\n\n"
+                    f"【该表情包当前已有的标签】：{existing_emotions}\n"
+                    f"请结合并参考这些已有标签，补全并扩展出更加完整和准确的标签列表（包含已有的和新补充的标签）。"
+                )
+        else:
+            guidelines = (
+                f"{guidelines}\n\n"
+                f"【该表情包当前已有的标签】：{existing_emotions}\n"
+                f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
+            )
 
     # 根据勾选条件，优化模型提示词
     prompt = (
