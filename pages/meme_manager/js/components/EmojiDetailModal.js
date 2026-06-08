@@ -56,6 +56,14 @@ export const EmojiDetailModal = {
     selectedProvider: {
       type: String,
       default: ''
+    },
+    aiAnalysisLoading: {
+      type: Boolean,
+      default: false
+    },
+    aiAnalysisMode: {
+      type: String,
+      default: ''
     }
   },
   emits: [
@@ -134,14 +142,14 @@ export const EmojiDetailModal = {
 
               <!-- AI 操作按钮 -->
               <div class="ai-action-buttons-group">
-                <button class="btn-secondary" @click="$emit('analyze', 'tags')" title="分析标签">
-                  <i class="fas fa-tags"></i> 标签
+                <button class="btn-secondary" @click="$emit('analyze', 'tags')" title="分析标签" :disabled="aiAnalysisLoading">
+                  <i class="fas" :class="aiAnalysisLoading && aiAnalysisMode === 'tags' ? 'fa-spinner fa-spin' : 'fa-tags'"></i> 标签
                 </button>
-                <button class="btn-secondary" @click="$emit('analyze', 'desc_by_tags')" title="通过标签分析描述">
-                  <i class="fas fa-comment-dots"></i> 描述
+                <button class="btn-secondary" @click="$emit('analyze', 'desc_by_tags')" title="通过标签分析描述" :disabled="aiAnalysisLoading">
+                  <i class="fas" :class="aiAnalysisLoading && aiAnalysisMode === 'desc_by_tags' ? 'fa-spinner fa-spin' : 'fa-comment-dots'"></i> 描述
                 </button>
-                <button class="btn-primary" @click="$emit('analyze', 'full')" title="完整分析">
-                  <i class="fas fa-brain"></i> 完整
+                <button class="btn-primary" @click="$emit('analyze', 'full')" title="完整分析" :disabled="aiAnalysisLoading">
+                  <i class="fas" :class="aiAnalysisLoading && aiAnalysisMode === 'full' ? 'fa-spinner fa-spin' : 'fa-brain'"></i> 完整
                 </button>
               </div>
             </div>
