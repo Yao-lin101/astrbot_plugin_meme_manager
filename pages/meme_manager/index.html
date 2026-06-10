@@ -368,7 +368,7 @@
                 :class="{ active: activeCategories.includes(category) }" @click="selectCategory(category)"
                 @dragover.prevent @drop="onDropEmoji($event, category)">
                 <span class="tab-name">{{ category }}</span>
-                <span class="tab-badge-vertical">{{ emojiData[category] ? emojiData[category].length : 0 }}</span>
+                <span class="tab-badge-vertical">{{ getCategoryActiveCount(category) }}</span>
               </button>
             </div>
           </aside>
