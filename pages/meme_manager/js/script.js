@@ -305,6 +305,7 @@ createApp({
       allCategories: api.allCategories,
       activeCategoryTimeGroups: api.activeCategoryTimeGroups,
       getEmojiTags: api.getEmojiTags,
+      getCategoryActiveCount: api.getCategoryActiveCount,
       visibleLimit: api.visibleLimit,
 
       // Toasts

@@ -114,22 +114,6 @@ export function useApi(showToast, pruneSelections) {
     }
   };
 
-  const filteredCategories = computed(() => {
-    const query = tabSearchQuery.value.trim().toLowerCase();
-    const categories = Object.keys(emojiData.value);
-    const unselectedCats = categories.filter(cat => !activeCategories.value.includes(cat));
-    if (!query) return unselectedCats;
-    return unselectedCats.filter(category => category.toLowerCase().includes(query));
-  });
-
-  const filteredDrawerTags = computed(() => {
-    const query = drawerTagSearchQuery.value.trim().toLowerCase();
-    const tags = Object.keys(emojiData.value);
-    const unselectedTags = tags.filter(tag => !selectedEmotions.value.includes(tag));
-    if (!query) return unselectedTags;
-    return unselectedTags.filter(tag => tag.toLowerCase().includes(query));
-  });
-
   const emojiTagsMap = computed(() => {
     const map = new Map();
     Object.entries(emojiData.value).forEach(([cat, emos]) => {
@@ -168,6 +152,49 @@ export function useApi(showToast, pruneSelections) {
     }
     
     return Array.from(intersection).sort();
+  });
+
+  const filteredCategories = computed(() => {
+    const query = tabSearchQuery.value.trim().toLowerCase();
+    const categories = Object.keys(emojiData.value);
+    
+    let allowedCats = categories;
+    if (activeCategories.value.length > 0 && !activeCategories.value.includes('all')) {
+      const intersectingCats = new Set();
+      activeCategoryEmojisList.value.forEach(emo => {
+        const emoTags = emojiTagsMap.value.get(emo);
+        if (emoTags) {
+          emoTags.forEach(cat => intersectingCats.add(cat));
+        }
+      });
+      allowedCats = categories.filter(cat => intersectingCats.has(cat));
+    }
+
+    const unselectedCats = allowedCats.filter(cat => !activeCategories.value.includes(cat));
+    if (!query) return unselectedCats;
+    return unselectedCats.filter(category => category.toLowerCase().includes(query));
+  });
+
+  const getCategoryActiveCount = (cat) => {
+    if (activeCategories.value.includes('all') || activeCategories.value.length === 0) {
+      return emojiData.value[cat] ? emojiData.value[cat].length : 0;
+    }
+    let count = 0;
+    activeCategoryEmojisList.value.forEach(emo => {
+      const tags = emojiTagsMap.value.get(emo);
+      if (tags && tags.has(cat)) {
+        count++;
+      }
+    });
+    return count;
+  };
+
+  const filteredDrawerTags = computed(() => {
+    const query = drawerTagSearchQuery.value.trim().toLowerCase();
+    const tags = Object.keys(emojiData.value);
+    const unselectedTags = tags.filter(tag => !selectedEmotions.value.includes(tag));
+    if (!query) return unselectedTags;
+    return unselectedTags.filter(tag => tag.toLowerCase().includes(query));
   });
 
   const importableEmojisList = computed(() => {
@@ -276,5 +303,6 @@ export function useApi(showToast, pruneSelections) {
     getEmojiTags,
     visibleLimit,
     selectedEmotions,
+    getCategoryActiveCount,
   };
 }
