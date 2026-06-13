@@ -58,7 +58,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api.message_components import *  # noqa: F403
 from astrbot.api.provider import LLMResponse
-from astrbot.api.star import Context, Star, register
+from astrbot.api.star import Context, Star
 
 from .backend import (
     CategoryManager,
@@ -78,13 +78,6 @@ from .init import init_plugin
 
 _meme_sender_instance = None
 
-
-@register(
-    "meme_manager",
-    "anka & e.e.",
-    "表情包管理器 - 支持表情包发送及表情包上传",
-    "4.8.6",
-)
 class MemeSender(Star, MemeConfigMixin):
     context: Context
 
