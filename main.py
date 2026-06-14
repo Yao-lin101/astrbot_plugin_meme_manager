@@ -78,6 +78,7 @@ from .init import init_plugin
 
 _meme_sender_instance = None
 
+
 class MemeSender(Star, MemeConfigMixin):
     context: Context
 

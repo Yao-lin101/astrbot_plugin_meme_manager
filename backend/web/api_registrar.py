@@ -79,7 +79,9 @@ def wrap_api_handler(sender, handler):
                     view_func=serve_emoji_wrapper,
                     methods=["GET"],
                 )
-                logger.debug("Meme Manager API wrapper: routes registered successfully!")
+                logger.debug(
+                    "Meme Manager API wrapper: routes registered successfully!"
+                )
             except Exception as e:
                 logger.error(f"Meme Manager API wrapper error registering routes: {e}")
         else:
