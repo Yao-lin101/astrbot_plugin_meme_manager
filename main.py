@@ -388,7 +388,7 @@ class MemeSender(Star, MemeConfigMixin):
         """保存并收录聊天中的表情包到表情包库中。
 
         Args:
-            categories(list): 表情分类列表（如 ['happy']）。仅在用户明确指定了分类时传入，否则不传。
+            categories(list): 表情分类列表（如 ['开心']）。仅在用户明确指定了分类时传入，否则不传。
             category(string): 表情分类。单标签兼容，仅在用户明确指定了分类时传入，否则不传。
             description(string): 表情包画面的简洁描述。仅在用户明确指定了描述时传入，否则不传。
         """
