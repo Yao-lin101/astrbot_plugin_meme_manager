@@ -177,7 +177,14 @@ async def download_image(
     ssl_context.verify_mode = ssl.CERT_NONE
 
     try:
-        if "multimedia.nt.qq.com.cn" in url:
+        if url.startswith("file:///"):
+            local_path = url.replace("file:///", "")
+            with open(local_path, "rb") as f:
+                content = f.read()
+        elif not (url.startswith("http://") or url.startswith("https://")):
+            with open(url, "rb") as f:
+                content = f.read()
+        elif "multimedia.nt.qq.com.cn" in url:
             insecure_url = url.replace("https://", "http://", 1)
             async with aiohttp.ClientSession() as session:
                 async with session.get(insecure_url) as resp:
