@@ -172,9 +172,9 @@ createApp({
     const getImageUrl = (emoji, isThumbnail = false) => {
       if (!emoji) return '';
       if (isThumbnail && !fullyLoadedEmojis.value[emoji]) {
-        return `/api/plug/astrbot_plugin_meme_manager/memes/file/thumbnail/${encodeURIComponent(emoji)}`;
+        return `/api/public/plug/astrbot_plugin_meme_manager/memes/file/thumbnail/${encodeURIComponent(emoji)}`;
       }
-      return `/api/plug/astrbot_plugin_meme_manager/memes/file/${encodeURIComponent(emoji)}`;
+      return `/api/public/plug/astrbot_plugin_meme_manager/memes/file/${encodeURIComponent(emoji)}`;
     };
 
     const activeCategory = computed(() => {
