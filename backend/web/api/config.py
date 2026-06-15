@@ -5,7 +5,7 @@ import os
 from quart import current_app, jsonify, request
 
 from astrbot.core.star.star import star_registry
-from astrbot.dashboard.routes.config import validate_config
+from astrbot.dashboard.services.config_service import validate_config
 
 logger = logging.getLogger(__name__)
 

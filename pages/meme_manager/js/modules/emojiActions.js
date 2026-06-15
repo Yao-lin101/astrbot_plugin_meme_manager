@@ -553,7 +553,7 @@ export function useEmojiActions({
           if (resData && (resData.code === "similar_emoji" || resData.code === "duplicate_emoji")) {
             const localUrl = URL.createObjectURL(file);
             const targetFilename = resData.existing_filename || resData.filename;
-            const similarUrl = `/api/file/meme_manager/memes/file/thumbnail/${encodeURIComponent(targetFilename)}`;
+            const similarUrl = `/api/plug/astrbot_plugin_meme_manager/memes/file/thumbnail/${encodeURIComponent(targetFilename)}`;
             
             const isSimilar = resData.code === "similar_emoji";
             const title = isSimilar ? "检测到相似表情包" : "检测到完全相同的表情包";
