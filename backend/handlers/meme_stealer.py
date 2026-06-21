@@ -188,12 +188,21 @@ async def download_image(
     ssl_context.verify_mode = ssl.CERT_NONE
 
     try:
+        local_path = None
         if url.startswith("file:///"):
             local_path = url.replace("file:///", "")
-            with open(local_path, "rb") as f:
-                content = f.read()
         elif not (url.startswith("http://") or url.startswith("https://")):
-            with open(url, "rb") as f:
+            local_path = url
+
+        if local_path is not None:
+            if local_path.startswith("/AstrBot/data"):
+                from pathlib import Path
+
+                from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+                rest = local_path[len("/AstrBot/data") :].lstrip("/")
+                local_path = str(Path(get_astrbot_data_path()) / rest)
+            with open(local_path, "rb") as f:
                 content = f.read()
         elif "multimedia.nt.qq.com.cn" in url:
             insecure_url = url.replace("https://", "http://", 1)

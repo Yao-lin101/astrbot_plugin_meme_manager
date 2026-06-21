@@ -270,9 +270,27 @@ class MemeSender(Star, MemeConfigMixin):
             return
         if not hasattr(self, "_session_last_image"):
             self._session_last_image = {}
+
+        # Clean up expired caches (TTL = 300s) to prevent memory accumulation
+        now = time.time()
+        expired_keys = [
+            k
+            for k, v in self._session_last_image.items()
+            if (now - v.get("ts", 0)) > 300
+        ]
+        for k in expired_keys:
+            self._session_last_image.pop(k, None)
+
+        img_bytes = None
+        try:
+            img_bytes = await images[-1].convert_to_base64()
+        except Exception as e:
+            logger.warning(f"[meme_manager] 缓存图片数据失败: {e}")
+
         self._session_last_image[event.unified_msg_origin] = {
             "url": images[-1].url,
-            "ts": time.time(),
+            "bytes": img_bytes,
+            "ts": now,
         }
 
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
