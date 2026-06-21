@@ -228,6 +228,23 @@ async def steal_meme(
     content = image_content
     file_type = image_type
     raw_hash = image_hash
+    if content is not None:
+        if raw_hash is None:
+            import hashlib
+
+            raw_hash = hashlib.sha256(content).hexdigest()
+        if file_type is None:
+            try:
+                import io
+
+                from PIL import Image as PILImage
+
+                with PILImage.open(io.BytesIO(content)) as img_obj:
+                    file_type = img_obj.format.lower()
+            except Exception as e:
+                logger.error(f"[meme_manager] 缓存图片格式检测失败: {e}")
+                file_type = "unknown"
+
     if content is None or file_type is None or raw_hash is None:
         content, file_type, raw_hash, dl_err = await download_image(url)
         if dl_err:

@@ -188,6 +188,8 @@ async def download_image(
     ssl_context.verify_mode = ssl.CERT_NONE
 
     try:
+        if not url:
+            return None, None, None, "下载图片失败：URL 为空。"
         local_path = None
         if url.startswith("file:///"):
             local_path = url.replace("file:///", "")
