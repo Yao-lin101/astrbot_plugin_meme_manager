@@ -129,8 +129,8 @@ async def send_meme(
         )
         return (
             f"表情包已成功发送！已选择{desc_info}的表情包。"
-            "（提示：如果该表情包已能完全表达你的意思，或者你在调用工具前已经生成了回复文本，"
-            "请在此直接结束本次回复，不要复述或重复你已经说过的话。）"
+            # "（提示：如果该表情包已能完全表达你的意思，或者你在调用工具前已经生成了回复文本，"
+            # "请在此直接结束本次回复，不要复述或重复你已经说过的话。）"
         )
     except Exception as e:
         logger.error(f"[meme_manager] LLM发图工具发送失败: {e}")
@@ -154,7 +154,6 @@ async def steal_meme(
     from ..handlers.meme_stealer import (
         download_image,
         extract_event_image_url,
-        get_cached_image_url,
         process_stolen_image,
         resolve_persona_preference,
     )
@@ -169,9 +168,57 @@ async def steal_meme(
     # 2. 取图（被动偷图路径会直接传入 image_content，此处仅在缺图时解析 URL）
     url = None
     if image_content is None:
-        url = extract_event_image_url(event) or get_cached_image_url(sender, event)
-        if not url:
-            return "没有在最近的聊天中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
+        url = extract_event_image_url(event)
+
+        # Check if the URL points to a missing local file (due to event lifecycle cleanup)
+        is_local_missing = False
+        if url:
+            import os
+
+            local_path = None
+            if url.startswith("file:///"):
+                local_path = url.replace("file:///", "")
+            elif not (url.startswith("http://") or url.startswith("https://")):
+                local_path = url
+
+            if local_path:
+                if local_path.startswith("/AstrBot/data"):
+                    from pathlib import Path
+
+                    from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+                    rest = local_path[len("/AstrBot/data") :].lstrip("/")
+                    local_path = str(Path(get_astrbot_data_path()) / rest)
+                if not os.path.exists(local_path):
+                    is_local_missing = True
+                    logger.info(
+                        f"[meme_manager] 引用图片已在核心清理，启用会话缓存回退。路径: {local_path}"
+                    )
+
+        if not url or is_local_missing:
+            # Fallback to session last image cache
+            cache = getattr(sender, "_session_last_image", {}).get(
+                event.unified_msg_origin
+            )
+            import time
+
+            if cache and (time.time() - cache.get("ts", 0)) <= 300:
+                if cache.get("bytes"):
+                    import base64
+
+                    try:
+                        image_content = base64.b64decode(cache.get("bytes"))
+                        logger.info(
+                            "[meme_manager] 成功从会话内存缓存中恢复表情包数据。"
+                        )
+                    except Exception as e:
+                        logger.warning(f"[meme_manager] 解码缓存表情包失败: {e}")
+
+                if image_content is None:
+                    url = cache.get("url")
+
+            if image_content is None and not url:
+                return "没有在最近的聊天中找到可以收录的表情包/图片哦。请发送图片并在消息中说明，或者直接引用（回复）要收录的图片并发出指令。"
 
     # 3. 检查分类是否合法（未启用多模态判定且未显式提供分类时报错）
     if not getattr(sender, "multimodal_llm_enabled", False) and not categories:
@@ -181,6 +228,23 @@ async def steal_meme(
     content = image_content
     file_type = image_type
     raw_hash = image_hash
+    if content is not None:
+        if raw_hash is None:
+            import hashlib
+
+            raw_hash = hashlib.sha256(content).hexdigest()
+        if file_type is None:
+            try:
+                import io
+
+                from PIL import Image as PILImage
+
+                with PILImage.open(io.BytesIO(content)) as img_obj:
+                    file_type = img_obj.format.lower()
+            except Exception as e:
+                logger.error(f"[meme_manager] 缓存图片格式检测失败: {e}")
+                file_type = "unknown"
+
     if content is None or file_type is None or raw_hash is None:
         content, file_type, raw_hash, dl_err = await download_image(url)
         if dl_err:

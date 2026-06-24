@@ -27,11 +27,22 @@ async def _check_meme_preference_match(
     content: bytes,
     file_type: str,
     preference_text: str,
-) -> tuple[bool, str]:
+) -> tuple[bool | None, str]:
     """调用多模态 LLM 判定图片是否满足人格的表情包收集偏好。
 
+    Args:
+        sender: The sender object.
+        event: The AstrMessageEvent.
+        content: The image raw bytes.
+        file_type: The image file format extension.
+        preference_text: The preference description.
+
     Returns:
-        (is_matched, error_message_or_reason)
+        A tuple of (is_matched, error_message_or_reason).
+        is_matched can be:
+            - True: matches the preference
+            - False: does not match the preference
+            - None: error occurred during evaluation (so it should not be cached)
     """
     provider_id = getattr(sender, "multimodal_llm_provider_id", "")
     if not provider_id:
@@ -39,7 +50,7 @@ async def _check_meme_preference_match(
             umo=event.unified_msg_origin
         )
     if not provider_id:
-        return False, "未找到可用的多模态模型/聊天模型提供商，无法进行偏好判定。"
+        return None, "未找到可用的多模态模型/聊天模型提供商，无法进行偏好判定。"
 
     import base64
 
@@ -79,7 +90,7 @@ async def _check_meme_preference_match(
             image_urls=[image_data_uri],
         )
         if not llm_resp or not llm_resp.completion_text:
-            return False, "模型返回内容为空，判定失败。"
+            return None, "模型返回内容为空，判定失败。"
 
         raw_text = llm_resp.completion_text.strip()
         logger.debug(f"[meme_manager] 多模态模型偏好匹配判定返回内容: {raw_text}")
@@ -101,10 +112,10 @@ async def _check_meme_preference_match(
             reason = data.get("reason", "")
             return is_match, reason
         else:
-            return False, f"无法解析模型返回的判定结果：{raw_text}"
+            return None, f"无法解析模型返回的判定结果：{raw_text}"
     except Exception as e:
         logger.error(f"[meme_manager] 偏好匹配度判定失败: {e}", exc_info=True)
-        return False, f"调用多模态模型出错: {str(e)}"
+        return None, f"调用多模态模型出错: {str(e)}"
 
 
 async def resolve_persona_preference(
@@ -177,12 +188,23 @@ async def download_image(
     ssl_context.verify_mode = ssl.CERT_NONE
 
     try:
+        if not url:
+            return None, None, None, "下载图片失败：URL 为空。"
+        local_path = None
         if url.startswith("file:///"):
             local_path = url.replace("file:///", "")
-            with open(local_path, "rb") as f:
-                content = f.read()
         elif not (url.startswith("http://") or url.startswith("https://")):
-            with open(url, "rb") as f:
+            local_path = url
+
+        if local_path is not None:
+            if local_path.startswith("/AstrBot/data"):
+                from pathlib import Path
+
+                from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+                rest = local_path[len("/AstrBot/data") :].lstrip("/")
+                local_path = str(Path(get_astrbot_data_path()) / rest)
+            with open(local_path, "rb") as f:
                 content = f.read()
         elif "multimedia.nt.qq.com.cn" in url:
             insecure_url = url.replace("https://", "http://", 1)
@@ -309,20 +331,17 @@ async def _check_preference(
         is_matched, match_reason = await _check_meme_preference_match(
             sender, event, content, file_type, preference_text
         )
-        if not is_matched:
-            if (
-                "错误" in match_reason
-                or "失败" in match_reason
-                or "未找到" in match_reason
-            ):
-                return f"大模型判定失败/不支持多模态：{match_reason}"
-            else:
-                # 明确的拒绝，记录缓存
-                try:
-                    save_steal_attempt(raw_hash, persona_id, False, match_reason)
-                except Exception as ex:
-                    logger.warning(f"保存尝试记录失败: {ex}")
-                return f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {match_reason}"
+        if is_matched is None:
+            return f"大模型判定失败/不支持多模态：{match_reason}"
+        elif not is_matched:
+            # Explicit rejection, cache the attempt
+            try:
+                save_steal_attempt(raw_hash, persona_id, False, match_reason)
+            except Exception as ex:
+                logger.warning(f"保存尝试记录失败: {ex}")
+            return (
+                f"该图片不符合当前人格的表情包收集偏好，拒绝收录。原因: {match_reason}"
+            )
         return None
 
 

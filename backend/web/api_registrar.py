@@ -334,13 +334,23 @@ def register_apis(sender):
             f"Meme Manager API: {route}",
         )
 
-    # Serve emoji static files endpoint
+    # Serve emoji static files endpoints
     async def serve_emoji_route_wrapper(category, filename):
-        return await serve_emoji(sender, category, filename)
+        return await serve_emoji(sender, category, filename, is_thumbnail=False)
+
+    async def serve_emoji_thumb_wrapper(category, filename):
+        return await serve_emoji(sender, category, filename, is_thumbnail=True)
+
+    sender.context.register_web_api(
+        f"/{PLUGIN_NAME}/memes/<category>/thumbnail/<filename>",
+        wrap_api_handler(sender, serve_emoji_thumb_wrapper),
+        ["GET"],
+        "Serve emoji thumbnail files",
+    )
 
     sender.context.register_web_api(
         f"/{PLUGIN_NAME}/memes/<category>/<filename>",
-        serve_emoji_route_wrapper,
+        wrap_api_handler(sender, serve_emoji_route_wrapper),
         ["GET"],
         "Serve emoji files",
     )

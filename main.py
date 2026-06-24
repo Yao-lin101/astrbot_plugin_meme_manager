@@ -4,56 +4,6 @@ import time
 
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403
-
-# Monkeypatch FileRoute statically at plugin import time to avoid dynamic route registration context issues
-try:
-    from astrbot.dashboard.routes.file import FileRoute
-
-    original_file_route_init = FileRoute.__init__
-
-    def patched_file_route_init(self, context):
-        original_file_route_init(self, context)
-
-        app = context.app
-        route_name_thumb = "meme_manager_serve_emoji_thumbnail"
-        route_name_orig = "meme_manager_serve_emoji"
-
-        async def serve_emoji_thumb_wrapper(category, filename):
-            from .backend.web.api_registrar import serve_emoji
-
-            if _meme_sender_instance:
-                return await serve_emoji(
-                    _meme_sender_instance, category, filename, is_thumbnail=True
-                )
-            return "Meme Manager plugin instance not found", 404
-
-        async def serve_emoji_wrapper(category, filename):
-            from .backend.web.api_registrar import serve_emoji
-
-            if _meme_sender_instance:
-                return await serve_emoji(
-                    _meme_sender_instance, category, filename, is_thumbnail=False
-                )
-            return "Meme Manager plugin instance not found", 404
-
-        if route_name_orig not in app.view_functions:
-            app.add_url_rule(
-                "/api/file/meme_manager/memes/<category>/thumbnail/<filename>",
-                endpoint=route_name_thumb,
-                view_func=serve_emoji_thumb_wrapper,
-                methods=["GET"],
-            )
-            app.add_url_rule(
-                "/api/file/meme_manager/memes/<category>/<filename>",
-                endpoint=route_name_orig,
-                view_func=serve_emoji_wrapper,
-                methods=["GET"],
-            )
-
-    FileRoute.__init__ = patched_file_route_init
-except Exception as e:
-    logger.error(f"[meme_manager] Failed to patch FileRoute statically: {e}")
-
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api.message_components import *  # noqa: F403
@@ -320,9 +270,27 @@ class MemeSender(Star, MemeConfigMixin):
             return
         if not hasattr(self, "_session_last_image"):
             self._session_last_image = {}
+
+        # Clean up expired caches (TTL = 300s) to prevent memory accumulation
+        now = time.time()
+        expired_keys = [
+            k
+            for k, v in self._session_last_image.items()
+            if (now - v.get("ts", 0)) > 300
+        ]
+        for k in expired_keys:
+            self._session_last_image.pop(k, None)
+
+        img_bytes = None
+        try:
+            img_bytes = await images[-1].convert_to_base64()
+        except Exception as e:
+            logger.warning(f"[meme_manager] 缓存图片数据失败: {e}")
+
         self._session_last_image[event.unified_msg_origin] = {
             "url": images[-1].url,
-            "ts": time.time(),
+            "bytes": img_bytes,
+            "ts": now,
         }
 
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)

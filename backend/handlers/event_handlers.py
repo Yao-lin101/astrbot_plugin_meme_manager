@@ -58,7 +58,7 @@ class EventHandlers:
         content: bytes,
         file_type: str,
         preference_text: str,
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool | None, str]:
         from .meme_stealer import _check_meme_preference_match
 
         return await _check_meme_preference_match(
