@@ -100,9 +100,16 @@ async def send_meme(
 
     final_meme_file = convert_to_gif(meme_file, sender)
 
+    # Extract description
+    meme_desc = selected_meme.get("description") or ""
+    if not meme_desc and selected_meme.get("emotions"):
+        meme_desc = ", ".join(selected_meme["emotions"])
+
     try:
         img = Image.fromFileSystem(final_meme_file)
         object.__setattr__(img, "sub_type", 1)  # Send as sticker subtype format
+        if meme_desc:
+            object.__setattr__(img, "meme_desc", meme_desc)  # Pass description attribute
 
         await event.send(MessageChain([img]))
 
