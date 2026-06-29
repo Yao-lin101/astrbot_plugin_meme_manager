@@ -104,13 +104,7 @@ async def send_meme(
         img = Image.fromFileSystem(final_meme_file)
         object.__setattr__(img, "sub_type", 1)  # Send as sticker subtype format
 
-        if event.get_platform_name() == "gewechat":
-            await event.send(MessageChain([img]))
-        else:
-            await sender.context.send_message(
-                event.unified_msg_origin,
-                MessageChain([img]),
-            )
+        await event.send(MessageChain([img]))
 
         event.set_extra("meme_tool_executed", True)
 
