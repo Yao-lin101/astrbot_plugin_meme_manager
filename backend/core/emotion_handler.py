@@ -646,7 +646,7 @@ async def search_memes_for_llm(
             valid_emoticons.add(tag)
 
     # 3. Split query by comma and call match_emotions_by_tags
-    query_parts = [q.strip() for q in query.split(",") if q.strip()]
+    query_parts = [q.strip() for q in re.split(r'[,，\s]+', query) if q.strip()]
     matched_emotions = await match_emotions_by_tags(
         sender, event, query_parts, valid_emoticons
     )
