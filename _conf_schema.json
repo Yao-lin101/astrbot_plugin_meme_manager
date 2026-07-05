@@ -129,6 +129,14 @@
         "type": "bool",
         "default": false,
         "hint": "开启后，在流式传输模式下表情图片将作为独立消息发送（流式模式下无法混合图文）"
+      },
+      "meme_summaries": {
+        "description": "表情包外显文字",
+        "type": "list",
+        "default": [
+          "这是一张表情包"
+        ],
+        "hint": "发送表情包时外显的文字提示，将会随机抽取一个发送"
       }
     }
   },

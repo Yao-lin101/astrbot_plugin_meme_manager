@@ -31,6 +31,21 @@ def patch_onebot_serializer():
                     data["subType"] = sub_type
                     data["sub_type"] = sub_type
                     data["subtype"] = sub_type
+
+                    # Add summary/caption external text from configuration only
+                    summary = getattr(segment, "summary", None)
+                    if not summary:
+                        try:
+                            from ...main import _meme_sender_instance
+                            import random
+                            if _meme_sender_instance and hasattr(_meme_sender_instance, "meme_summaries"):
+                                summaries = _meme_sender_instance.meme_summaries
+                                if summaries:
+                                    summary = random.choice(summaries)
+                        except Exception as e:
+                            logger.debug(f"Meme Manager: Failed to retrieve meme summaries: {e}")
+                    if summary:
+                        data["summary"] = summary
             return res
 
         AiocqhttpMessageEvent._from_segment_to_dict = patched_from_segment_to_dict

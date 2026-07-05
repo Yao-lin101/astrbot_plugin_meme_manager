@@ -87,6 +87,10 @@ class MemeConfigMixin:
         return get_config_value(self.config, "streaming_compatibility", False)
 
     @property
+    def meme_summaries(self) -> list[str]:
+        return get_config_value(self.config, "meme_summaries", ["这是一张表情包"])
+
+    @property
     def enable_similarity_dedup(self) -> bool:
         return get_config_value(self.config, "enable_similarity_dedup", True)
 

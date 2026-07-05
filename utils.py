@@ -354,6 +354,7 @@ def get_config_value(config: dict, key: str, default: Any = None) -> Any:
         "mixed_message_probability": "interaction_config",
         "convert_static_to_gif": "interaction_config",
         "streaming_compatibility": "interaction_config",
+        "meme_summaries": "interaction_config",
         # auto_steal_config
         "auto_steal_enabled": "auto_steal_config",
         "auto_steal_probability": "auto_steal_config",
