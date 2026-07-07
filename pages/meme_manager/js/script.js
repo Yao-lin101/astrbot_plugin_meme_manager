@@ -386,6 +386,7 @@ createApp({
       activeDetailEmoji: emojiActions.activeDetailEmoji,
       detailMetadata: emojiActions.detailMetadata,
       detailEmojiDescription: emojiActions.detailEmojiDescription,
+      detailEmojiSendMode: emojiActions.detailEmojiSendMode,
       selectedEmotions: api.selectedEmotions,
       selectedPersonas: emojiActions.selectedPersonas,
       detailDrawerLoading: emojiActions.detailDrawerLoading,

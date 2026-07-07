@@ -119,6 +119,37 @@
   letter-spacing: normal;
 }
 
+.send-mode-segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-app);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.send-mode-option {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.send-mode-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.send-mode-option.active {
+  background: var(--bg-element);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #2563eb;
+  box-shadow: var(--shadow-sm);
+}
+
 .drawer-actions {
   display: flex;
   justify-content: flex-end;

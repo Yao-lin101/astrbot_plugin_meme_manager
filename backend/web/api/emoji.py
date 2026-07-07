@@ -8,6 +8,10 @@ from pathlib import Path
 from quart import current_app, jsonify, request
 
 from ....config import MEMES_DIR
+from ...core.helpers import (
+    MEME_SEND_MODE_STICKER,
+    normalize_meme_send_mode,
+)
 from ...db.database import get_db_conn
 from ...db.models import (
     DuplicateEmojiError,
@@ -223,16 +227,20 @@ async def delete_emoji():
 
 
 async def edit_emoji():
-    """编辑表情包的标签和允许的人格与描述"""
+    """编辑表情包的标签、允许的人格、描述与发送格式"""
     try:
         data = await request.get_json()
         filename = data.get("filename")
         emotions = data.get("emotions")  # List of emotions
         personas = data.get("personas")  # List of persona IDs, or ["*"]
         description = data.get("description")
+        send_mode = data.get("send_mode")
+        normalized_send_mode = normalize_meme_send_mode(send_mode)
 
         if not filename:
             return jsonify({"message": "Filename is required"}), 400
+        if send_mode is not None and normalized_send_mode != send_mode:
+            return jsonify({"message": "Invalid send_mode"}), 400
 
         conn = get_db_conn()
         cursor = conn.cursor()
@@ -240,16 +248,19 @@ async def edit_emoji():
         emotions_str = ",".join(emotions) if isinstance(emotions, list) else emotions
         personas_str = ",".join(personas) if isinstance(personas, list) else personas
 
+        set_parts = ["emotions = ?", "personas = ?"]
+        params = [emotions_str, personas_str]
         if "description" in data:
-            cursor.execute(
-                "UPDATE memes SET emotions = ?, personas = ?, description = ? WHERE filename = ?",
-                (emotions_str, personas_str, description, filename),
-            )
-        else:
-            cursor.execute(
-                "UPDATE memes SET emotions = ?, personas = ? WHERE filename = ?",
-                (emotions_str, personas_str, filename),
-            )
+            set_parts.append("description = ?")
+            params.append(description)
+        if send_mode is not None:
+            set_parts.append("send_mode = ?")
+            params.append(normalized_send_mode)
+        params.append(filename)
+        cursor.execute(
+            f"UPDATE memes SET {', '.join(set_parts)} WHERE filename = ?",
+            tuple(params),
+        )
         conn.commit()
 
         # Check if the meme has emotions. If not, delete it.
@@ -284,14 +295,21 @@ async def get_emoji_info(filename=None):
         conn = get_db_conn()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT emotions, personas, description FROM memes WHERE filename = ?",
+            "SELECT emotions, personas, description, send_mode FROM memes WHERE filename = ?",
             (filename,),
         )
         row = cursor.fetchone()
         conn.close()
 
         if not row:
-            return jsonify({"emotions": [], "personas": [], "description": ""}), 404
+            return jsonify(
+                {
+                    "emotions": [],
+                    "personas": [],
+                    "description": "",
+                    "send_mode": MEME_SEND_MODE_STICKER,
+                }
+            ), 404
 
         emotions = (
             [e.strip() for e in row["emotions"].split(",")] if row["emotions"] else []
@@ -300,6 +318,9 @@ async def get_emoji_info(filename=None):
             [p.strip() for p in row["personas"].split(",")] if row["personas"] else []
         )
         description = row["description"] or ""
+        send_mode = normalize_meme_send_mode(
+            row["send_mode"] if "send_mode" in row.keys() else None
+        )
 
         return jsonify(
             {
@@ -307,6 +328,7 @@ async def get_emoji_info(filename=None):
                 "emotions": emotions,
                 "personas": personas,
                 "description": description,
+                "send_mode": send_mode,
             }
         ), 200
     except Exception as e:

@@ -1,3 +1,5 @@
+import { SEND_MODES, normalizeSendMode } from '../modules/sendModes.js';
+
 export const EmojiDetailModal = {
   name: 'EmojiDetailModal',
   props: {
@@ -12,6 +14,10 @@ export const EmojiDetailModal = {
     description: {
       type: String,
       required: true
+    },
+    sendMode: {
+      type: String,
+      default: SEND_MODES.STICKER
     },
     loading: {
       type: Boolean,
@@ -68,6 +74,7 @@ export const EmojiDetailModal = {
   },
   emits: [
     'update:description',
+    'update:send-mode',
     'update:drawer-tag-search-query',
     'update:selected-provider',
     'close',
@@ -82,7 +89,8 @@ export const EmojiDetailModal = {
   ],
   data() {
     return {
-      isDrawerInputFocused: false
+      isDrawerInputFocused: false,
+      sendModes: SEND_MODES
     };
   },
   computed: {
@@ -92,6 +100,14 @@ export const EmojiDetailModal = {
       },
       set(val) {
         this.$emit('update:description', val);
+      }
+    },
+    localSendMode: {
+      get() {
+        return normalizeSendMode(this.sendMode);
+      },
+      set(val) {
+        this.$emit('update:send-mode', normalizeSendMode(val));
       }
     },
     localSearchQuery: {
@@ -216,6 +232,27 @@ export const EmojiDetailModal = {
                         class="form-control" 
                         style="width: 100%; height: 60px; padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-primary); resize: vertical; font-family: inherit; font-size: 13px;" 
                         placeholder="请输入表情包的简短描述..."></textarea>
+            </div>
+
+            <!-- 发送格式 -->
+            <div class="drawer-section">
+              <label>发送格式</label>
+              <div class="send-mode-segmented" role="group">
+                <button type="button"
+                        class="send-mode-option"
+                        :class="{ active: localSendMode === sendModes.STICKER }"
+                        @click="localSendMode = sendModes.STICKER">
+                  <i class="fas fa-face-smile"></i>
+                  <span>小图表情</span>
+                </button>
+                <button type="button"
+                        class="send-mode-option"
+                        :class="{ active: localSendMode === sendModes.IMAGE }"
+                        @click="localSendMode = sendModes.IMAGE">
+                  <i class="fas fa-image"></i>
+                  <span>普通图片</span>
+                </button>
+              </div>
             </div>
 
             <!-- 人格可用性多选 -->

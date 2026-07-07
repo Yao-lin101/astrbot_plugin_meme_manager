@@ -439,6 +439,7 @@
     <!-- 表情包编辑属性模态框 -->
     <emoji-detail-modal :active-emoji="activeDetailEmoji" :metadata="detailMetadata"
       :description="detailEmojiDescription" @update:description="detailEmojiDescription = $event"
+      :send-mode="detailEmojiSendMode" @update:send-mode="detailEmojiSendMode = $event"
       :loading="detailDrawerLoading" :selected-emotions="selectedEmotions" :selected-personas="selectedPersonas"
       :system-personas="systemPersonas" :drawer-tag-search-query="drawerTagSearchQuery"
       @update:drawer-tag-search-query="drawerTagSearchQuery = $event" :filtered-drawer-tags="filteredDrawerTags"
