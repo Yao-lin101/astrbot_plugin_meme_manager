@@ -5,6 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from ...config import MEMES_DIR, PLUGIN_DATA_DIR
+from ..core.helpers import MEME_SEND_MODE_STICKER, MEME_SEND_MODE_VALUES
 
 logger = logging.getLogger(__name__)
 DB_PATH = PLUGIN_DATA_DIR / "memes.db"
@@ -23,14 +24,15 @@ def init_db():
     PLUGIN_DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("""
+    cursor.execute(f"""
     CREATE TABLE IF NOT EXISTS memes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT UNIQUE,
         emotions TEXT,
         personas TEXT,
         original_hash TEXT,
-        description TEXT
+        description TEXT,
+        send_mode TEXT DEFAULT '{MEME_SEND_MODE_STICKER}'
     )
     """)
     cursor.execute("""
@@ -108,6 +110,19 @@ def init_db():
         logger.info("数据库表中缺少 original_hash 字段，正在进行升级...")
         cursor.execute("ALTER TABLE memes ADD COLUMN original_hash TEXT")
         conn.commit()
+
+    if "send_mode" not in columns:
+        logger.info("数据库表中缺少 send_mode 字段，正在进行升级...")
+        cursor.execute(
+            f"ALTER TABLE memes ADD COLUMN send_mode TEXT DEFAULT '{MEME_SEND_MODE_STICKER}'"
+        )
+        conn.commit()
+
+    cursor.execute(
+        "UPDATE memes SET send_mode = ? WHERE send_mode IS NULL OR send_mode NOT IN (?, ?)",
+        (MEME_SEND_MODE_STICKER, *MEME_SEND_MODE_VALUES),
+    )
+    conn.commit()
 
     # 填充现有的 original_hash (如果为 NULL)
     cursor.execute("SELECT id, filename FROM memes WHERE original_hash IS NULL")

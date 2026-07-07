@@ -8,7 +8,32 @@ from PIL import Image as PILImage
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.message.components import Plain
+from astrbot.core.message.components import Image, Plain
+
+
+MEME_SEND_MODE_STICKER = "sticker"
+MEME_SEND_MODE_IMAGE = "image"
+MEME_SEND_MODE_VALUES = (MEME_SEND_MODE_STICKER, MEME_SEND_MODE_IMAGE)
+VALID_MEME_SEND_MODES = set(MEME_SEND_MODE_VALUES)
+
+
+def normalize_meme_send_mode(send_mode: str | None) -> str:
+    if send_mode in VALID_MEME_SEND_MODES:
+        return send_mode
+    return MEME_SEND_MODE_STICKER
+
+
+def build_meme_image(
+    image_path: str,
+    send_mode: str | None = MEME_SEND_MODE_STICKER,
+    meme_desc: str | None = None,
+) -> Image:
+    img = Image.fromFileSystem(image_path)
+    if normalize_meme_send_mode(send_mode) == MEME_SEND_MODE_STICKER:
+        object.__setattr__(img, "sub_type", 1)
+    if meme_desc:
+        object.__setattr__(img, "meme_desc", meme_desc)
+    return img
 
 
 async def get_persona_id(sender, event: AstrMessageEvent) -> str:

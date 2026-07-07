@@ -3,12 +3,11 @@ import random
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.api.message_components import Image
 from astrbot.core.message.message_event_result import MessageChain
 
 from ...config import MEMES_DIR
 from .emotion_handler import search_memes_for_llm
-from .helpers import convert_to_gif, get_persona_id
+from .helpers import build_meme_image, convert_to_gif, get_persona_id
 
 
 def _build_display_groups(candidates: list[dict]) -> list[dict]:
@@ -106,10 +105,11 @@ async def send_meme(
         meme_desc = ", ".join(selected_meme["emotions"])
 
     try:
-        img = Image.fromFileSystem(final_meme_file)
-        object.__setattr__(img, "sub_type", 1)  # Send as sticker subtype format
-        if meme_desc:
-            object.__setattr__(img, "meme_desc", meme_desc)  # Pass description attribute
+        img = build_meme_image(
+            final_meme_file,
+            selected_meme.get("send_mode"),
+            meme_desc,
+        )
 
         await event.send(MessageChain([img]))
 

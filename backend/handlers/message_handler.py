@@ -5,7 +5,7 @@ import traceback
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.message.components import Image, Plain
+from astrbot.core.message.components import Plain
 from astrbot.core.message.message_event_result import MessageChain, ResultContentType
 
 from ...config import MEMES_DIR
@@ -15,6 +15,7 @@ from ..core.emotion_handler import (
     get_direct_trigger_memes,
 )
 from ..core.helpers import (
+    build_meme_image,
     convert_to_gif,
     get_persona_id,
     merge_components_with_images,
@@ -122,7 +123,8 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                 )
 
                 for meme in selected_memes:
-                    meme_file = os.path.join(MEMES_DIR, meme)
+                    filename = meme["filename"]
+                    meme_file = os.path.join(MEMES_DIR, filename)
                     logger.debug(
                         f"[meme_manager] 随机选中表情图片 (重合度得分): {meme_file}"
                     )
@@ -131,8 +133,10 @@ async def on_decorating_result(sender, event: AstrMessageEvent):
                         final_meme_file = convert_to_gif(meme_file, sender)
                         if final_meme_file != meme_file:
                             temp_files.append(final_meme_file)
-                        img = Image.fromFileSystem(final_meme_file)
-                        object.__setattr__(img, "sub_type", 1)
+                        img = build_meme_image(
+                            final_meme_file,
+                            meme.get("send_mode"),
+                        )
                         emotion_images.append(img)
                     except Exception as e:
                         logger.error(f"添加表情图片失败: {e}")
@@ -267,13 +271,16 @@ async def handle_direct_meme_trigger(sender, event: AstrMessageEvent):
     emotion_images = []
     temp_files = []
     for meme in selected_memes:
-        meme_file = os.path.join(MEMES_DIR, meme)
+        filename = meme["filename"]
+        meme_file = os.path.join(MEMES_DIR, filename)
         try:
             final_meme_file = convert_to_gif(meme_file, sender)
             if final_meme_file != meme_file:
                 temp_files.append(final_meme_file)
-            img = Image.fromFileSystem(final_meme_file)
-            object.__setattr__(img, "sub_type", 1)
+            img = build_meme_image(
+                final_meme_file,
+                meme.get("send_mode"),
+            )
             emotion_images.append(img)
         except Exception as e:
             logger.error(f"[meme_manager] (直接触发) 添加表情图片失败: {e}")

@@ -1,3 +1,5 @@
+import { SEND_MODES, normalizeSendMode } from './sendModes.js';
+
 const { ref, reactive, nextTick } = window.Vue;
 
 export function useEmojiActions({
@@ -24,6 +26,7 @@ export function useEmojiActions({
   const detailMetadata = ref(null);
   const selectedPersonas = ref([]);
   const detailEmojiDescription = ref("");
+  const detailEmojiSendMode = ref(SEND_MODES.STICKER);
   const detailDrawerLoading = ref(false);
   const aiAnalysisLoading = ref(false);
   const aiAnalysisMode = ref('');
@@ -65,6 +68,7 @@ export function useEmojiActions({
       selectedEmotions.value = metadata.emotions || [];
       selectedPersonas.value = metadata.personas || [];
       detailEmojiDescription.value = metadata.description || "";
+      detailEmojiSendMode.value = normalizeSendMode(metadata.send_mode);
     } catch (e) {
       showToast(e.message, "error", "加载表情属性失败");
       closeDetailDrawer();
@@ -79,6 +83,7 @@ export function useEmojiActions({
     selectedEmotions.value = [];
     selectedPersonas.value = [];
     detailEmojiDescription.value = "";
+    detailEmojiSendMode.value = SEND_MODES.STICKER;
     drawerTagSearchQuery.value = "";
   };
 
@@ -171,6 +176,7 @@ export function useEmojiActions({
           emotions: selectedEmotions.value,
           personas: personas,
           description: detailEmojiDescription.value,
+          send_mode: detailEmojiSendMode.value,
         }),
       });
       if (!res.ok) throw new Error("保存属性失败");
@@ -873,6 +879,7 @@ export function useEmojiActions({
     activeDetailEmoji,
     detailMetadata,
     detailEmojiDescription,
+    detailEmojiSendMode,
     selectedEmotions,
     selectedPersonas,
     detailDrawerLoading,

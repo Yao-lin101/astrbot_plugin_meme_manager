@@ -7,15 +7,16 @@ import traceback
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 from astrbot.api.provider import LLMResponse
-from astrbot.core.message.components import Image
 from astrbot.core.message.message_event_result import MessageChain
 
 from ...config import MEMES_DIR
 from ...utils import get_config_value
 from ..db.database import get_db_conn
 from .helpers import (
+    build_meme_image,
     convert_to_gif,
     get_persona_id,
+    normalize_meme_send_mode,
 )
 
 
@@ -56,7 +57,7 @@ async def get_scored_memes_by_emotions(
     if emotion_conditions:
         conditions.append(f"({' OR '.join(emotion_conditions)})")
 
-    sql = f"SELECT filename, emotions, description FROM memes WHERE {' AND '.join(conditions)}"
+    sql = f"SELECT filename, emotions, description, send_mode FROM memes WHERE {' AND '.join(conditions)}"
     cursor.execute(sql, tuple(params))
     rows = cursor.fetchall()
     conn.close()
@@ -142,6 +143,9 @@ async def get_scored_memes_by_emotions(
                         matched_dedicated.append(primary_dedicated)
 
             description = row["description"] if "description" in row.keys() else ""
+            send_mode = normalize_meme_send_mode(
+                row["send_mode"] if "send_mode" in row.keys() else None
+            )
             score = matched_score + dedicated_bonus
 
             if score > 0:
@@ -150,6 +154,7 @@ async def get_scored_memes_by_emotions(
                         "filename": filename,
                         "emotions": meme_emotions,
                         "description": description or "",
+                        "send_mode": send_mode,
                         "score": score,
                         "matched_count": matched_count,
                         "matched_details": matched_details,
@@ -165,8 +170,8 @@ async def get_scored_memes_by_emotions(
 
 async def _select_memes_by_emotions_priority(
     sender, found_emotions: list, persona_id: str
-) -> list[str]:
-    """根据情绪标签的重合度优先级筛选并随机推荐表情包图片。
+) -> list[dict]:
+    """根据情绪标签的重合度优先级筛选并随机推荐表情包记录。
 
     优先返回满足更多情绪标签的表情图片。
     """
@@ -180,10 +185,9 @@ async def _select_memes_by_emotions_priority(
     score_groups = {}
     memes_scoring_details = {}
     for item in scored_memes:
-        filename = item["filename"]
         score = item["score"]
-        score_groups.setdefault(score, []).append(filename)
-        memes_scoring_details[filename] = item
+        score_groups.setdefault(score, []).append(item)
+        memes_scoring_details[item["filename"]] = item
 
     # 从高分到低分依次填充选择池，直至达到 max_emotions_per_message
     selected_memes = []
@@ -193,8 +197,8 @@ async def _select_memes_by_emotions_priority(
     for score in sorted_scores:
         group_memes = score_groups[score]
         random.shuffle(group_memes)
-        for m in group_memes:
-            selected_memes.append(m)
+        for meme in group_memes:
+            selected_memes.append(meme)
             if len(selected_memes) >= max_limit:
                 break
         if len(selected_memes) >= max_limit:
@@ -203,8 +207,8 @@ async def _select_memes_by_emotions_priority(
     # 打印最终选中的表情的标签命中及打分详情
     if selected_memes:
         log_lines = []
-        for filename in selected_memes:
-            detail = memes_scoring_details.get(filename, {})
+        for meme in selected_memes:
+            detail = memes_scoring_details.get(meme["filename"], {})
             desc = detail.get("description", "")
             desc_line = f"    描述: {desc}\n" if desc else ""
             log_lines.append(
@@ -579,15 +583,18 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
         )
 
         for meme in selected_memes:
-            meme_file = os.path.join(MEMES_DIR, meme)
+            filename = meme["filename"]
+            meme_file = os.path.join(MEMES_DIR, filename)
             logger.debug(
                 f"[meme_manager] 流式模式选中表情图片 (重合度得分): {meme_file}"
             )
             final_meme_file = convert_to_gif(meme_file, sender)
 
             try:
-                img = Image.fromFileSystem(final_meme_file)
-                object.__setattr__(img, "sub_type", 1)
+                img = build_meme_image(
+                    final_meme_file,
+                    meme.get("send_mode"),
+                )
                 if event.get_platform_name() == "gewechat":
                     await event.send(MessageChain([img]))
                 else:
@@ -667,6 +674,7 @@ async def search_memes_for_llm(
                 "filename": item["filename"],
                 "emotions": item["emotions"],
                 "description": item["description"],
+                "send_mode": normalize_meme_send_mode(item.get("send_mode")),
                 "score": item["score"],
             }
         )
@@ -813,8 +821,8 @@ async def match_emotions_by_tags(
 
 async def get_direct_trigger_memes(
     sender, event: AstrMessageEvent, raw_tags: list[str]
-) -> list[str]:
-    """根据原始标签，匹配当前会话人格的有效表情，并按重合度优先级选出要发送的表情包文件列表。"""
+) -> list[dict]:
+    """根据原始标签，匹配当前会话人格的有效表情，并按重合度优先级选出要发送的表情包记录。"""
     persona_id = await get_persona_id(sender, event)
 
     conn = get_db_conn()
