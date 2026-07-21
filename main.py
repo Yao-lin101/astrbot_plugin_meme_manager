@@ -377,7 +377,7 @@ class MemeSender(Star, MemeConfigMixin):
         """搜索并发送表情包。
 
         Args:
-            query(string): 检索关键词/表情标签。支持逗号分隔多个标签（如 '猫猫, 得意'）。
+            query(string): 检索关键词/表情标签。支持逗号分隔多个标签（如 '猫猫, 得意'），标签顺序会影响匹配权重，越靠前的标签权重越高、对结果影响越大。
             index(number): 选中的候选表情包序号（从 1 开始）。确定发送特定表情时传入。
         """
         await self.check_and_reload_if_changed()
