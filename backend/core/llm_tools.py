@@ -6,6 +6,7 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
 
 from ...config import MEMES_DIR
+from ...utils import get_config_value
 from .emotion_handler import search_memes_for_llm
 from .helpers import build_meme_image, convert_to_gif, get_persona_id
 
@@ -168,6 +169,11 @@ async def steal_meme(
     # 2. 检查图片来源参数
     url = image_url
     if image_content is None and not url:
+        giftia_mode = bool(
+            get_config_value(sender.config, "enable_giftia_mode", False)
+        )
+        if giftia_mode:
+            return "请在 image_url 参数中指定要收录的图片哈希。"
         return "请在 image_url 参数中指定要收录的图片 URL。"
 
     # 3. 检查分类是否合法（未启用多模态判定且未显式提供分类时报错）
