@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import os
 import re
 import ssl
 import time
@@ -16,9 +17,6 @@ from ...utils import get_config_value
 from ..core.helpers import get_persona_id, get_persona_setting
 from ..db.database import get_db_conn, get_steal_attempt, save_steal_attempt
 from ..db.models import save_and_register_meme
-
-# 会话最近图片缓存的有效期：超过该时长的缓存图片不再用于 steal_meme 回退取图
-LAST_IMAGE_CACHE_TTL = 300
 
 
 async def _check_meme_preference_match(
@@ -164,21 +162,10 @@ def extract_event_image_url(event: AstrMessageEvent) -> str | None:
     return None
 
 
-def get_cached_image_url(sender, event: AstrMessageEvent) -> str | None:
-    """回退取图：返回本会话最近收到且仍在有效期内的图片 URL。"""
-    cache = getattr(sender, "_session_last_image", {}).get(event.unified_msg_origin)
-    if cache and (time.time() - cache.get("ts", 0)) <= LAST_IMAGE_CACHE_TTL:
-        logger.info(
-            "[meme_manager] steal_meme 当前消息无图，回退使用本会话最近缓存的图片。"
-        )
-        return cache.get("url")
-    return None
-
-
 async def download_image(
     url: str,
 ) -> tuple[bytes | None, str | None, str | None, str | None]:
-    """下载图片并检测类型、计算哈希。
+    """下载或从本地/Giftia缓存读取图片，并检测类型、计算哈希。
 
     Returns:
         (content|None, file_type|None, raw_hash|None, error_message|None)
@@ -190,13 +177,22 @@ async def download_image(
     try:
         if not url:
             return None, None, None, "下载图片失败：URL 为空。"
-        local_path = None
-        if url.startswith("file:///"):
-            local_path = url.replace("file:///", "")
-        elif not (url.startswith("http://") or url.startswith("https://")):
-            local_path = url
 
-        if local_path is not None:
+        content = None
+        clean_url = url.strip()
+        if clean_url.startswith("giftia://"):
+            clean_url = clean_url[9:]
+
+        is_http = clean_url.startswith("http://") or clean_url.startswith("https://")
+
+        # 1. 尝试作为本地路径读取
+        if not is_http:
+            local_path = clean_url
+            if local_path.startswith("file:///"):
+                local_path = local_path.replace("file:///", "")
+            elif local_path.startswith("file://"):
+                local_path = local_path.replace("file://", "")
+
             if local_path.startswith("/AstrBot/data"):
                 from pathlib import Path
 
@@ -204,22 +200,41 @@ async def download_image(
 
                 rest = local_path[len("/AstrBot/data") :].lstrip("/")
                 local_path = str(Path(get_astrbot_data_path()) / rest)
-            with open(local_path, "rb") as f:
-                content = f.read()
-        elif "multimedia.nt.qq.com.cn" in url:
-            insecure_url = url.replace("https://", "http://", 1)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(insecure_url) as resp:
-                    content = await resp.read()
-        else:
-            async with aiohttp.ClientSession(
-                connector=aiohttp.TCPConnector(ssl=ssl_context)
-            ) as session:
-                async with session.get(url) as resp:
-                    content = await resp.read()
+
+            if os.path.exists(local_path) and os.path.isfile(local_path):
+                with open(local_path, "rb") as f:
+                    content = f.read()
+            else:
+                # 2. 尝试从 Giftia 缓存 (media_cache) 解析图片哈希
+                try:
+                    from astrbot.core.star.star_tools import StarTools
+
+                    giftia_cache_file = (
+                        StarTools.get_data_dir("astrbot_plugin_giftia")
+                        / "media_cache"
+                        / clean_url
+                    )
+                    if giftia_cache_file.exists() and giftia_cache_file.is_file():
+                        content = giftia_cache_file.read_bytes()
+                except Exception as e:
+                    logger.debug(f"[meme_manager] 尝试读取 Giftia 缓存失败: {e}")
+
+        # 3. HTTP / HTTPS 下载
+        if content is None and is_http:
+            if "multimedia.nt.qq.com.cn" in clean_url:
+                insecure_url = clean_url.replace("https://", "http://", 1)
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(insecure_url) as resp:
+                        content = await resp.read()
+            else:
+                async with aiohttp.ClientSession(
+                    connector=aiohttp.TCPConnector(ssl=ssl_context)
+                ) as session:
+                    async with session.get(clean_url) as resp:
+                        content = await resp.read()
 
         if not content:
-            return None, None, None, "下载图片失败，文件内容为空。"
+            return None, None, None, "下载/获取图片失败，图片内容为空或本地缓存未命中。"
 
         # 检测图片类型
         try:

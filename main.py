@@ -121,6 +121,82 @@ class MemeSender(Star, MemeConfigMixin):
         # Start background tag embedding and similarity feature synchronization
         asyncio.create_task(sync_tag_embeddings(self))
         asyncio.create_task(sync_similarity_features(self))
+        self._apply_llm_tool_config()
+
+    @filter.on_plugin_loaded()
+    async def on_loaded(self, _):
+        self._apply_llm_tool_config()
+
+    def _apply_llm_tool_config(self):
+        """根据配置动态调整 LLM 工具描述（支持 Giftia 模式简略描述）。"""
+        from .utils import get_config_value
+
+        tool_name = "steal_meme"
+        giftia_mode = bool(get_config_value(self.config, "enable_giftia_mode", False))
+
+        image_url_desc = (
+            "Image hash."
+            if giftia_mode
+            else "要收录的图片 HTTP/HTTPS URL 或本地文件路径。"
+        )
+        categories_desc = "表情分类列表（如 ['开心']）。仅在用户明确指定了分类时传入，否则不传。"
+        category_desc = "表情分类。单标签兼容，仅在用户明确指定了分类时传入，否则不传。"
+        description_desc = "表情包画面的简洁描述。仅在用户明确指定了描述时传入，否则不传。"
+        tool_desc = "保存并收录聊天中的图片/表情包到表情包库中。"
+
+        try:
+            tool_managers = []
+            try:
+                from astrbot.core.provider.register import llm_tools
+
+                if llm_tools:
+                    tool_managers.append(llm_tools)
+            except Exception:
+                pass
+            if hasattr(self.context, "provider_manager") and hasattr(
+                self.context.provider_manager, "llm_tools"
+            ):
+                if self.context.provider_manager.llm_tools not in tool_managers:
+                    tool_managers.append(self.context.provider_manager.llm_tools)
+
+            tool_mgr_ctx = getattr(self.context, "get_llm_tool_manager", None)
+            if callable(tool_mgr_ctx):
+                ctx_mgr = tool_mgr_ctx()
+                if ctx_mgr and ctx_mgr not in tool_managers:
+                    tool_managers.append(ctx_mgr)
+
+            for mgr in tool_managers:
+                if hasattr(mgr, "func_list"):
+                    for ft in mgr.func_list:
+                        if getattr(ft, "name", None) == tool_name:
+                            ft.description = tool_desc
+                            props = getattr(ft, "parameters", {}).get("properties", {})
+                            if "image_url" in props:
+                                props["image_url"]["description"] = image_url_desc
+                            if "categories" in props:
+                                props["categories"]["description"] = categories_desc
+                            if "category" in props:
+                                props["category"]["description"] = category_desc
+                            if "description" in props:
+                                props["description"]["description"] = description_desc
+
+            # 更新 WebUI 仪表盘 display 描述 (star_handlers_registry)
+            from astrbot.core.star.star_handler import star_handlers_registry
+
+            full_webui_desc = (
+                f"{tool_desc}  Args: "
+                f"image_url(string): {image_url_desc}  "
+                f"categories(list): {categories_desc}  "
+                f"category(string): {category_desc}  "
+                f"description(string): {description_desc}"
+            )
+
+            for md in star_handlers_registry:
+                if md.handler_name == tool_name:
+                    md.desc = full_webui_desc
+                    break
+        except Exception as e:
+            logger.warning(f"[meme_manager] 动态更新 LLM 工具描述失败: {e}")
 
     @property
     def category_mapping(self) -> dict[str, str]:
@@ -157,6 +233,7 @@ class MemeSender(Star, MemeConfigMixin):
                     self.category_manager._load_categories()
                 )
                 self._reload_personas()
+                self._apply_llm_tool_config()
         except Exception as e:
             logger.error(f"[meme_manager] 检查自动重载失败: {e}")
 
@@ -262,37 +339,6 @@ class MemeSender(Star, MemeConfigMixin):
         async for res in EventHandlers.handle_direct_meme_trigger(self, event):
             yield res
 
-    @filter.event_message_type(EventMessageType.ALL)
-    async def cache_last_image(self, event: AstrMessageEvent):
-        """缓存各会话最近收到的图片，供 steal_meme 在当前消息/引用均无图时回退取图。"""
-        images = [c for c in event.message_obj.message if isinstance(c, Image)]
-        if not images:
-            return
-        if not hasattr(self, "_session_last_image"):
-            self._session_last_image = {}
-
-        # Clean up expired caches (TTL = 300s) to prevent memory accumulation
-        now = time.time()
-        expired_keys = [
-            k
-            for k, v in self._session_last_image.items()
-            if (now - v.get("ts", 0)) > 300
-        ]
-        for k in expired_keys:
-            self._session_last_image.pop(k, None)
-
-        img_bytes = None
-        try:
-            img_bytes = await images[-1].convert_to_base64()
-        except Exception as e:
-            logger.warning(f"[meme_manager] 缓存图片数据失败: {e}")
-
-        self._session_last_image[event.unified_msg_origin] = {
-            "url": images[-1].url,
-            "bytes": img_bytes,
-            "ts": now,
-        }
-
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def handle_group_message(self, event: AstrMessageEvent):
         """处理群聊消息以实现暗中自动偷表情包"""
@@ -349,13 +395,15 @@ class MemeSender(Star, MemeConfigMixin):
     async def steal_meme(
         self,
         event: AstrMessageEvent,
+        image_url: str | None = None,
         categories: list[str] | None = None,
         category: str | None = None,
         description: str | None = None,
     ):
-        """保存并收录聊天中的表情包到表情包库中。
+        """保存并收录聊天中的图片/表情包到表情包库中。
 
         Args:
+            image_url(string): 要收录的图片 HTTP/HTTPS URL 或本地文件路径。
             categories(list): 表情分类列表（如 ['开心']）。仅在用户明确指定了分类时传入，否则不传。
             category(string): 表情分类。单标签兼容，仅在用户明确指定了分类时传入，否则不传。
             description(string): 表情包画面的简洁描述。仅在用户明确指定了描述时传入，否则不传。
@@ -364,7 +412,11 @@ class MemeSender(Star, MemeConfigMixin):
         if not categories and category:
             categories = [category]
         return await EventHandlers.steal_meme(
-            self, event, categories, description=description
+            self,
+            event,
+            image_url=image_url,
+            categories=categories,
+            description=description,
         )
 
     @llm_tool(name="send_meme")

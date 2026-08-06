@@ -69,12 +69,15 @@ class EventHandlers:
     async def steal_meme(
         sender,
         event: AstrMessageEvent,
-        categories: list[str],
+        image_url: str | None = None,
+        categories: list[str] | None = None,
         description: str | None = None,
     ):
         from ..core.llm_tools import steal_meme
 
-        return await steal_meme(sender, event, categories, description=description)
+        return await steal_meme(
+            sender, event, image_url=image_url, categories=categories, description=description
+        )
 
     @staticmethod
     async def auto_steal_meme(sender, event: AstrMessageEvent):

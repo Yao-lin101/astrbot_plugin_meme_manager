@@ -320,6 +320,12 @@
     ],
     "hint": "选择表情包发送模式：'tag' (情绪标签模式), 'tool' (大模型发送工具), 'hybrid' (混合模式：平时使用情绪标签，特殊场景使用工具)"
   },
+  "enable_giftia_mode": {
+    "description": "Giftia 兼容模式",
+    "type": "bool",
+    "default": false,
+    "hint": "Giftia 兼容模式开关。开启后 steal_meme 工具的 image_url 描述自动简化为 'Image hash.'；关闭时为完整描述。"
+  },
   "persona_settings": {
     "description": "人格专属表情包偏好配置",
     "type": "text",
