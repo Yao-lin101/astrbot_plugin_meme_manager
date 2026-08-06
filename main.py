@@ -97,6 +97,7 @@ class MemeSender(Star, MemeConfigMixin):
         self.upload_states = {}
         self.pending_images = {}
         self.auto_steal_semaphore = asyncio.Semaphore(2)
+        self._applied_giftia_mode = None
 
         # Register all Web APIs and serve static endpoint
         register_apis(self)
@@ -125,14 +126,24 @@ class MemeSender(Star, MemeConfigMixin):
 
     @filter.on_plugin_loaded()
     async def on_loaded(self, _):
-        self._apply_llm_tool_config()
+        self._apply_llm_tool_config(force=True)
 
-    def _apply_llm_tool_config(self):
-        """根据配置动态调整 LLM 工具描述（支持 Giftia 模式简略描述）。"""
+    def _apply_llm_tool_config(self, force: bool = False):
+        """根据配置动态调整 LLM 工具描述（支持 Giftia 模式简略描述）。
+
+        Args:
+            force (bool): 是否强制刷新工具注册表描述。
+                - 默认为 False 时，若 enable_giftia_mode 配置状态与已应用状态一致，将直接短路跳过后续昂贵的注册表遍历与描述刷写；
+                - 当插件生命周期钩子（如 on_loaded）触发或需要强制覆盖注册表时，应传入 force=True。
+        """
         from .utils import get_config_value
 
         tool_name = "steal_meme"
         giftia_mode = bool(get_config_value(self.config, "enable_giftia_mode", False))
+
+        if not force and self._applied_giftia_mode == giftia_mode:
+            return
+        self._applied_giftia_mode = giftia_mode
 
         image_url_desc = (
             "Image hash."
