@@ -169,10 +169,9 @@ async def steal_meme(
     # 2. 检查图片来源参数
     url = image_url
     if image_content is None and not url:
-        giftia_mode = bool(
-            get_config_value(sender.config, "enable_giftia_mode", False)
-        )
-        if giftia_mode:
+        from ...utils import is_giftia_mode_enabled
+
+        if is_giftia_mode_enabled(sender.config):
             return "请在 image_url 参数中指定要收录的图片哈希。"
         return "请在 image_url 参数中指定要收录的图片 URL。"
 

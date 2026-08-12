@@ -4,12 +4,6 @@ from astrbot.api.provider import LLMResponse
 
 class EventHandlers:
     @staticmethod
-    async def _get_persona_id(sender, event: AstrMessageEvent) -> str:
-        from ..core.helpers import get_persona_id
-
-        return await get_persona_id(sender, event)
-
-    @staticmethod
     async def _select_memes_by_emotions_priority(
         sender, found_emotions: list[str], persona_id: str
     ) -> list[str]:

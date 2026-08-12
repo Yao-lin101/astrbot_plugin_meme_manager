@@ -48,6 +48,7 @@
     "enable": true,
     "default_provider_id": "",
     "fallback_chat_models": [],
+    "request_max_retries": 5,
     "default_image_caption_provider_id": "",
     "image_caption_prompt": "Please describe the image using Chinese.",
     "provider_pool": [
@@ -61,6 +62,7 @@
     "websearch_brave_key": [],
     "websearch_baidu_app_builder_key": "",
     "websearch_firecrawl_key": [],
+    "websearch_exa_key": [],
     "web_search_link": false,
     "display_reasoning_text": false,
     "identifier": false,
@@ -73,7 +75,7 @@
     "prompt_prefix": "{{prompt}}",
     "context_limit_reached_strategy": "truncate_by_turns",
     "llm_compress_instruction": "Based on our full conversation history, produce a concise summary of key takeaways and/or project progress.\n1. Systematically cover all core topics discussed and the final conclusion/outcome for each; clearly highlight the latest primary focus.\n2. If any tools were used, summarize tool usage (total call count) and extract the most valuable insights from tool outputs.\n3. If there was an initial user goal, state it first and describe the current progress/status.\n4. Write the summary in the user's language.\n",
-    "llm_compress_keep_recent": 6,
+    "llm_compress_keep_recent_ratio": 0.15,
     "llm_compress_provider_id": "",
     "max_context_length": -1,
     "dequeue_context_length": 1,
@@ -156,6 +158,8 @@
     "group_message_max_cnt": 300,
     "image_caption": false,
     "image_caption_provider_id": "",
+    "group_message_history_enable": false,
+    "group_message_history_max_cnt": 700,
     "active_reply": {
       "enable": false,
       "method": "possibility_reply",
@@ -196,14 +200,25 @@
   "dashboard": {
     "enable": true,
     "username": "astrbot",
-    "password": "1c32b3286eeef2532a56b938105a4c20",
-    "pbkdf2_password": "pbkdf2_sha256$600000$f7e547e1dd6f29c2d361bd6e77121bd5$4f81f8e9046f0b145e2285d2abf1159fa8787f859de9f12c5e7eecee8941eb34",
+    "password": "6f43bb618bd2005831eb0441df740c7c",
+    "pbkdf2_password": "pbkdf2_sha256$600000$da9ad34b5ac45adfa4ffc417d892ea46$60389525446a1b198e941888815f644f2a57add401c9152a42bc3c90c3447783",
     "password_storage_upgraded": true,
     "password_change_required": true,
     "jwt_secret": "",
     "host": "0.0.0.0",
     "port": 6185,
     "disable_access_log": true,
+    "trust_proxy_headers": false,
+    "auth_rate_limit": {
+      "enable": true,
+      "average_interval": 1.0,
+      "max_burst": 3
+    },
+    "totp": {
+      "enable": false,
+      "secret": "",
+      "recovery_code_hash": ""
+    },
     "ssl": {
       "enable": false,
       "cert_file": "",
