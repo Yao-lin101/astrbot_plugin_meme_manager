@@ -36,8 +36,185 @@ def build_meme_image(
     return img
 
 
+import weakref
+
+# 弱引用缓存字典：以 sender 为键，存入 Giftia 实例或 False (Sentinel 哨兵)
+# 优势：不给 sender 对象动态添加私有属性，且 sender 销毁时缓存自动清空，无内存泄漏
+_GIFTIA_STAR_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _get_giftia_star(sender):
+    """高效查找并缓存已实例化的 Giftia 插件对象（使用 WeakKeyDictionary 弱引用缓存，适配 AstrBot StarMetadata）"""
+    try:
+        if sender in _GIFTIA_STAR_CACHE:
+            cached = _GIFTIA_STAR_CACHE[sender]
+            return cached if cached is not False else None
+    except Exception:
+        pass
+
+    giftia_star = None
+
+    # 1. 优先通过 AstrBot Context 官方 API (get_all_stars / get_registered_star) 遍历 StarMetadata
+    if hasattr(sender.context, "get_all_stars"):
+        try:
+            for meta in sender.context.get_all_stars():
+                cls_obj = getattr(meta, "star_cls", None)
+                if cls_obj and hasattr(cls_obj, "bot_map") and hasattr(cls_obj, "adapter_id_map"):
+                    giftia_star = cls_obj
+                    break
+                # 兼容通过名称匹配
+                name_str = str(getattr(meta, "name", "") or "").lower()
+                dir_str = str(getattr(meta, "root_dir_name", "") or "").lower()
+                if ("giftia" in name_str or "giftia" in dir_str) and cls_obj:
+                    if hasattr(cls_obj, "bot_map"):
+                        giftia_star = cls_obj
+                        break
+        except Exception as e:
+            logger.debug(f"[meme_manager] 尝试通过 context.get_all_stars 获取 Giftia 实例异常: {e}")
+
+    # 2. 从 AstrBot 官方核心全局星图注册表 (star_registry) 检索 StarMetadata.star_cls
+    if not giftia_star:
+        try:
+            from astrbot.core.star.star import star_registry
+
+            for meta in star_registry:
+                cls_obj = getattr(meta, "star_cls", None)
+                if cls_obj and hasattr(cls_obj, "bot_map") and hasattr(cls_obj, "adapter_id_map"):
+                    giftia_star = cls_obj
+                    break
+        except Exception as e:
+            logger.debug(f"[meme_manager] 尝试从 astrbot.core.star.star 检索 Giftia 实例异常: {e}")
+
+    # 3. 从 context 上的其他插件管理器/字典属性遍历降级匹配
+    if not giftia_star:
+        for attr in ("star_manager", "plugin_manager", "_stars", "stars", "star_map"):
+            mgr = getattr(sender.context, attr, None)
+            if not mgr:
+                continue
+
+            stars_iterable = (
+                mgr.values() if isinstance(mgr, dict)
+                else getattr(mgr, "stars", getattr(mgr, "_stars", getattr(mgr, "star_registry", [])))
+            )
+            try:
+                for item in stars_iterable:
+                    cls_obj = getattr(item, "star_cls", item)
+                    if cls_obj and hasattr(cls_obj, "bot_map") and hasattr(cls_obj, "adapter_id_map"):
+                        giftia_star = cls_obj
+                        break
+            except Exception:
+                pass
+            if giftia_star:
+                break
+
+    # 4. 存入 WeakKeyDictionary 缓存 (未找到存入 False 作哨兵)
+    try:
+        _GIFTIA_STAR_CACHE[sender] = giftia_star if giftia_star is not None else False
+    except Exception:
+        pass
+
+    return giftia_star
+
+
+def _match_giftia_bot_name(giftia_star, event: AstrMessageEvent) -> str | None:
+    """从 Giftia 实例的 adapter_map 和 bot_map 中精准匹配当前事件对应的 Bot 名称"""
+    platform_id = getattr(getattr(event, "platform_meta", None), "id", None)
+    self_id = str(event.get_self_id()) if hasattr(event, "get_self_id") else ""
+    umo = getattr(event, "unified_msg_origin", None)
+    umo_prefix = str(umo).split(":")[0] if umo else ""
+
+    adapter_map = getattr(giftia_star, "adapter_id_map", {})
+    bot_map = getattr(giftia_star, "bot_map", {})
+
+    # 优先级 1: adapter_map 精确查找
+    if platform_id and platform_id in adapter_map:
+        return adapter_map[platform_id]
+    if self_id and self_id in adapter_map:
+        return adapter_map[self_id]
+    if umo_prefix and umo_prefix in adapter_map:
+        return adapter_map[umo_prefix]
+
+    # 优先级 2: bot_name 与 platform_id / umo_prefix / self_id 精确相等 (忽略大小写)
+    for b_name in bot_map.keys():
+        b_lower = b_name.lower()
+        if (
+            (platform_id and b_lower == platform_id.lower())
+            or (umo_prefix and b_lower == umo_prefix.lower())
+            or (self_id and b_lower == self_id.lower())
+        ):
+            return b_name
+
+    # 优先级 3: adapter_ids 列表中存在精确匹配项
+    for b_name, b_conf in bot_map.items():
+        a_ids = [str(x).lower() for x in b_conf.get("adapter_ids", []) if x]
+        if (
+            (platform_id and platform_id.lower() in a_ids)
+            or (self_id and self_id.lower() in a_ids)
+            or (umo_prefix and umo_prefix.lower() in a_ids)
+        ):
+            return b_name
+
+    return None
+
+
+def _resolve_giftia_persona_id(sender, event: AstrMessageEvent) -> str | None:
+    """在 Giftia 模式下从事件或 Giftia Bot 映射解析 Persona ID"""
+    # 1. 优先检查 event 中是否带有显式设置的人格 ID
+    if hasattr(event, "get_extra"):
+        extra_pid = event.get_extra("persona_id") or event.get_extra("giftia_persona_id")
+        if extra_pid:
+            logger.debug(f"[meme_manager] [Giftia模式] 从 event.get_extra 解析到 Persona ID: '{extra_pid}'")
+            return str(extra_pid)
+    if hasattr(event, "persona_id") and getattr(event, "persona_id", None):
+        extra_pid = getattr(event, "persona_id")
+        logger.debug(f"[meme_manager] [Giftia模式] 从 event.persona_id 解析到 Persona ID: '{extra_pid}'")
+        return str(extra_pid)
+
+    # 2. 从 Giftia 插件的平台适配器映射中自动精准匹配当前机器人的人格 ID
+    try:
+        giftia_star = _get_giftia_star(sender)
+        if giftia_star:
+            matched_bot_name = _match_giftia_bot_name(giftia_star, event)
+            bot_map = getattr(giftia_star, "bot_map", {})
+
+            if matched_bot_name and matched_bot_name in bot_map:
+                bot_conf = bot_map[matched_bot_name]
+                p_id = bot_conf.get("llm_reply_conf", {}).get("persona_id")
+                if p_id:
+                    logger.debug(
+                        f"[meme_manager] [Giftia模式] 通过 Bot [{matched_bot_name}] 成功匹配 Persona ID: '{p_id}'"
+                    )
+                    return str(p_id)
+                else:
+                    logger.warning(
+                        f"[meme_manager] [Giftia模式] 匹配到 Bot [{matched_bot_name}]，但该 Bot 未在 Giftia 配置 llm_reply_conf.persona_id"
+                    )
+            else:
+                platform_id = getattr(getattr(event, "platform_meta", None), "id", None)
+                self_id = str(event.get_self_id()) if hasattr(event, "get_self_id") else ""
+                logger.warning(
+                    f"[meme_manager] [Giftia模式] 未能从 Giftia 映射中找到对应的 Bot "
+                    f"(platform_id='{platform_id}', self_id='{self_id}')"
+                )
+        else:
+            logger.warning("[meme_manager] [Giftia模式] 未检测到已实例化的 Giftia 插件 (astrbot_plugin_giftia)")
+    except Exception as e:
+        logger.warning(f"[meme_manager] [Giftia模式] 尝试从 Giftia 获取 Persona ID 发生异常: {e}", exc_info=True)
+
+    return None
+
+
 async def get_persona_id(sender, event: AstrMessageEvent) -> str:
     """获取当前会话实际生效的人格 ID"""
+    from ...utils import is_giftia_mode_enabled
+
+    if is_giftia_mode_enabled(sender.config):
+        p_id = _resolve_giftia_persona_id(sender, event)
+        if p_id:
+            return p_id
+    else:
+        logger.debug("[meme_manager] Giftia 兼容模式未开启 (enable_giftia_mode=False)，使用 AstrBot 原生人格解析")
+
     conversation_persona_id = None
     try:
         curr_cid = await sender.context.conversation_manager.get_curr_conversation_id(

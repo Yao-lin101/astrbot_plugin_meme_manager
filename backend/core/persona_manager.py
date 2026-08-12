@@ -22,6 +22,16 @@ def reload_personas(sender):
             )
             sender.persona_prompts_backup[name] = cleaned_prompt.strip()
 
+    from ...utils import is_giftia_mode_enabled
+
+    if is_giftia_mode_enabled(sender.config):
+        # Giftia 模式下保持人格系统提示词完全干净，恢复备份的原生 prompt，不注入任何表情包指令
+        for persona in personas:
+            name = persona.get("name") or ""
+            if name in sender.persona_prompts_backup:
+                persona["prompt"] = sender.persona_prompts_backup[name]
+        return
+
     format_instruction = (
         "\n\n<meme_formatting_instructions>\n"
         "【输出格式要求（极其重要）】:\n"

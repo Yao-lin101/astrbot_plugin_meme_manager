@@ -136,10 +136,10 @@ class MemeSender(Star, MemeConfigMixin):
                 - 默认为 False 时，若 enable_giftia_mode 配置状态与已应用状态一致，将直接短路跳过后续昂贵的注册表遍历与描述刷写；
                 - 当插件生命周期钩子（如 on_loaded）触发或需要强制覆盖注册表时，应传入 force=True。
         """
-        from .utils import get_config_value
+        from .utils import is_giftia_mode_enabled
 
         tool_name = "steal_meme"
-        giftia_mode = bool(get_config_value(self.config, "enable_giftia_mode", False))
+        giftia_mode = is_giftia_mode_enabled(self.config)
 
         if not force and self._applied_giftia_mode == giftia_mode:
             return

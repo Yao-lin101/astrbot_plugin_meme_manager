@@ -390,3 +390,9 @@ def get_config_value(config: dict, key: str, default: Any = None) -> Any:
             return parent_val[key]
 
     return default
+
+
+def is_giftia_mode_enabled(config: dict) -> bool:
+    """快捷获取当前是否启用了 Giftia 兼容模式"""
+    return bool(get_config_value(config, "enable_giftia_mode", False))
+
