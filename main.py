@@ -448,6 +448,72 @@ class MemeSender(Star, MemeConfigMixin):
 
         return await send_meme(self, event, query, index)
 
+    async def get_candidate_memes(
+        self,
+        persona_id: str = "default",
+        query: str = "",
+        count: int = 5,
+        event: AstrMessageEvent = None,
+    ) -> list[dict]:
+        """供 Giftia 等其他 Agent/插件调用的统一接口：获取指定人设与查询词匹配打分后的表情包候选列表"""
+        await self.check_and_reload_if_changed()
+        from .backend.core.emotion_handler import get_candidate_memes_for_plugin
+
+        return await get_candidate_memes_for_plugin(
+            sender=self,
+            persona_id=persona_id,
+            query=query,
+            count=count,
+            event=event,
+        )
+
+    def get_meme_by_id(self, meme_id: int | str) -> dict | None:
+        """通过自增 ID 查询单条表情包数据"""
+        from .backend.db.database import get_db_conn
+
+        conn = get_db_conn()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, filename, emotions, personas, description, send_mode FROM memes WHERE id = ?",
+            (int(meme_id),),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "filename": row["filename"],
+            "emotions": row["emotions"] or "",
+            "description": row["description"] or "",
+            "personas": row["personas"] or "*",
+            "send_mode": row["send_mode"] or "sticker",
+        }
+
+    def build_meme_component(self, meme_id_or_dict) -> Image | None:
+        """构造 Image 消息组件并自动设置 send_mode 和 meme_desc"""
+        if isinstance(meme_id_or_dict, (int, str)) and str(meme_id_or_dict).isdigit():
+            meme = self.get_meme_by_id(int(meme_id_or_dict))
+        elif isinstance(meme_id_or_dict, dict):
+            meme = meme_id_or_dict
+        else:
+            return None
+
+        if not meme:
+            return None
+
+        file_path = os.path.join(MEMES_DIR, meme["filename"])
+        if not os.path.isfile(file_path):
+            return None
+
+        comp = Image.fromFileSystem(file_path)
+        send_mode = meme.get("send_mode") or "sticker"
+        if send_mode == "sticker":
+            comp.sub_type = 1
+        desc = meme.get("description") or meme.get("emotions") or "表情包"
+        setattr(comp, "meme_desc", desc)
+        return comp
+
     async def terminate(self):
         """清理资源"""
         personas = self.context.provider_manager.personas

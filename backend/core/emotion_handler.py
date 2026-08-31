@@ -57,7 +57,7 @@ async def get_scored_memes_by_emotions(
     if emotion_conditions:
         conditions.append(f"({' OR '.join(emotion_conditions)})")
 
-    sql = f"SELECT filename, emotions, description, send_mode FROM memes WHERE {' AND '.join(conditions)}"
+    sql = f"SELECT id, filename, emotions, description, send_mode FROM memes WHERE {' AND '.join(conditions)}"
     cursor.execute(sql, tuple(params))
     rows = cursor.fetchall()
     conn.close()
@@ -151,6 +151,7 @@ async def get_scored_memes_by_emotions(
             if score > 0:
                 valid_memes.append(
                     {
+                        "id": row["id"] if "id" in row.keys() else None,
                         "filename": filename,
                         "emotions": meme_emotions,
                         "description": description or "",
@@ -618,7 +619,7 @@ async def _send_memes_streaming(sender, event: AstrMessageEvent):
 
 
 async def search_memes_for_llm(
-    sender, query: str, persona_id: str, event: AstrMessageEvent = None
+    sender, query: str, persona_id: str, event: AstrMessageEvent = None, limit: int = 8
 ) -> list[dict]:
     """为 LLM 搜索表情包。使用精确匹配与向量相似度检索，并采用与情绪表情匹配一致的评分规则。"""
     query = query.strip()
@@ -666,11 +667,12 @@ async def search_memes_for_llm(
         sender, matched_emotions, persona_id
     )
 
-    # Return the top 8 matched memes (required format: filename, emotions, description, score)
+    # Return the top matched memes (required format: id, filename, emotions, description, score)
     results = []
-    for item in scored_memes[:8]:
+    for item in scored_memes[:limit]:
         results.append(
             {
+                "id": item.get("id"),
                 "filename": item["filename"],
                 "emotions": item["emotions"],
                 "description": item["description"],
@@ -679,6 +681,66 @@ async def search_memes_for_llm(
             }
         )
     return results
+
+
+async def get_candidate_memes_for_plugin(
+    sender,
+    persona_id: str = "default",
+    query: str = "",
+    count: int = 5,
+    event: AstrMessageEvent = None,
+) -> list[dict]:
+    """供外部插件 (如 Giftia) 获取结构化表情包候选列表的统一公共入口。
+    优先执行基于标签/向量的多通道评分检索；若无匹配或 query 为空则返回该人设下的表情包。
+    """
+    if count <= 0:
+        return []
+
+    if query and query.strip():
+        results = await search_memes_for_llm(
+            sender=sender,
+            query=query,
+            persona_id=persona_id,
+            event=event,
+            limit=count,
+        )
+        if results:
+            return results
+
+    # 兜底：返回当前人设下的表情包
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, filename, emotions, description, send_mode FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
+        (f"%,{persona_id},%",),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    candidates = []
+    for row in rows:
+        fn = str(row["filename"])
+        full_path = os.path.join(MEMES_DIR, fn)
+        if os.path.exists(full_path):
+            emotions_list = (
+                [e.strip() for e in row["emotions"].split(",") if e.strip()]
+                if row["emotions"]
+                else []
+            )
+            candidates.append(
+                {
+                    "id": row["id"],
+                    "filename": fn,
+                    "emotions": emotions_list,
+                    "description": row["description"] or "",
+                    "send_mode": normalize_meme_send_mode(row["send_mode"]),
+                    "score": 0,
+                }
+            )
+
+    import random
+    random.shuffle(candidates)
+    return candidates[:count]
 
 
 async def match_emotions_by_tags(
