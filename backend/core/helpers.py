@@ -31,6 +31,8 @@ def build_meme_image(
     img = Image.fromFileSystem(image_path)
     if normalize_meme_send_mode(send_mode) == MEME_SEND_MODE_STICKER:
         object.__setattr__(img, "sub_type", 1)
+    else:
+        object.__setattr__(img, "sub_type", 0)
     if meme_desc:
         object.__setattr__(img, "meme_desc", meme_desc)
     return img
