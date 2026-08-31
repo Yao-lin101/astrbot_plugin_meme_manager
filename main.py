@@ -469,13 +469,18 @@ class MemeSender(Star, MemeConfigMixin):
 
     def get_meme_by_id(self, meme_id: int | str) -> dict | None:
         """通过自增 ID 查询单条表情包数据"""
+        try:
+            target_id = int(meme_id)
+        except (TypeError, ValueError):
+            return None
+
         from .backend.db.database import get_db_conn
 
         conn = get_db_conn()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id, filename, emotions, personas, description, send_mode FROM memes WHERE id = ?",
-            (int(meme_id),),
+            (target_id,),
         )
         row = cursor.fetchone()
         conn.close()
@@ -492,8 +497,8 @@ class MemeSender(Star, MemeConfigMixin):
 
     def build_meme_component(self, meme_id_or_dict) -> Image | None:
         """构造 Image 消息组件并自动设置 send_mode 和 meme_desc"""
-        if isinstance(meme_id_or_dict, (int, str)) and str(meme_id_or_dict).isdigit():
-            meme = self.get_meme_by_id(int(meme_id_or_dict))
+        if isinstance(meme_id_or_dict, (int, str)):
+            meme = self.get_meme_by_id(meme_id_or_dict)
         elif isinstance(meme_id_or_dict, dict):
             meme = meme_id_or_dict
         else:
