@@ -506,13 +506,14 @@ class MemeSender(Star, MemeConfigMixin):
         if not os.path.isfile(file_path):
             return None
 
-        comp = Image.fromFileSystem(file_path)
-        send_mode = meme.get("send_mode") or "sticker"
-        if send_mode == "sticker":
-            comp.sub_type = 1
+        from .backend.core.helpers import build_meme_image
+
         desc = meme.get("description") or meme.get("emotions") or "表情包"
-        setattr(comp, "meme_desc", desc)
-        return comp
+        return build_meme_image(
+            file_path,
+            send_mode=meme.get("send_mode"),
+            meme_desc=desc,
+        )
 
     async def terminate(self):
         """清理资源"""
