@@ -5,9 +5,10 @@ import mimetypes
 import os
 from pathlib import Path
 
+from PIL import Image as PILImage
 from quart import current_app, jsonify, request
 
-from ....config import MEMES_DIR
+from ....config import MEMES_DIR, PLUGIN_DATA_DIR
 from ...core.helpers import (
     MEME_SEND_MODE_STICKER,
     normalize_meme_send_mode,
@@ -23,6 +24,8 @@ from ...db.models import (
 from .common import trigger_tag_vectorization
 
 logger = logging.getLogger(__name__)
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("image/avif", ".avif")
 
 
 async def get_all_emojis():
@@ -336,36 +339,79 @@ async def get_emoji_info(filename=None):
 
 
 async def get_emoji_file_base64():
-    """获取表情文件的 Base64 编码数据"""
+    """Return an original image or cached thumbnail through the page bridge.
+
+    Returns:
+        A JSON response containing Base64 image data and its content type, or an
+        error response. The optional ``thumbnail`` query parameter selects a
+        static preview limited to 150 by 150 pixels.
+    """
     filename = request.args.get("filename")
     if not filename:
         return jsonify({"message": "缺少文件名"}), 400
 
-    filename = os.path.basename(filename)
-
-    target_path = os.path.join(MEMES_DIR, filename)
-    if not os.path.exists(target_path):
-        found = False
-        for item in os.listdir(MEMES_DIR):
-            item_path = os.path.join(MEMES_DIR, item)
-            if os.path.isdir(item_path):
-                file_path = os.path.join(item_path, filename)
-                if os.path.exists(file_path):
-                    target_path = file_path
-                    found = True
-                    break
-        if not found:
-            return jsonify({"message": "文件不存在"}), 404
+    if filename in {".", ".."} or any(char in filename for char in ("/", "\\", "\x00")):
+        return jsonify({"message": "无效的文件名"}), 400
 
     try:
-        with open(target_path, "rb") as f:
-            content = f.read()
-        mime_type, _ = mimetypes.guess_type(target_path)
-        if not mime_type:
-            mime_type = "image/png"
-        base64_str = base64.b64encode(content).decode("utf-8")
+        memes_dir = Path(MEMES_DIR).resolve()
+        target_path = memes_dir / filename
+        if not target_path.is_file() or not target_path.resolve().is_relative_to(
+            memes_dir
+        ):
+            candidates = (
+                item / filename
+                for item in (memes_dir.iterdir() if memes_dir.is_dir() else [])
+                if item.is_dir() and item.name not in {".thumbnails", "thumbnails"}
+            )
+            target_path = next(
+                (
+                    path.resolve()
+                    for path in candidates
+                    if path.is_file() and path.resolve().is_relative_to(memes_dir)
+                ),
+                None,
+            )
+        if target_path is None:
+            return jsonify({"message": "文件不存在"}), 404
+
+        mime_type = mimetypes.guess_type(target_path)[0] or "image/png"
+        if request.args.get("thumbnail", "").lower() in {"1", "true"}:
+            try:
+                PILImage.init()
+                thumb_format = "AVIF" if "AVIF" in PILImage.SAVE else "WEBP"
+                thumb_dir = Path(PLUGIN_DATA_DIR) / "thumbnails"
+                thumb_dir.mkdir(parents=True, exist_ok=True)
+                thumb_path = thumb_dir / f"{filename}.{thumb_format.lower()}"
+                if (
+                    not thumb_path.is_file()
+                    or target_path.stat().st_mtime_ns > thumb_path.stat().st_mtime_ns
+                ):
+                    with PILImage.open(target_path) as image:
+                        if getattr(image, "is_animated", False):
+                            image.seek(0)
+                            image = image.copy()
+                        image.thumbnail((150, 150))
+                        temp_path = thumb_path.with_name(thumb_path.name + ".tmp")
+                        image.save(temp_path, format=thumb_format)
+                        temp_path.replace(thumb_path)
+                target_path = thumb_path
+                mime_type = f"image/{thumb_format.lower()}"
+            except Exception as exc:
+                logger.warning(
+                    "Failed to generate thumbnail for %s; using original image: %s",
+                    filename,
+                    exc,
+                )
+
+        content = target_path.read_bytes()
         return jsonify(
-            {"status": "success", "mime": mime_type, "base64": base64_str}
+            {
+                "status": "success",
+                "mime": mime_type,
+                "content_type": mime_type,
+                "base64": base64.b64encode(content).decode("ascii"),
+            }
         ), 200
     except Exception as e:
         return jsonify({"message": f"读取文件失败: {e}"}), 500

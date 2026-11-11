@@ -4,6 +4,7 @@ const { ref, reactive, nextTick } = window.Vue;
 
 export function useEmojiActions({
   showToast,
+  loadImage,
   fetchEmojis,
   activeCategories,
   selectionEnabled,
@@ -557,9 +558,9 @@ export function useEmojiActions({
 
         if (res.status === 409) {
           if (resData && (resData.code === "similar_emoji" || resData.code === "duplicate_emoji")) {
-            const localUrl = URL.createObjectURL(file);
             const targetFilename = resData.existing_filename || resData.filename;
-            const similarUrl = `/api/public/plug/astrbot_plugin_meme_manager/memes/file/thumbnail/${encodeURIComponent(targetFilename)}`;
+            const similarUrl = await loadImage(targetFilename, true);
+            const localUrl = URL.createObjectURL(file);
             
             const isSimilar = resData.code === "similar_emoji";
             const title = isSimilar ? "检测到相似表情包" : "检测到完全相同的表情包";
