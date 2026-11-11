@@ -14,7 +14,11 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.components import Image, Reply
 
 from ...utils import get_config_value
-from ..core.helpers import get_persona_id, get_persona_setting
+from ..core.helpers import (
+    extract_frames_for_llm,
+    get_persona_id,
+    get_persona_setting,
+)
 from ..db.database import get_db_conn, get_steal_attempt, save_steal_attempt
 from ..db.models import save_and_register_meme
 
@@ -27,6 +31,8 @@ async def _check_meme_preference_match(
     preference_text: str,
 ) -> tuple[bool | None, str]:
     """调用多模态 LLM 判定图片是否满足人格的表情包收集偏好。
+
+    若为动图，动态抽帧至多 8 张发送给 LLM 判定。
 
     Args:
         sender: The sender object.
@@ -50,21 +56,18 @@ async def _check_meme_preference_match(
     if not provider_id:
         return None, "未找到可用的多模态模型/聊天模型提供商，无法进行偏好判定。"
 
-    import base64
+    image_urls, is_animated = extract_frames_for_llm(content, file_type, max_frames=8)
 
-    mime_type = "image/jpeg"
-    if file_type == "png":
-        mime_type = "image/png"
-    elif file_type == "gif":
-        mime_type = "image/gif"
-    elif file_type == "webp":
-        mime_type = "image/webp"
-
-    b64_data = base64.b64encode(content).decode("utf-8")
-    image_data_uri = f"data:{mime_type};base64,{b64_data}"
+    animated_note = ""
+    if is_animated and len(image_urls) > 1:
+        animated_note = (
+            f"（注意：当前待判定的表情包为动图，已按时间顺序抽取了 {len(image_urls)} 张关键帧画面，"
+            f"请结合连贯动作、动态变化与整体风格综合判定）\n"
+        )
 
     prompt = (
-        f"请根据当前人格的表情包收集偏好，判定给定的表情包图片是否符合该收集偏好。\n"
+        f"请根据当前人格的表情包收集偏好，判定给定的表情包是否符合该收集偏好。\n"
+        f"{animated_note}"
         f"【当前人格的表情包收集偏好】：\n"
         f"{preference_text}\n\n"
         f"【判定规则（极其重要）】：\n"
@@ -79,13 +82,18 @@ async def _check_meme_preference_match(
     )
 
     try:
+        frame_tip = (
+            f" (动图抽帧: {len(image_urls)} 帧)"
+            if is_animated and len(image_urls) > 1
+            else ""
+        )
         logger.debug(
-            f"[meme_manager] 正在调用多模态模型 {provider_id} 判定表情包偏好匹配度..."
+            f"[meme_manager] 正在调用多模态模型 {provider_id} 判定表情包偏好匹配度{frame_tip}..."
         )
         llm_resp = await sender.context.llm_generate(
             chat_provider_id=provider_id,
             prompt=prompt,
-            image_urls=[image_data_uri],
+            image_urls=image_urls,
         )
         if not llm_resp or not llm_resp.completion_text:
             return None, "模型返回内容为空，判定失败。"
@@ -377,18 +385,14 @@ async def _classify_with_multimodal(
     if not provider_id:
         return [], "", False, False
 
-    import base64
+    image_urls, is_animated = extract_frames_for_llm(content, file_type, max_frames=8)
 
-    mime_type = "image/jpeg"
-    if file_type == "png":
-        mime_type = "image/png"
-    elif file_type == "gif":
-        mime_type = "image/gif"
-    elif file_type == "webp":
-        mime_type = "image/webp"
-
-    b64_data = base64.b64encode(content).decode("utf-8")
-    image_data_uri = f"data:{mime_type};base64,{b64_data}"
+    animated_note = ""
+    if is_animated and len(image_urls) > 1:
+        animated_note = (
+            f"\n（注意：当前表情包为动图，已按时间顺序抽取了 {len(image_urls)} 张连续关键帧画面，"
+            f"请结合连贯动作、表情演变与具体情境进行整体分析和描述）\n"
+        )
 
     guidelines = getattr(sender, "multimodal_tag_prompt", None)
     if not guidelines:
@@ -408,7 +412,7 @@ async def _classify_with_multimodal(
         )
 
     prompt = (
-        f"{guidelines}\n\n"
+        f"{guidelines}\n{animated_note}\n"
         "【输出格式要求（极其重要）】：\n"
         "- 请仅以 JSON 格式的字典对象返回，其中必须包含两个字段：\n"
         '  1. `tags` (数组，表情包对应的标签列表，如 ["敷衍", "猫猫"])\n'
@@ -422,11 +426,16 @@ async def _classify_with_multimodal(
     )
 
     try:
-        logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类与描述...")
+        frame_tip = (
+            f" (动图抽帧: {len(image_urls)} 帧)"
+            if is_animated and len(image_urls) > 1
+            else ""
+        )
+        logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类与描述{frame_tip}...")
         llm_resp = await sender.context.llm_generate(
             chat_provider_id=provider_id,
             prompt=prompt,
-            image_urls=[image_data_uri],
+            image_urls=image_urls,
         )
         parsed_categories: list[str] = []
         description = ""

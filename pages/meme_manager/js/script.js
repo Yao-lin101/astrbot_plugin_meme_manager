@@ -1,6 +1,7 @@
 import { useToasts } from './modules/toasts.js';
 import { useModals } from './modules/modals.js';
 import { useApi } from './modules/api.js';
+import { useImages } from './modules/images.js';
 import { useSelection } from './modules/selection.js';
 import { useSync } from './modules/sync.js';
 import { useCategories } from './modules/categories.js';
@@ -51,6 +52,8 @@ createApp({
     // 3. Selection & API
     let pruneSelectionsRef = () => {};
     const api = useApi(showToast, () => pruneSelectionsRef());
+    const images = useImages(api.emojiMtimes);
+    const { getImageUrl, markEmojiFullyLoaded, onMouseEnterEmoji, onMouseLeaveEmoji } = images;
 
     const selection = useSelection(api.emojiData, api.allEmojisList, api.emojiDescriptions);
     pruneSelectionsRef = selection.pruneSelections;
@@ -74,6 +77,7 @@ createApp({
     // 6. Emoji Actions
     const emojiActions = useEmojiActions({
       showToast,
+      loadImage: images.loadImage,
       fetchEmojis: api.fetchEmojis,
       activeCategories: api.activeCategories,
       selectionEnabled: selection.selectionEnabled,
@@ -136,46 +140,6 @@ createApp({
     const isDrawerInputFocused = ref(false);
     const otherDropdownVisible = ref(false);
     const mobileSidebarOpen = ref(false);
-
-
-
-
-    const fullyLoadedEmojis = ref({});
-    const markEmojiFullyLoaded = (emoji) => {
-      if (emoji) {
-        fullyLoadedEmojis.value[emoji] = true;
-      }
-    };
-
-    let hoverTimer = null;
-    const onMouseEnterEmoji = (emoji) => {
-      if (!emoji || fullyLoadedEmojis.value[emoji]) return;
-      if (hoverTimer) clearTimeout(hoverTimer);
-      hoverTimer = setTimeout(() => {
-        markEmojiFullyLoaded(emoji);
-      }, 500);
-    };
-
-    const onMouseLeaveEmoji = () => {
-      if (hoverTimer) {
-        clearTimeout(hoverTimer);
-        hoverTimer = null;
-      }
-    };
-
-    onUnmounted(() => {
-      if (hoverTimer) {
-        clearTimeout(hoverTimer);
-      }
-    });
-
-    const getImageUrl = (emoji, isThumbnail = false) => {
-      if (!emoji) return '';
-      if (isThumbnail && !fullyLoadedEmojis.value[emoji]) {
-        return `/api/public/plug/astrbot_plugin_meme_manager/memes/file/thumbnail/${encodeURIComponent(emoji)}`;
-      }
-      return `/api/public/plug/astrbot_plugin_meme_manager/memes/file/${encodeURIComponent(emoji)}`;
-    };
 
     const activeCategory = computed(() => {
       if (api.activeCategories.value.includes('all')) return 'all';

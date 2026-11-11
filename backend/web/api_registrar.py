@@ -1,11 +1,4 @@
-import mimetypes
-import os
-
 from astrbot.api import logger
-
-# Ensure webp and avif mimetypes are registered
-mimetypes.add_type("image/webp", ".webp")
-mimetypes.add_type("image/avif", ".avif")
 
 
 def patch_onebot_serializer():
@@ -36,14 +29,20 @@ def patch_onebot_serializer():
                     summary = getattr(segment, "summary", None)
                     if not summary:
                         try:
-                            from ...main import _meme_sender_instance
                             import random
-                            if _meme_sender_instance and hasattr(_meme_sender_instance, "meme_summaries"):
+
+                            from ...main import _meme_sender_instance
+
+                            if _meme_sender_instance and hasattr(
+                                _meme_sender_instance, "meme_summaries"
+                            ):
                                 summaries = _meme_sender_instance.meme_summaries
                                 if summaries:
                                     summary = random.choice(summaries)
                         except Exception as e:
-                            logger.debug(f"Meme Manager: Failed to retrieve meme summaries: {e}")
+                            logger.debug(
+                                f"Meme Manager: Failed to retrieve meme summaries: {e}"
+                            )
                     if summary:
                         data["summary"] = summary
             return res
@@ -57,52 +56,18 @@ def patch_onebot_serializer():
 
 
 def wrap_api_handler(sender, handler):
-    """Wrap api handlers to setup context and register a dynamic serve_emoji route."""
+    """Wrap an API handler with the plugin configuration context.
+
+    Args:
+        sender: Plugin instance providing the configuration.
+        handler: Async API handler to invoke.
+
+    Returns:
+        The wrapped async handler.
+    """
 
     async def wrapper(*args, **kwargs):
         from quart import current_app
-
-        logger.debug("Meme Manager API wrapper: wrapper called!")
-        # Register the dynamic unauthenticated serve_emoji route on app startup/first request
-        app = current_app._get_current_object()
-        route_name_thumb = "meme_manager_serve_emoji_thumbnail"
-        route_name_orig = "meme_manager_serve_emoji"
-        if route_name_orig not in app.view_functions:
-            logger.debug("Meme Manager API wrapper: registering routes!")
-            try:
-
-                async def serve_emoji_wrapper(category, filename):
-                    return await serve_emoji(
-                        sender, category, filename, is_thumbnail=False
-                    )
-
-                async def serve_emoji_thumb_wrapper(category, filename):
-                    return await serve_emoji(
-                        sender, category, filename, is_thumbnail=True
-                    )
-
-                app.add_url_rule(
-                    "/api/file/meme_manager/memes/<category>/thumbnail/<filename>",
-                    endpoint=route_name_thumb,
-                    view_func=serve_emoji_thumb_wrapper,
-                    methods=["GET"],
-                )
-
-                app.add_url_rule(
-                    "/api/file/meme_manager/memes/<category>/<filename>",
-                    endpoint=route_name_orig,
-                    view_func=serve_emoji_wrapper,
-                    methods=["GET"],
-                )
-                logger.debug(
-                    "Meme Manager API wrapper: routes registered successfully!"
-                )
-            except Exception as e:
-                logger.error(f"Meme Manager API wrapper error registering routes: {e}")
-        else:
-            logger.debug(
-                "Meme Manager API wrapper: routes already in app.view_functions"
-            )
 
         current_app.config["PLUGIN_CONFIG"] = {
             "sender": sender,
@@ -124,112 +89,6 @@ def wrap_api_handler(sender, handler):
         return await handler(*args, **kwargs)
 
     return wrapper
-
-
-async def serve_emoji(sender, category, filename, is_thumbnail=False):
-    """Serve emoji files from various directories."""
-    from quart import send_from_directory
-
-    from ...config import MEMES_DIR, PLUGIN_DATA_DIR
-
-    target_path = None
-    # Check absolute location directly under MEMES_DIR
-    check_path = os.path.join(MEMES_DIR, filename)
-    if os.path.exists(check_path):
-        target_path = check_path
-    else:
-        # Check category path
-        if category != "file" and category != "all":
-            category_path = os.path.join(MEMES_DIR, category)
-            check_path = os.path.join(category_path, filename)
-            if os.path.exists(check_path):
-                target_path = check_path
-
-        if not target_path:
-            # Search all subdirectories inside MEMES_DIR
-            for item in os.listdir(MEMES_DIR):
-                if item == ".thumbnails":
-                    continue
-                item_path = os.path.join(MEMES_DIR, item)
-                if os.path.isdir(item_path):
-                    check_path = os.path.join(item_path, filename)
-                    if os.path.exists(check_path):
-                        target_path = check_path
-                        break
-
-    if not target_path or not os.path.exists(target_path):
-        return "File not found: " + filename, 404
-
-    logger.debug(
-        f"Meme Manager serve_emoji: filename={filename}, category={category}, is_thumbnail={is_thumbnail}"
-    )
-    if is_thumbnail:
-        from PIL import Image as PILImage
-
-        PILImage.init()
-        avif_supported = "AVIF" in PILImage.SAVE
-        thumb_ext = ".avif" if avif_supported else ".webp"
-        thumb_format = "AVIF" if avif_supported else "WEBP"
-
-        thumb_dir = os.path.join(PLUGIN_DATA_DIR, "thumbnails")
-        os.makedirs(thumb_dir, exist_ok=True)
-        thumb_filename = filename + thumb_ext
-        thumb_path = os.path.join(thumb_dir, thumb_filename)
-
-        need_generate = True
-        if os.path.exists(thumb_path):
-            try:
-                if os.path.getmtime(target_path) <= os.path.getmtime(thumb_path):
-                    need_generate = False
-            except Exception as e:
-                logger.warning(f"Error checking mtime for {thumb_filename}: {e}")
-
-        logger.debug(
-            f"Meme Manager serve_emoji: thumb_path={thumb_path}, exists={os.path.exists(thumb_path)}, need_generate={need_generate}"
-        )
-
-        if need_generate:
-            try:
-                logger.debug(
-                    f"Meme Manager serve_emoji: generating thumbnail for {filename} using format {thumb_format}"
-                )
-                with PILImage.open(target_path) as img:
-                    orig_format = img.format
-                    # If GIF, extract first frame
-                    if orig_format == "GIF":
-                        img.seek(0)
-                        img = img.copy()
-
-                    img.thumbnail((150, 150))
-
-                    # Save atomically
-                    temp_thumb_path = thumb_path + ".tmp"
-                    img.save(temp_thumb_path, format=thumb_format)
-                    os.replace(temp_thumb_path, thumb_path)
-                logger.debug(
-                    f"Meme Manager serve_emoji: thumbnail generated successfully at {thumb_path}"
-                )
-            except Exception as e:
-                logger.warning(
-                    f"Failed to generate {thumb_format} thumbnail for {filename}: {e}"
-                )
-                # fallback to serving original and disable browser caching for the fallback image
-                response = await send_from_directory(
-                    os.path.dirname(target_path), os.path.basename(target_path)
-                )
-                response.headers["Cache-Control"] = (
-                    "no-store, no-cache, must-revalidate, max-age=0"
-                )
-                return response
-
-        logger.debug(f"Meme Manager serve_emoji: serving thumbnail {thumb_path}")
-        mimetype = "image/avif" if avif_supported else "image/webp"
-        return await send_from_directory(thumb_dir, thumb_filename, mimetype=mimetype)
-
-    logger.debug(f"Meme Manager serve_emoji: serving original image {target_path}")
-    return await send_from_directory(
-        os.path.dirname(target_path), os.path.basename(target_path)
-    )
 
 
 def register_apis(sender):
@@ -348,24 +207,3 @@ def register_apis(sender):
             methods,
             f"Meme Manager API: {route}",
         )
-
-    # Serve emoji static files endpoints
-    async def serve_emoji_route_wrapper(category, filename):
-        return await serve_emoji(sender, category, filename, is_thumbnail=False)
-
-    async def serve_emoji_thumb_wrapper(category, filename):
-        return await serve_emoji(sender, category, filename, is_thumbnail=True)
-
-    sender.context.register_web_api(
-        f"/{PLUGIN_NAME}/memes/<category>/thumbnail/<filename>",
-        wrap_api_handler(sender, serve_emoji_thumb_wrapper),
-        ["GET"],
-        "Serve emoji thumbnail files",
-    )
-
-    sender.context.register_web_api(
-        f"/{PLUGIN_NAME}/memes/<category>/<filename>",
-        wrap_api_handler(sender, serve_emoji_route_wrapper),
-        ["GET"],
-        "Serve emoji files",
-    )

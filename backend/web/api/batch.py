@@ -2,6 +2,7 @@ import logging
 
 from quart import current_app, jsonify, request
 
+from ...core.helpers import extract_frames_for_llm
 from ...db.database import get_db_conn
 from ...db.models import (
     batch_convert_to_gif,
@@ -531,16 +532,7 @@ async def analyze_emoji_core(
     except Exception:
         file_type = "unknown"
 
-    mime_type = "image/jpeg"
-    if file_type == "png":
-        mime_type = "image/png"
-    elif file_type == "gif":
-        mime_type = "image/gif"
-    elif file_type == "webp":
-        mime_type = "image/webp"
-
-    b64_data = base64.b64encode(content).decode("utf-8")
-    image_data_uri = f"data:{mime_type};base64,{b64_data}"
+    image_urls, is_animated = extract_frames_for_llm(content, file_type, max_frames=8)
 
     # 查询现有数据，以便进行参考及后续的部分更新
     conn = get_db_conn()
@@ -613,9 +605,16 @@ async def analyze_emoji_core(
                 f"请结合并参考这些已有标签的语境，为您生成的描述提供辅助参考。"
             )
 
+    animated_note = ""
+    if is_animated and len(image_urls) > 1:
+        animated_note = (
+            f"\n（注意：当前表情包为动图，已按时间顺序抽取了 {len(image_urls)} 张连续关键帧画面，"
+            f"请结合整体连贯动作、表情演变与具体情境进行分析和描述）\n"
+        )
+
     # 根据勾选条件，优化模型提示词
     prompt = (
-        f"{guidelines}\n\n"
+        f"{guidelines}\n{animated_note}\n"
         f"【输出格式要求（极其重要）】：\n"
         f"- 请仅以 JSON 格式的字典对象返回，其中必须包含以下字段：\n"
     )
@@ -646,7 +645,7 @@ async def analyze_emoji_core(
                 sender.context.llm_generate(
                     chat_provider_id=provider_id,
                     prompt=prompt,
-                    image_urls=[image_data_uri],
+                    image_urls=image_urls,
                 ),
                 timeout=ANALYZE_TIMEOUT,
             )

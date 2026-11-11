@@ -1,3 +1,5 @@
+import base64
+import io
 import os
 import random
 import re
@@ -316,6 +318,111 @@ def convert_to_gif(image_path: str, sender) -> str:
     except Exception as e:
         logger.error(f"转换图片为 GIF 失败: {e}", exc_info=True)
         return image_path
+
+
+def extract_frames_for_llm(
+    content: bytes,
+    file_type: str,
+    max_frames: int = 8,
+    max_dimension: int = 512,
+    quality: int = 85,
+) -> tuple[list[str], bool]:
+    """提取图片数据供多模态 LLM 分析。
+
+    如果是动图（如多帧 GIF / WebP / APNG），则动态均匀抽取至多 max_frames 帧并转为 JPEG base64 Data URI；
+    如果是静态图或单帧图，则直接返回原图的 base64 Data URI。
+
+    Args:
+        content: 图片原始字节。
+        file_type: 图片扩展名/类型（如 'gif', 'png', 'jpeg', 'webp'）。
+        max_frames: 动图最大抽帧数量，默认为 8。
+        max_dimension: 抽帧图片的最长边像素限制，若超过则等比缩放，降低 payload 与 token 开销。
+        quality: JPEG 编码质量（1-100）。
+
+    Returns:
+        tuple[list[str], bool]: (image_data_uris, is_animated)
+    """
+    clean_type = (file_type or "").lower().lstrip(".")
+    mime_type = "image/jpeg"
+    if clean_type == "png":
+        mime_type = "image/png"
+    elif clean_type == "gif":
+        mime_type = "image/gif"
+    elif clean_type == "webp":
+        mime_type = "image/webp"
+
+    b64_orig = base64.b64encode(content).decode("utf-8")
+    fallback_uri = f"data:{mime_type};base64,{b64_orig}"
+
+    try:
+        with PILImage.open(io.BytesIO(content)) as img:
+            is_animated = bool(
+                getattr(img, "is_animated", False) or getattr(img, "n_frames", 1) > 1
+            )
+            n_frames = getattr(img, "n_frames", 1) if is_animated else 1
+
+            if not is_animated or n_frames <= 1:
+                return [fallback_uri], False
+
+            # 动态抽帧至多 max_frames 张
+            if n_frames <= max_frames:
+                frame_indices = list(range(n_frames))
+            else:
+                # 均匀线性抽帧，确保涵盖第一帧和最后一帧
+                step = (n_frames - 1) / (max_frames - 1)
+                frame_indices = sorted(
+                    list(
+                        dict.fromkeys(
+                            [
+                                max(0, min(round(i * step), n_frames - 1))
+                                for i in range(max_frames)
+                            ]
+                        )
+                    )
+                )
+
+            image_urls: list[str] = []
+            for idx in frame_indices:
+                try:
+                    img.seek(idx)
+                    frame = img.copy()
+
+                    # 处理带透明通道的帧，统一贴合到纯白底色背景并转为 RGB
+                    if frame.mode in ("RGBA", "LA") or (
+                        frame.mode == "P" and "transparency" in frame.info
+                    ):
+                        frame_rgba = frame.convert("RGBA")
+                        bg = PILImage.new("RGB", frame_rgba.size, (255, 255, 255))
+                        bg.paste(frame_rgba, mask=frame_rgba.split()[3])
+                        frame_rgb = bg
+                    else:
+                        frame_rgb = frame.convert("RGB")
+
+                    # 若尺寸过大则等比缩放
+                    w, h = frame_rgb.size
+                    if max_dimension and (w > max_dimension or h > max_dimension):
+                        scale = max_dimension / max(w, h)
+                        new_w = max(1, int(w * scale))
+                        new_h = max(1, int(h * scale))
+                        frame_rgb = frame_rgb.resize(
+                            (new_w, new_h), PILImage.Resampling.LANCZOS
+                        )
+
+                    out_io = io.BytesIO()
+                    frame_rgb.save(out_io, format="JPEG", quality=quality)
+                    frame_b64 = base64.b64encode(out_io.getvalue()).decode("utf-8")
+                    image_urls.append(f"data:image/jpeg;base64,{frame_b64}")
+                except Exception as frame_err:
+                    logger.warning(f"[meme_manager] 抽帧索引 {idx} 失败: {frame_err}")
+
+            if not image_urls:
+                return [fallback_uri], False
+
+            return image_urls, True
+
+    except Exception as e:
+        logger.warning(f"[meme_manager] 尝试对动图进行抽帧失败，降级使用原图: {e}")
+        return [fallback_uri], False
 
 
 def is_position_in_thinking_tags(text: str, position: int) -> bool:
