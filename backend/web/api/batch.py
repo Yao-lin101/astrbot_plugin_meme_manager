@@ -505,7 +505,6 @@ async def analyze_emoji_core(
     Returns a dict: {"status": "success", "tags": [...], "description": "..."}
     """
     import asyncio
-    import base64
     import io
     import json
     import os

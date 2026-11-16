@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 class ImageSync:
     """图片同步客户端
 
-    用于在本地目录和远程图床之间同步图片文件。支持目录结构，
-    可以保持本地目录分类在远程图床中。
+    Sync images between the flat local meme directory and an image host.
+    Meme tags and persona bindings are stored in the plugin database.
 
     基本用法:
         sync = ImageSync(config={
@@ -90,8 +90,8 @@ class ImageSync:
         Returns:
             包含需要上传和下载的文件信息的字典:
             {
-                "to_upload": [{"filename": "1.jpg", "category": "cats"}],
-                "to_download": [{"filename": "2.jpg", "category": "dogs"}]
+                "to_upload": [{"filename": "1.jpg", "category": ""}],
+                "to_download": [{"filename": "2.jpg", "category": ""}]
             }
         """
         return self.sync_manager.check_sync_status()

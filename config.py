@@ -1,16 +1,11 @@
 import os
-import shutil
 import sys
 from pathlib import Path
 
-from astrbot.core.utils.astrbot_path import (
-    get_astrbot_data_path,
-    get_astrbot_plugin_data_path,
-)
+from astrbot.core.utils.astrbot_path import get_astrbot_plugin_data_path
 
 # 获取当前插件目录的绝对路径
 PLUGIN_DIR = Path(__file__).resolve().parent
-CURRENT_DIR = str(PLUGIN_DIR)
 DEFAULT_PLUGIN_NAME = "meme_manager"
 
 
@@ -18,14 +13,6 @@ def resolve_plugin_name(plugin_name: str | None = None) -> str:
     """优先使用运行时插件名，失败时回退到硬编码插件名。"""
     candidate = plugin_name or DEFAULT_PLUGIN_NAME
     return candidate.strip() or DEFAULT_PLUGIN_NAME
-
-
-def get_legacy_plugin_data_dir() -> Path | None:
-    """返回旧版插件数据目录 data/memes_data。"""
-    try:
-        return (Path(get_astrbot_data_path()) / "memes_data").resolve()
-    except Exception:
-        return None
 
 
 def get_plugin_data_dir(plugin_name: str | None = None) -> Path:
@@ -45,61 +32,11 @@ def get_plugin_data_dir(plugin_name: str | None = None) -> Path:
         return fallback_data_path
 
 
-def _plugin_data_dir_has_content(plugin_data_dir: Path) -> bool:
-    """判断目标插件数据目录是否已有有效内容。"""
-    metadata_file = plugin_data_dir / "memes_data.json"
-    if metadata_file.is_file():
-        return True
-
-    memes_dir = plugin_data_dir / "memes"
-    return memes_dir.is_dir() and any(memes_dir.iterdir())
-
-
-def _copy_directory_contents(source_dir: Path, target_dir: Path) -> None:
-    """合并复制目录内容，不覆盖已存在文件。"""
-    for item in source_dir.iterdir():
-        target_path = target_dir / item.name
-        if item.is_dir():
-            shutil.copytree(item, target_path, dirs_exist_ok=True)
-            continue
-        if not target_path.exists():
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(item, target_path)
-
-
-def migrate_legacy_data_dir_if_needed(plugin_data_dir: Path) -> None:
-    """将旧版 data/memes_data 安全迁移到 data/plugin_data/meme_manager。"""
-    legacy_data_dir = get_legacy_plugin_data_dir()
-    if legacy_data_dir is None or not legacy_data_dir.exists():
-        return
-
-    if legacy_data_dir.resolve() == plugin_data_dir.resolve():
-        return
-
-    if _plugin_data_dir_has_content(plugin_data_dir):
-        return
-
-    try:
-        plugin_data_dir.mkdir(parents=True, exist_ok=True)
-        _copy_directory_contents(legacy_data_dir, plugin_data_dir)
-        print(
-            f"检测到旧版插件数据目录，已迁移到: {plugin_data_dir}",
-            file=sys.stderr,
-        )
-    except Exception as exc:
-        print(
-            f"迁移旧版插件数据目录失败: {exc}",
-            file=sys.stderr,
-        )
-
-
 PLUGIN_DATA_DIR = get_plugin_data_dir()
-migrate_legacy_data_dir_if_needed(PLUGIN_DATA_DIR)
 BASE_DATA_DIR = PLUGIN_DATA_DIR
 MEMES_DIR = PLUGIN_DATA_DIR / "memes"
 MEMES_DATA_PATH = PLUGIN_DATA_DIR / "memes_data.json"  # 类别描述数据文件路径
 TEMP_DIR = PLUGIN_DATA_DIR / "temp"
-DEFAULT_MEMES_INIT_MARKER = PLUGIN_DATA_DIR / ".default_memes_initialized"
 
 # 确保目录存在
 os.makedirs(MEMES_DIR, exist_ok=True)

@@ -13,7 +13,7 @@ from ...config import MEMES_DIR
 from ...utils import (
     compress_image,
 )
-from ..db.database import get_db_conn, migrate_filesystem_to_db
+from ..db.database import get_db_conn
 from ..db.models import (
     clear_all_emojis,
     get_emoji_by_category,
@@ -244,7 +244,6 @@ class CommandsHandler:
         from ..db.database import clear_all_tag_embeddings
 
         clear_all_tag_embeddings()
-        sender._reload_personas()
 
         # 重新统计真正删除了多少
         conn = get_db_conn()
@@ -289,7 +288,6 @@ class CommandsHandler:
             yield event.plain_result(f"❌ 删除标签「{tag}」失败，请稍后重试。")
             return
 
-        sender._reload_personas()
         yield event.plain_result(
             f"✅ 已成功删除标签「{tag}」"
             f"{f'，并处理了 {emoji_count} 个相关表情包的归属。' if emoji_count > 0 else '。'}"
@@ -412,8 +410,6 @@ class CommandsHandler:
         try:
             success = sender.img_sync.sync_from_remote()
             if success:
-                # 重新运行迁移，以防下载的图片有子文件夹结构
-                migrate_filesystem_to_db()
                 yield event.plain_result("从云端同步已完成！")
                 await sender.reload_emotions()
             else:
@@ -463,8 +459,6 @@ class CommandsHandler:
         try:
             success = sender.img_sync.overwrite_from_remote()
             if success:
-                # 重新迁移
-                migrate_filesystem_to_db()
                 yield event.plain_result("从云端覆盖已完成！")
                 await sender.reload_emotions()
             else:

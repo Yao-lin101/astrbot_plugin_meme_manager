@@ -37,9 +37,6 @@ export const ConfigPage = {
     const newPreferenceTagInput = ref('');
     const showUsePreferenceDropdown = ref(false);
 
-    const blacklistSearchQuery = ref('');
-    const showBlacklistDropdown = ref(false);
-
     const localPersonaUseList = ref([]);
     const localPersonaCollectPref = ref('');
 
@@ -47,10 +44,9 @@ export const ConfigPage = {
     const embeddingProviders = ref([]);
 
     const tabKeys = {
-      basic: ['enable_llm_tool', 'persona_blacklist', 'meme_prompt'],
+      basic: ['enable_giftia_mode'],
       interaction: ['interaction_config'],
       auto_steal: ['auto_steal_config', 'multimodal_config'],
-      emotion: ['emotion_llm_config'],
       embedding: ['embedding_config', 'similarity_dedup_config'],
       compression: ['compression_config'],
       image_host: ['image_host', 'image_host_config']
@@ -201,7 +197,6 @@ export const ConfigPage = {
       }
       if (field.type === 'text') return 'textarea';
       if (field.type === 'list') {
-        if (key === 'persona_blacklist') return 'persona_blacklist_select';
         return 'list';
       }
       if (field.type === 'string' && field.options) return 'select';
@@ -280,41 +275,6 @@ export const ConfigPage = {
       }
     };
 
-    // Persona Blacklist Multiselect Helpers
-    const getPersonaName = (pId) => {
-      const p = props.systemPersonas.find(p => p.id === pId);
-      if (!p) return pId;
-      return p.name === pId ? p.name : `${p.name} (${pId})`;
-    };
-
-    const filteredBlacklistPersonas = computed(() => {
-      const query = blacklistSearchQuery.value.trim().toLowerCase();
-      if (!query) return props.systemPersonas;
-      return props.systemPersonas.filter(p => 
-        p.name.toLowerCase().includes(query) || p.id.toLowerCase().includes(query)
-      );
-    });
-
-    const handleBlacklistBlur = () => {
-      setTimeout(() => {
-        showBlacklistDropdown.value = false;
-      }, 200);
-    };
-
-    const toggleBlacklistPersona = (pId) => {
-      if (!localConfig.value.persona_blacklist) {
-        localConfig.value.persona_blacklist = [];
-      }
-      const list = [...localConfig.value.persona_blacklist];
-      const idx = list.indexOf(pId);
-      if (idx > -1) {
-        list.splice(idx, 1);
-      } else {
-        list.push(pId);
-      }
-      localConfig.value.persona_blacklist = list;
-    };
-
     return {
       activeSubTab,
       selectedPersonaId,
@@ -338,12 +298,6 @@ export const ConfigPage = {
       tabKeys,
       providers,
       embeddingProviders,
-      blacklistSearchQuery,
-      showBlacklistDropdown,
-      getPersonaName,
-      filteredBlacklistPersonas,
-      handleBlacklistBlur,
-      toggleBlacklistPersona,
       clearingAll,
       clearingOrphans,
       cacheCleanupResult,
@@ -366,9 +320,6 @@ export const ConfigPage = {
         </button>
         <button class="secondary-tab" :class="{ active: activeSubTab === 'auto_steal' }" @click="activeSubTab = 'auto_steal'">
           <i class="fas fa-download"></i> 偷图与分类
-        </button>
-        <button class="secondary-tab" :class="{ active: activeSubTab === 'emotion' }" @click="activeSubTab = 'emotion'">
-          <i class="fas fa-heart"></i> 情感分析
         </button>
         <button class="secondary-tab" :class="{ active: activeSubTab === 'embedding' }" @click="activeSubTab = 'embedding'">
           <i class="fas fa-magnifying-glass"></i> 检索与去重
@@ -409,7 +360,7 @@ export const ConfigPage = {
                 <span class="form-label" style="font-size: 12.5px;">
                   <i class="fas fa-tags"></i> 专属发图偏好 (标签多选)
                 </span>
-                <p class="form-hint" style="margin-top: -4px;">配置该人格发言时，以更高权重优先推荐发送的表情分类标签。</p>
+                <p class="form-hint" style="margin-top: -4px;">工具与 Giftia 检索时，首个标签用于候选评分加分，其余标签可参与检索。</p>
                 
                 <div class="multiselect-tag-container" style="display: flex; align-items: center; gap: 8px; background: var(--bg-element); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); min-height: 42px; width: 100%; flex-wrap: wrap; box-sizing: border-box; position: relative;">
                   <!-- Active pills -->
@@ -489,7 +440,7 @@ export const ConfigPage = {
         <div v-else style="display: flex; flex-direction: column; gap: 24px;">
           <!-- Loop through keys mapped to current activeSubTab -->
           <template v-for="key in tabKeys[activeSubTab]" :key="key">
-            <div v-if="configSchema[key]" class="config-card" :style="{ zIndex: (key === 'persona_blacklist' && showBlacklistDropdown) ? 100 : 'auto', position: (key === 'persona_blacklist' && showBlacklistDropdown) ? 'relative' : 'static' }">
+            <div v-if="configSchema[key]" class="config-card">
               <div class="config-card-title">
                 {{ configSchema[key].description || key }}
               </div>
@@ -590,6 +541,17 @@ export const ConfigPage = {
                     <!-- Textarea -->
                     <textarea v-else-if="getFieldType(subField, subKey) === 'textarea'" v-model="localConfig[key][subKey]" class="form-control"></textarea>
 
+                    <!-- List of strings -->
+                    <div v-else-if="getFieldType(subField, subKey) === 'list'" class="list-editor">
+                      <div v-for="(item, idx) in localConfig[key][subKey]" :key="idx" class="list-editor-item">
+                        <input type="text" v-model="localConfig[key][subKey][idx]" class="form-control" />
+                        <button class="btn-danger-outline" style="padding: 0 12px;" @click="localConfig[key][subKey].splice(idx, 1)">&times;</button>
+                      </div>
+                      <button class="btn-secondary" style="align-self: flex-start; margin-top: 4px;" @click="localConfig[key][subKey].push('')">
+                        <i class="fas fa-plus"></i> 添加条目
+                      </button>
+                    </div>
+
                     <!-- Hint -->
                     <p v-if="subField.hint && getFieldType(subField, subKey) !== 'switch'" class="form-hint">{{ subField.hint }}</p>
                   </template>
@@ -639,7 +601,7 @@ export const ConfigPage = {
                     <input v-else type="text" v-model="localConfig[key]" class="form-control" placeholder="无法查找到 Embedding 供应商，请输入 Provider ID" />
                   </template>
 
-                  <!-- List (Blacklist / Array of strings) -->
+                  <!-- List of strings -->
                   <div v-else-if="getFieldType(configSchema[key], key) === 'list'" class="list-editor">
                     <div v-for="(item, idx) in localConfig[key]" :key="idx" class="list-editor-item">
                       <input type="text" v-model="localConfig[key][idx]" class="form-control" />
@@ -648,46 +610,6 @@ export const ConfigPage = {
                     <button class="btn-secondary" style="align-self: flex-start; margin-top: 4px;" @click="localConfig[key].push('')">
                       <i class="fas fa-plus"></i> 添加条目
                     </button>
-                  </div>
-
-                  <!-- Persona Blacklist Multiselect Dropdown -->
-                  <div v-else-if="getFieldType(configSchema[key], key) === 'persona_blacklist_select'" class="persona-tags-select" style="position: relative; width: 100%;">
-                    <div class="multiselect-tag-container" style="display: flex; align-items: center; gap: 8px; background: var(--bg-element); border: 1px solid var(--border-color); padding: 8px 12px; border-radius: var(--radius-md); min-height: 42px; width: 100%; flex-wrap: wrap; box-sizing: border-box; position: relative;">
-                      <!-- Active pills -->
-                      <span v-for="pId in localConfig[key]" :key="pId" class="active-tag-pill" style="display: inline-flex; align-items: center; gap: 4px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.3); color: var(--primary-color); padding: 2px 8px; border-radius: 4px; font-size: 12.5px; font-weight: 500; user-select: none;">
-                        {{ getPersonaName(pId) }}
-                        <span @click.stop="toggleBlacklistPersona(pId)" style="cursor: pointer; font-weight: bold; font-size: 13px; color: var(--primary-color); line-height: 1; padding-left: 2px;" onmouseover="this.style.color='var(--danger-color)'" onmouseout="this.style.color='var(--primary-color)'">&times;</span>
-                      </span>
-                      
-                      <!-- Dropdown Input -->
-                      <div style="position: relative; display: inline-flex; align-items: center; flex: 1; min-width: 160px;">
-                        <input 
-                          type="text" 
-                          v-model="blacklistSearchQuery" 
-                          @focus="showBlacklistDropdown = true"
-                          @blur="handleBlacklistBlur"
-                          placeholder="点击或检索选择禁用的人格..." 
-                          style="width: 100%; border: none; background: transparent; color: var(--text-primary); outline: none; font-size: 13px;"
-                        />
-                        
-                        <!-- Dropdown Menu -->
-                        <div v-show="showBlacklistDropdown" class="dropdown-menu" style="position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 1000; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); max-height: 200px; overflow-y: auto; min-width: 220px; padding: 4px 0; display: flex; flex-direction: column; gap: 2px;" @mousedown.prevent>
-                          <div 
-                            v-for="p in filteredBlacklistPersonas" 
-                            :key="p.id"
-                            style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; cursor: pointer; color: var(--text-primary); font-size: 13.5px; margin: 0; user-select: none; transition: background 0.2s;" 
-                            :style="{ background: (localConfig[key] && localConfig[key].includes(p.id)) ? 'rgba(59, 130, 246, 0.08)' : 'transparent', color: (localConfig[key] && localConfig[key].includes(p.id)) ? 'var(--primary-color)' : 'var(--text-primary)' }"
-                            @mouseover="$event.currentTarget.style.background = 'var(--bg-hover)'"
-                            @mouseleave="$event.currentTarget.style.background = (localConfig[key] && localConfig[key].includes(p.id)) ? 'rgba(59, 130, 246, 0.08)' : 'transparent'"
-                            @click="toggleBlacklistPersona(p.id)"
-                          >
-                            <span style="flex: 1;">{{ p.name === p.id ? p.name : p.name + ' (' + p.id + ')' }}</span>
-                            <i v-if="localConfig[key] && localConfig[key].includes(p.id)" class="fas fa-check" style="color: var(--primary-color); font-size: 12px;"></i>
-                          </div>
-                          <div v-if="filteredBlacklistPersonas.length === 0" style="padding: 8px 12px; color: var(--text-secondary); font-size: 12.5px; text-align: center;">暂无匹配人格</div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
 
                   <!-- Regular Inputs -->

@@ -6,7 +6,6 @@ from astrbot.api.event import AstrMessageEvent
 from astrbot.core.message.message_event_result import MessageChain
 
 from ...config import MEMES_DIR
-from ...utils import get_config_value
 from .emotion_handler import search_memes_for_llm
 from .helpers import build_meme_image, convert_to_gif, get_persona_id
 
@@ -114,8 +113,6 @@ async def send_meme(
 
         await event.send(MessageChain([img]))
 
-        event.set_extra("meme_tool_executed", True)
-
         if final_meme_file != meme_file and os.path.exists(final_meme_file):
             try:
                 os.remove(final_meme_file)
@@ -129,11 +126,7 @@ async def send_meme(
             if selected_meme.get("description")
             else f"标签为 [{', '.join(selected_meme['emotions'])}]"
         )
-        return (
-            f"表情包已成功发送！已选择{desc_info}的表情包。"
-            # "（提示：如果该表情包已能完全表达你的意思，或者你在调用工具前已经生成了回复文本，"
-            # "请在此直接结束本次回复，不要复述或重复你已经说过的话。）"
-        )
+        return f"表情包已成功发送！已选择{desc_info}的表情包。"
     except Exception as e:
         logger.error(f"[meme_manager] LLM发图工具发送失败: {e}")
         return f"表情包发送失败：{e}"

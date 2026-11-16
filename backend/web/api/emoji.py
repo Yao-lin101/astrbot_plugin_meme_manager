@@ -359,20 +359,6 @@ async def get_emoji_file_base64():
         if not target_path.is_file() or not target_path.resolve().is_relative_to(
             memes_dir
         ):
-            candidates = (
-                item / filename
-                for item in (memes_dir.iterdir() if memes_dir.is_dir() else [])
-                if item.is_dir() and item.name not in {".thumbnails", "thumbnails"}
-            )
-            target_path = next(
-                (
-                    path.resolve()
-                    for path in candidates
-                    if path.is_file() and path.resolve().is_relative_to(memes_dir)
-                ),
-                None,
-            )
-        if target_path is None:
             return jsonify({"message": "文件不存在"}), 404
 
         mime_type = mimetypes.guess_type(target_path)[0] or "image/png"
@@ -459,30 +445,13 @@ async def generate_thumbnails_api():
 
         for row in rows:
             filename = row["filename"]
-            # Find original file
-            target_path = os.path.join(MEMES_DIR, filename)
-            if not os.path.exists(target_path):
-                # Search inside categories if not found
-                found = False
-                for item in os.listdir(MEMES_DIR):
-                    if item == ".thumbnails" or item == "thumbnails":
-                        continue
-                    item_path = os.path.join(MEMES_DIR, item)
-                    if os.path.isdir(item_path):
-                        check_path = os.path.join(item_path, filename)
-                        if os.path.exists(check_path):
-                            target_path = check_path
-                            found = True
-                            break
-                if not found:
-                    failed += 1
-                    errors.append(
-                        {
-                            "filename": filename,
-                            "error": "Original file not found on disk",
-                        }
-                    )
-                    continue
+            target_path = Path(MEMES_DIR) / filename
+            if not target_path.is_file():
+                failed += 1
+                errors.append(
+                    {"filename": filename, "error": "Original file not found on disk"}
+                )
+                continue
 
             thumb_filename = filename + thumb_ext
             thumb_path = os.path.join(thumb_dir, thumb_filename)

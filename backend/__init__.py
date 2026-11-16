@@ -3,7 +3,6 @@ from .core.config_mixin import MemeConfigMixin
 from .core.emotion_handler import sync_tag_embeddings
 from .core.helpers import migrate_old_persona_tags_if_needed
 from .core.llm_tools import send_meme, steal_meme
-from .core.persona_manager import reload_personas
 from .db.similarity import sync_similarity_features
 from .handlers.commands_handler import CommandsHandler
 from .handlers.event_handlers import EventHandlers
@@ -16,7 +15,6 @@ __all__ = [
     "migrate_old_persona_tags_if_needed",
     "send_meme",
     "steal_meme",
-    "reload_personas",
     "sync_similarity_features",
     "CommandsHandler",
     "EventHandlers",

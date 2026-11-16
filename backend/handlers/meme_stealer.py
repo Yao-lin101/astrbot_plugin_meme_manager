@@ -431,7 +431,9 @@ async def _classify_with_multimodal(
             if is_animated and len(image_urls) > 1
             else ""
         )
-        logger.debug(f"正在调用多模态模型 {provider_id} 判定表情分类与描述{frame_tip}...")
+        logger.debug(
+            f"正在调用多模态模型 {provider_id} 判定表情分类与描述{frame_tip}..."
+        )
         llm_resp = await sender.context.llm_generate(
             chat_provider_id=provider_id,
             prompt=prompt,

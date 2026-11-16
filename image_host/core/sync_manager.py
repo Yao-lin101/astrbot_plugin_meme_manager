@@ -84,7 +84,11 @@ class SyncManager:
                 print(f"  - [{img.get('category', '根目录')}] {img['filename']}")
 
         print("\n正在获取远程文件列表...")
-        remote_images = self.image_host.get_image_list()
+        remote_images = [
+            image
+            for image in self.image_host.get_image_list()
+            if not image.get("category")
+        ]
         print(f"\n远程文件总数: {len(remote_images)}")
         if len(remote_images) > 5:
             print("前5个文件:")
