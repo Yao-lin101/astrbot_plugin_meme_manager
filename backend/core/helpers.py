@@ -2,16 +2,15 @@ import base64
 import io
 import os
 import random
-import re
 import tempfile
 import time
+import weakref
 
 from PIL import Image as PILImage
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
-from astrbot.core.message.components import Image, Plain
-
+from astrbot.core.message.components import Image
 
 MEME_SEND_MODE_STICKER = "sticker"
 MEME_SEND_MODE_IMAGE = "image"
@@ -40,8 +39,6 @@ def build_meme_image(
     return img
 
 
-import weakref
-
 # 弱引用缓存字典：以 sender 为键，存入 Giftia 实例或 False (Sentinel 哨兵)
 # 优势：不给 sender 对象动态添加私有属性，且 sender 销毁时缓存自动清空，无内存泄漏
 _GIFTIA_STAR_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
@@ -63,7 +60,11 @@ def _get_giftia_star(sender):
         try:
             for meta in sender.context.get_all_stars():
                 cls_obj = getattr(meta, "star_cls", None)
-                if cls_obj and hasattr(cls_obj, "bot_map") and hasattr(cls_obj, "adapter_id_map"):
+                if (
+                    cls_obj
+                    and hasattr(cls_obj, "bot_map")
+                    and hasattr(cls_obj, "adapter_id_map")
+                ):
                     giftia_star = cls_obj
                     break
                 # 兼容通过名称匹配
@@ -74,7 +75,9 @@ def _get_giftia_star(sender):
                         giftia_star = cls_obj
                         break
         except Exception as e:
-            logger.debug(f"[meme_manager] 尝试通过 context.get_all_stars 获取 Giftia 实例异常: {e}")
+            logger.debug(
+                f"[meme_manager] 尝试通过 context.get_all_stars 获取 Giftia 实例异常: {e}"
+            )
 
     # 2. 从 AstrBot 官方核心全局星图注册表 (star_registry) 检索 StarMetadata.star_cls
     if not giftia_star:
@@ -83,11 +86,17 @@ def _get_giftia_star(sender):
 
             for meta in star_registry:
                 cls_obj = getattr(meta, "star_cls", None)
-                if cls_obj and hasattr(cls_obj, "bot_map") and hasattr(cls_obj, "adapter_id_map"):
+                if (
+                    cls_obj
+                    and hasattr(cls_obj, "bot_map")
+                    and hasattr(cls_obj, "adapter_id_map")
+                ):
                     giftia_star = cls_obj
                     break
         except Exception as e:
-            logger.debug(f"[meme_manager] 尝试从 astrbot.core.star.star 检索 Giftia 实例异常: {e}")
+            logger.debug(
+                f"[meme_manager] 尝试从 astrbot.core.star.star 检索 Giftia 实例异常: {e}"
+            )
 
     # 3. 从 context 上的其他插件管理器/字典属性遍历降级匹配
     if not giftia_star:
@@ -97,13 +106,22 @@ def _get_giftia_star(sender):
                 continue
 
             stars_iterable = (
-                mgr.values() if isinstance(mgr, dict)
-                else getattr(mgr, "stars", getattr(mgr, "_stars", getattr(mgr, "star_registry", [])))
+                mgr.values()
+                if isinstance(mgr, dict)
+                else getattr(
+                    mgr,
+                    "stars",
+                    getattr(mgr, "_stars", getattr(mgr, "star_registry", [])),
+                )
             )
             try:
                 for item in stars_iterable:
                     cls_obj = getattr(item, "star_cls", item)
-                    if cls_obj and hasattr(cls_obj, "bot_map") and hasattr(cls_obj, "adapter_id_map"):
+                    if (
+                        cls_obj
+                        and hasattr(cls_obj, "bot_map")
+                        and hasattr(cls_obj, "adapter_id_map")
+                    ):
                         giftia_star = cls_obj
                         break
             except Exception:
@@ -165,13 +183,19 @@ def _resolve_giftia_persona_id(sender, event: AstrMessageEvent) -> str | None:
     """在 Giftia 模式下从事件或 Giftia Bot 映射解析 Persona ID"""
     # 1. 优先检查 event 中是否带有显式设置的人格 ID
     if hasattr(event, "get_extra"):
-        extra_pid = event.get_extra("persona_id") or event.get_extra("giftia_persona_id")
+        extra_pid = event.get_extra("persona_id") or event.get_extra(
+            "giftia_persona_id"
+        )
         if extra_pid:
-            logger.debug(f"[meme_manager] [Giftia模式] 从 event.get_extra 解析到 Persona ID: '{extra_pid}'")
+            logger.debug(
+                f"[meme_manager] [Giftia模式] 从 event.get_extra 解析到 Persona ID: '{extra_pid}'"
+            )
             return str(extra_pid)
     if hasattr(event, "persona_id") and getattr(event, "persona_id", None):
         extra_pid = getattr(event, "persona_id")
-        logger.debug(f"[meme_manager] [Giftia模式] 从 event.persona_id 解析到 Persona ID: '{extra_pid}'")
+        logger.debug(
+            f"[meme_manager] [Giftia模式] 从 event.persona_id 解析到 Persona ID: '{extra_pid}'"
+        )
         return str(extra_pid)
 
     # 2. 从 Giftia 插件的平台适配器映射中自动精准匹配当前机器人的人格 ID
@@ -195,15 +219,22 @@ def _resolve_giftia_persona_id(sender, event: AstrMessageEvent) -> str | None:
                     )
             else:
                 platform_id = getattr(getattr(event, "platform_meta", None), "id", None)
-                self_id = str(event.get_self_id()) if hasattr(event, "get_self_id") else ""
+                self_id = (
+                    str(event.get_self_id()) if hasattr(event, "get_self_id") else ""
+                )
                 logger.warning(
                     f"[meme_manager] [Giftia模式] 未能从 Giftia 映射中找到对应的 Bot "
                     f"(platform_id='{platform_id}', self_id='{self_id}')"
                 )
         else:
-            logger.warning("[meme_manager] [Giftia模式] 未检测到已实例化的 Giftia 插件 (astrbot_plugin_giftia)")
+            logger.warning(
+                "[meme_manager] [Giftia模式] 未检测到已实例化的 Giftia 插件 (astrbot_plugin_giftia)"
+            )
     except Exception as e:
-        logger.warning(f"[meme_manager] [Giftia模式] 尝试从 Giftia 获取 Persona ID 发生异常: {e}", exc_info=True)
+        logger.warning(
+            f"[meme_manager] [Giftia模式] 尝试从 Giftia 获取 Persona ID 发生异常: {e}",
+            exc_info=True,
+        )
 
     return None
 
@@ -217,7 +248,9 @@ async def get_persona_id(sender, event: AstrMessageEvent) -> str:
         if p_id:
             return p_id
     else:
-        logger.debug("[meme_manager] Giftia 兼容模式未开启 (enable_giftia_mode=False)，使用 AstrBot 原生人格解析")
+        logger.debug(
+            "[meme_manager] Giftia 兼容模式未开启 (enable_giftia_mode=False)，使用 AstrBot 原生人格解析"
+        )
 
     conversation_persona_id = None
     try:
@@ -267,20 +300,6 @@ async def get_persona_id(sender, event: AstrMessageEvent) -> str:
         persona_id = "default"
 
     return persona_id
-
-
-async def get_persona_prompt(sender, event: AstrMessageEvent) -> str:
-    """获取当前会话实际生效的人格系统提示词"""
-    persona_id = await get_persona_id(sender, event)
-    try:
-        persona_obj = sender.context.provider_manager.persona_mgr.get_persona_v3_by_id(
-            persona_id
-        )
-        if persona_obj:
-            return persona_obj.get("prompt", "") or ""
-    except Exception as e:
-        logger.warning(f"获取当前会话实际生效人格 Prompt 失败: {e}")
-    return ""
 
 
 def convert_to_gif(image_path: str, sender) -> str:
@@ -371,13 +390,11 @@ def extract_frames_for_llm(
                 # 均匀线性抽帧，确保涵盖第一帧和最后一帧
                 step = (n_frames - 1) / (max_frames - 1)
                 frame_indices = sorted(
-                    list(
-                        dict.fromkeys(
-                            [
-                                max(0, min(round(i * step), n_frames - 1))
-                                for i in range(max_frames)
-                            ]
-                        )
+                    dict.fromkeys(
+                        [
+                            max(0, min(round(i * step), n_frames - 1))
+                            for i in range(max_frames)
+                        ]
                     )
                 )
 
@@ -423,128 +440,6 @@ def extract_frames_for_llm(
     except Exception as e:
         logger.warning(f"[meme_manager] 尝试对动图进行抽帧失败，降级使用原图: {e}")
         return [fallback_uri], False
-
-
-def is_position_in_thinking_tags(text: str, position: int) -> bool:
-    """检查指定位置是否在thinking标签内"""
-    thinking_pattern = re.compile(
-        r"<think(?:ing)?>.*?</think(?:ing)?>", re.DOTALL | re.IGNORECASE
-    )
-
-    for match in thinking_pattern.finditer(text):
-        if match.start() <= position < match.end():
-            return True
-    return False
-
-
-def is_likely_emotion_markup(markup, text, position):
-    before_text = text[:position].strip()
-    after_text = text[position + len(markup) :].strip()
-
-    has_chinese_before = bool(
-        re.search(r"[\u4e00-\u9fff]", before_text[-1:] if before_text else "")
-    )
-    has_chinese_after = bool(
-        re.search(r"[\u4e00-\u9fff]", after_text[:1] if after_text else "")
-    )
-    if has_chinese_before or has_chinese_after:
-        return True
-
-    if re.match(r"\[\d+\]", markup):
-        return False
-
-    if " " in markup[1:-1]:
-        return False
-
-    return True
-
-
-def is_likely_emotion(word, text, position, valid_emotions, sender):
-    before_text = text[:position].strip()
-    after_text = text[position + len(word) :].strip()
-
-    english_context_before = bool(re.search(r"[a-zA-Z]$", before_text))
-    english_context_after = bool(re.search(r"^[a-zA-Z]", after_text))
-
-    if english_context_before or english_context_after:
-        return False
-
-    has_chinese_before = bool(
-        re.search(r"[\u4e00-\u9fff]", before_text[-1:] if before_text else "")
-    )
-    has_chinese_after = bool(
-        re.search(r"[\u4e00-\u9fff]", after_text[:1] if after_text else "")
-    )
-
-    if has_chinese_before or has_chinese_after:
-        return True
-
-    if not before_text or before_text.endswith(
-        ("。", "，", "！", "？", ".", ",", ":", ";", "!", "?", "\n")
-    ):
-        return True
-
-    if (not before_text or before_text[-1] in " \t\n.,!?;:'\"()[]{}") and (
-        not after_text or after_text[0] in " \t\n.,!?;:'\"()[]{}"
-    ):
-        return True
-
-    if word in sender.config.get("high_confidence_emotions", []):
-        return True
-
-    return False
-
-
-def merge_components_with_images(sender, components, images):
-    """将表情图片与文本组件智能配对，支持分段回复"""
-    logger.debug(
-        f"[meme_manager] _merge_components_with_images 输入: 组件总数={len(components)}, 图片总数={len(images)}"
-    )
-
-    if not images:
-        return components
-
-    if not components:
-        return images
-
-    plain_indices = [i for i, comp in enumerate(components) if isinstance(comp, Plain)]
-    logger.debug(f"[meme_manager] Plain 组件的索引位置列表: {plain_indices}")
-
-    if not plain_indices:
-        return components + images
-
-    merged_components = components.copy()
-    images_per_text = max(1, len(images) // len(plain_indices))
-    image_index = 0
-    images_inserted_so_far = 0
-
-    for idx, plain_idx in enumerate(plain_indices):
-        if image_index >= len(images):
-            break
-
-        if idx == len(plain_indices) - 1:
-            images_for_this_text = len(images) - image_index
-        else:
-            images_for_this_text = min(images_per_text, len(images) - image_index)
-
-        logger.debug(
-            f"[meme_manager] Plain 组件 {idx} (索引={plain_idx}) 分配的图片数量: {images_for_this_text}"
-        )
-
-        insert_pos = plain_idx + 1 + images_inserted_so_far
-
-        for _ in range(images_for_this_text):
-            if image_index < len(images):
-                merged_components.insert(insert_pos, images[image_index])
-                image_index += 1
-                insert_pos += 1
-                images_inserted_so_far += 1
-
-    logger.debug(
-        f"[meme_manager] 合并前组件总数: {len(components)}, 合并后组件总数: {len(merged_components)}"
-    )
-
-    return merged_components
 
 
 PERSONA_TAGS_PATH = None

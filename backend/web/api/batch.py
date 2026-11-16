@@ -293,12 +293,21 @@ active_analyze_task = None
 
 
 async def get_providers():
-    """获取所有可用的 LLM 提供商 (Chat Completion)"""
+    """List chat providers, or decision providers when requested.
+
+    Returns:
+        Provider IDs and display names as a JSON response.
+    """
     try:
         plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         context = plugin_config.get("context")
         if context:
-            providers = context.get_all_providers()
+            if request.args.get("provider_type") == "decision":
+                providers = getattr(
+                    context.provider_manager, "decision_provider_insts", []
+                )
+            else:
+                providers = context.get_all_providers()
             result = []
             for p in providers:
                 meta = p.meta()
@@ -505,7 +514,6 @@ async def analyze_emoji_core(
     Returns a dict: {"status": "success", "tags": [...], "description": "..."}
     """
     import asyncio
-    import base64
     import io
     import json
     import os

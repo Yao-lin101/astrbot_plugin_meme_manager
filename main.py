@@ -1,13 +1,11 @@
 import asyncio
 import os
-import time
 
 from astrbot.api import logger
 from astrbot.api.all import *  # noqa: F403
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.event.filter import EventMessageType
 from astrbot.api.message_components import *  # noqa: F403
-from astrbot.api.provider import LLMResponse
 from astrbot.api.star import Context, Star
 
 from .backend import (
@@ -18,7 +16,6 @@ from .backend import (
     migrate_old_persona_tags_if_needed,
     patch_onebot_serializer,
     register_apis,
-    reload_personas,
     sync_similarity_features,
     sync_tag_embeddings,
 )
@@ -93,9 +90,7 @@ class MemeSender(Star, MemeConfigMixin):
                 self._r2_bucket_name = r2_config.get("bucket_name")
 
         # Initialize state properties
-        self.found_emotions = []
         self.upload_states = {}
-        self.pending_images = {}
         self.auto_steal_semaphore = asyncio.Semaphore(2)
         self._applied_giftia_mode = None
 
@@ -106,18 +101,11 @@ class MemeSender(Star, MemeConfigMixin):
             logger.info(f"Cloudflare R2 图床已初始化: {self._r2_bucket_name}")
             delattr(self, "_r2_bucket_name")
 
-        # Setup and inject persona prompt instructions
-        self.persona_prompts_backup = {}
-        self._reload_personas()
-
-        # Activate or deactivate LLM tool based on settings
+        # Re-enable the tool if a previous tag-only configuration disabled it.
         try:
-            if self.enable_llm_tool in ("tool", "hybrid"):
-                self.context.activate_llm_tool("send_meme")
-            else:
-                self.context.deactivate_llm_tool("send_meme")
+            self.context.activate_llm_tool("send_meme")
         except Exception as e:
-            logger.warning(f"[meme_manager] 无法激活/停用 LLM 发图工具: {e}")
+            logger.warning(f"[meme_manager] Failed to activate send_meme: {e}")
 
         # Start background tag embedding and similarity feature synchronization
         asyncio.create_task(sync_tag_embeddings(self))
@@ -150,9 +138,13 @@ class MemeSender(Star, MemeConfigMixin):
             if giftia_mode
             else "要收录的图片 HTTP/HTTPS URL 或本地文件路径。"
         )
-        categories_desc = "表情分类列表（如 ['开心']）。仅在用户明确指定了分类时传入，否则不传。"
+        categories_desc = (
+            "表情分类列表（如 ['开心']）。仅在用户明确指定了分类时传入，否则不传。"
+        )
         category_desc = "表情分类。单标签兼容，仅在用户明确指定了分类时传入，否则不传。"
-        description_desc = "表情包画面的简洁描述。仅在用户明确指定了描述时传入，否则不传。"
+        description_desc = (
+            "表情包画面的简洁描述。仅在用户明确指定了描述时传入，否则不传。"
+        )
         tool_desc = "保存并收录聊天中的图片/表情包到表情包库中。"
 
         try:
@@ -209,20 +201,10 @@ class MemeSender(Star, MemeConfigMixin):
         except Exception as e:
             logger.warning(f"[meme_manager] 动态更新 LLM 工具描述失败: {e}")
 
-    @property
-    def category_mapping(self) -> dict[str, str]:
-        """Backward compatibility property: returns all categories with empty string values."""
-        return dict.fromkeys(self.category_manager.get_categories(), "")
-
-    def _reload_personas(self):
-        """Reload meme settings and inject prompt instructions into registered personas."""
-        reload_personas(self)
-
     async def reload_emotions(self):
         """Dynamically reload meme configuration settings."""
         try:
             self.category_manager.sync_with_filesystem()
-            self._reload_personas()
             asyncio.create_task(sync_tag_embeddings(self))
             try:
                 self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
@@ -243,7 +225,6 @@ class MemeSender(Star, MemeConfigMixin):
                 self.category_manager.categories = (
                     self.category_manager._load_categories()
                 )
-                self._reload_personas()
                 self._apply_llm_tool_config()
         except Exception as e:
             logger.error(f"[meme_manager] 检查自动重载失败: {e}")
@@ -343,13 +324,6 @@ class MemeSender(Star, MemeConfigMixin):
         async for res in EventHandlers.handle_upload_image(self, event):
             yield res
 
-    @filter.event_message_type(EventMessageType.ALL)
-    async def handle_direct_meme_trigger(self, event: AstrMessageEvent):
-        """监听 <emotions>标签</emotions> 直接触发表情包发送，绕过 LLM"""
-        await self.check_and_reload_if_changed()
-        async for res in EventHandlers.handle_direct_meme_trigger(self, event):
-            yield res
-
     @filter.event_message_type(EventMessageType.GROUP_MESSAGE)
     async def handle_group_message(self, event: AstrMessageEvent):
         """处理群聊消息以实现暗中自动偷表情包"""
@@ -384,23 +358,6 @@ class MemeSender(Star, MemeConfigMixin):
                 await EventHandlers.auto_steal_meme(self, event)
 
         asyncio.create_task(run_steal_task())
-
-    @filter.on_llm_response(priority=99999)
-    async def resp(self, event: AstrMessageEvent, response: LLMResponse):
-        """处理 LLM 响应，识别表情"""
-        await self.check_and_reload_if_changed()
-        await EventHandlers.resp(self, event, response)
-
-    @filter.on_decorating_result(priority=99999)
-    async def on_decorating_result(self, event: AstrMessageEvent):
-        """在消息发送前清理文本中的表情标签，并添加表情图片"""
-        await self.check_and_reload_if_changed()
-        await EventHandlers.on_decorating_result(self, event)
-
-    @filter.after_message_sent()
-    async def after_message_sent(self, event: AstrMessageEvent):
-        """消息发送后处理。用于发送未混合的表情图片。"""
-        await EventHandlers.after_message_sent(self, event)
 
     @llm_tool(name="steal_meme")
     async def steal_meme(
@@ -522,12 +479,5 @@ class MemeSender(Star, MemeConfigMixin):
 
     async def terminate(self):
         """清理资源"""
-        personas = self.context.provider_manager.personas
-        if hasattr(self, "persona_prompts_backup"):
-            for persona in personas:
-                name = persona.get("name") or ""
-                if name in self.persona_prompts_backup:
-                    persona["prompt"] = self.persona_prompts_backup[name]
-
         if self.img_sync:
             self.img_sync.stop_sync()

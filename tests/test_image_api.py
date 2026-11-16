@@ -150,13 +150,13 @@ async def test_thumbnail_failure_returns_original(image_api, monkeypatch, caplog
     assert "using original image" in caplog.text
 
 
-async def test_legacy_category_image_is_supported(image_api):
+async def test_pre_v4_category_image_is_not_loaded(image_api):
     api, client = image_api
     category = api.MEMES_DIR / "happy"
     category.mkdir()
     Image.new("RGB", (20, 20), "red").save(category / "legacy.png")
     response = await client.get("/image", query_string={"filename": "legacy.png"})
-    assert response.status_code == 200
+    assert response.status_code == 404
 
 
 @pytest.mark.parametrize(
