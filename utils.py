@@ -196,6 +196,7 @@ def get_config_value(config: dict, key: str, default: Any = None) -> Any:
         "auto_steal_probability": "auto_steal_config",
         "auto_steal_min_seen": "auto_steal_config",
         # multimodal_config
+        "meme_decision_provider_id": "multimodal_config",
         "multimodal_llm_enabled": "multimodal_config",
         "multimodal_llm_provider_id": "multimodal_config",
         "multimodal_tag_prompt": "multimodal_config",

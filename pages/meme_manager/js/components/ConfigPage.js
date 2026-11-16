@@ -41,6 +41,7 @@ export const ConfigPage = {
     const localPersonaCollectPref = ref('');
 
     const providers = ref([]);
+    const decisionProviders = ref([]);
     const embeddingProviders = ref([]);
 
     const tabKeys = {
@@ -201,6 +202,7 @@ export const ConfigPage = {
       }
       if (field.type === 'string' && field.options) return 'select';
       if (field.type === 'string' && field._special === 'select_provider') return 'provider_select';
+      if (field.type === 'string' && field._special === 'select_decision_provider') return 'decision_provider_select';
       if (field.type === 'string' && field._special === 'select_embedding_provider') return 'embedding_provider_select';
       return 'text';
     };
@@ -227,9 +229,17 @@ export const ConfigPage = {
       }
     };
 
-    onMounted(() => {
+    onMounted(async () => {
       fetchProviders();
       fetchEmbeddingProviders();
+      try {
+        const res = await fetch("providers?provider_type=decision");
+        if (res.ok) {
+          decisionProviders.value = await res.json();
+        }
+      } catch (e) {
+        console.error("Failed to load decision providers:", e);
+      }
     });
 
     // Cache cleanup state
@@ -297,6 +307,7 @@ export const ConfigPage = {
       filteredPreferenceCategories,
       tabKeys,
       providers,
+      decisionProviders,
       embeddingProviders,
       clearingAll,
       clearingOrphans,
@@ -520,6 +531,14 @@ export const ConfigPage = {
                     <select v-else-if="getFieldType(subField, subKey) === 'provider_select'" v-model="localConfig[key][subKey]" class="form-control">
                       <option value="">-- 请选择供应商 (留空默认) --</option>
                       <option v-for="prov in providers" :key="prov.id" :value="prov.id">
+                        {{ prov.name }} ({{ prov.id }})
+                      </option>
+                    </select>
+
+                    <!-- Decision Provider ID Dropdown -->
+                    <select v-else-if="getFieldType(subField, subKey) === 'decision_provider_select'" v-model="localConfig[key][subKey]" class="form-control">
+                      <option value="">-- 沿用多模态判定流程 --</option>
+                      <option v-for="prov in decisionProviders" :key="prov.id" :value="prov.id">
                         {{ prov.name }} ({{ prov.id }})
                       </option>
                     </select>

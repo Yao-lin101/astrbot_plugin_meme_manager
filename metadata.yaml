@@ -2,6 +2,6 @@ name: astrbot_plugin_meme_manager
 display_name: 表情包管理器
 desc: AstrBot 表情包管理器向量版。支持 Embedding 标签检索、send_meme 工具与 Giftia 兼容接口；提供人格图库与偏好配置、自动收录、视觉相似度去重、批量 AI 分析和图床同步。
 help: 功能包含： 1. send_meme 工具检索与选择发送，兼容 Giftia 候选与图片组件接口 2. 人格专属图库、使用偏好与收集偏好配置 3. AI 自动偷表情收录与视觉相似度去重 4. WebUI 批量管理、AI 分析及图床同步
-version: v4.8.6
+version: v5.0.0
 author: anka & e.e.
 repo: https://github.com/Yao-lin101/astrbot_plugin_meme_manager

@@ -11,6 +11,15 @@ class MemeConfigMixin:
         return get_config_value(self.config, "auto_steal_probability", 30)
 
     @property
+    def meme_decision_provider_id(self) -> str:
+        """Return the optional decision provider used for collection checks.
+
+        Returns:
+            The configured provider ID, or an empty string for the chat flow.
+        """
+        return get_config_value(self.config, "meme_decision_provider_id", "")
+
+    @property
     def multimodal_tag_prompt(self) -> str:
         default_tag_prompt = (
             "你是一个专业的表情包内容分析师，需要全面分析表情包的各个维度，重点识别角色来源、作品归属和物品特征，为用户提供详细、准确、实用的信息。\n"

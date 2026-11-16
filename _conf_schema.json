@@ -117,9 +117,16 @@
     }
   },
   "multimodal_config": {
-    "description": "多模态分类配置",
+    "description": "收录判定与多模态分类配置",
     "type": "object",
     "items": {
+      "meme_decision_provider_id": {
+        "description": "收录判定决策模型 Provider ID（可选）",
+        "type": "string",
+        "default": "",
+        "hint": "用于判断是否属于表情包、是否符合人格收集偏好。AstrBot 当前仅 Gemini 决策模型支持多模态适配。留空继续使用原来的多模态判定流程；标签与描述仍使用下方的多模态模型。",
+        "_special": "select_decision_provider"
+      },
       "multimodal_llm_enabled": {
         "description": "启用多模态模型自动分类表情包",
         "type": "bool",

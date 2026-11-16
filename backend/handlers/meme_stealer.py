@@ -30,9 +30,10 @@ async def _check_meme_preference_match(
     file_type: str,
     preference_text: str,
 ) -> tuple[bool | None, str]:
-    """调用多模态 LLM 判定图片是否满足人格的表情包收集偏好。
+    """Check meme eligibility and persona preference with the configured model.
 
-    若为动图，动态抽帧至多 8 张发送给 LLM 判定。
+    Use the decision service when configured, otherwise the original multimodal
+    chat flow. Animated images are sampled into at most eight frames.
 
     Args:
         sender: The sender object.
@@ -48,13 +49,18 @@ async def _check_meme_preference_match(
             - False: does not match the preference
             - None: error occurred during evaluation (so it should not be cached)
     """
-    provider_id = getattr(sender, "multimodal_llm_provider_id", "")
-    if not provider_id:
-        provider_id = await sender.context.get_current_chat_provider_id(
-            umo=event.unified_msg_origin
-        )
-    if not provider_id:
-        return None, "未找到可用的多模态模型/聊天模型提供商，无法进行偏好判定。"
+    decision_provider_id = (
+        getattr(sender, "meme_decision_provider_id", "") or ""
+    ).strip()
+    provider_id = ""
+    if not decision_provider_id:
+        provider_id = getattr(sender, "multimodal_llm_provider_id", "")
+        if not provider_id:
+            provider_id = await sender.context.get_current_chat_provider_id(
+                umo=event.unified_msg_origin
+            )
+        if not provider_id:
+            return None, "未找到可用的多模态模型/聊天模型提供商，无法进行偏好判定。"
 
     image_urls, is_animated = extract_frames_for_llm(content, file_type, max_frames=8)
 
@@ -64,6 +70,67 @@ async def _check_meme_preference_match(
             f"（注意：当前待判定的表情包为动图，已按时间顺序抽取了 {len(image_urls)} 张关键帧画面，"
             f"请结合连贯动作、动态变化与整体风格综合判定）\n"
         )
+
+    if decision_provider_id:
+        try:
+            # Import lazily so the original flow works on older AstrBot versions.
+            from astrbot.api.provider import (
+                DecisionBooleanAnswer,
+                DecisionBooleanQuestion,
+                DecisionInput,
+                DecisionMedia,
+            )
+
+            state = DecisionInput(
+                content=[
+                    f"{animated_note}【当前人格的表情包收集偏好】：\n{preference_text}"
+                ]
+            )
+            for image_url in image_urls:
+                mime_type, data = image_url.removeprefix("data:").split(";base64,", 1)
+                state.content.append(
+                    DecisionMedia(type="image", mime_type=mime_type, data=data)
+                )
+            answers = await sender.context.decision.ask(
+                {
+                    "is_meme": DecisionBooleanQuestion(
+                        "给定图片是否属于聊天中用于表达情绪、态度或回应的表情包范畴？"
+                        "请结合图片内容、动作和整体风格判断。"
+                    ),
+                    "matches_preference": DecisionBooleanQuestion(
+                        "给定图片的内容和风格是否符合上下文提供的当前人格的表情包收集偏好？"
+                    ),
+                },
+                state=state,
+                provider_id=decision_provider_id,
+            )
+            is_meme = answers["is_meme"]
+            matches_preference = answers["matches_preference"]
+            for answer in (is_meme, matches_preference):
+                if not isinstance(answer, DecisionBooleanAnswer) or not (
+                    0 <= answer.probability <= 1
+                ):
+                    raise ValueError(
+                        "Decision provider returned an invalid boolean answer"
+                    )
+            logger.debug(
+                f"[meme_manager] Collection decision ({decision_provider_id}): "
+                f"is_meme={is_meme.probability}, "
+                f"matches_preference={matches_preference.probability}"
+            )
+            if is_meme.probability < 0.5:
+                return False, "图片不属于表情包范畴。"
+            if matches_preference.probability < 0.5:
+                return False, "图片不符合当前人格的表情包收集偏好。"
+            return True, "属于表情包且符合当前人格的收集偏好。"
+        except Exception as e:
+            logger.error(
+                f"[meme_manager] Decision-based collection check failed: {e}",
+                exc_info=True,
+            )
+            return None, (
+                f"调用决策模型失败（AstrBot 当前仅 Gemini 决策模型支持多模态输入）：{e}"
+            )
 
     prompt = (
         f"请根据当前人格的表情包收集偏好，判定给定的表情包是否符合该收集偏好。\n"
@@ -355,7 +422,7 @@ async def _check_preference(
             sender, event, content, file_type, preference_text
         )
         if is_matched is None:
-            return f"大模型判定失败/不支持多模态：{match_reason}"
+            return f"收录判定失败：{match_reason}"
         elif not is_matched:
             # Explicit rejection, cache the attempt
             try:
