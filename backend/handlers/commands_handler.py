@@ -241,9 +241,7 @@ class CommandsHandler:
 
         clear_all_emojis()
         sender.category_manager.clear_all_categories()
-        from ..db.database import clear_all_tag_embeddings
-
-        clear_all_tag_embeddings()
+        vectors_cleared = await sender.tag_embeddings.reset()
 
         # 重新统计真正删除了多少
         conn = get_db_conn()
@@ -253,8 +251,13 @@ class CommandsHandler:
         conn.close()
 
         deleted_total = total_count - rem_count
+        vector_status = (
+            "标签向量缓存已清空。"
+            if vectors_cleared
+            else "清空标签向量缓存失败，请查看警告日志。"
+        )
         yield event.plain_result(
-            f"✅ 已成功清空全部表情包和标签，共删除 {deleted_total} 个文件，标签配置与向量缓存已清空。"
+            f"已清空表情包和标签配置，共删除 {deleted_total} 个文件。{vector_status}"
         )
 
     @staticmethod
@@ -565,14 +568,18 @@ class CommandsHandler:
 
     @staticmethod
     async def rebuild_tag_embeddings(sender, event: AstrMessageEvent):
-        """清空缓存的标签向量并重新计算"""
-        import asyncio
+        """Reset the tag cache and start a rebuild with the configured provider.
 
-        from ..core.emotion_handler import sync_tag_embeddings
-        from ..db.database import clear_all_tag_embeddings
+        Args:
+            sender: Plugin instance owning the embedding cache.
+            event: Administrator command event.
 
-        clear_all_tag_embeddings()
+        Yields:
+            Status of the rebuild request.
+        """
+        started = await sender.tag_embeddings.reset(rebuild=True)
         yield event.plain_result(
-            "✅ 已清空所有表情标签的向量缓存。正在后台调用配置的 Embedding 提供商重新同步计算向量，完成会有后台日志..."
+            "已清空旧向量缓存，正在后台按当前模型重建。请查看日志确认完成。"
+            if started
+            else "启动向量缓存重建失败，请查看警告日志。"
         )
-        asyncio.create_task(sync_tag_embeddings(sender))

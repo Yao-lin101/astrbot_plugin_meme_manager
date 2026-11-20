@@ -17,8 +17,8 @@ from .backend import (
     patch_onebot_serializer,
     register_apis,
     sync_similarity_features,
-    sync_tag_embeddings,
 )
+from .backend.core.tag_embeddings import TagEmbeddingStore
 from .config import MEMES_DATA_PATH, MEMES_DIR
 from .image_host.img_sync import ImageSync
 from .init import init_plugin
@@ -45,6 +45,7 @@ class MemeSender(Star, MemeConfigMixin):
 
         # Initialize category manager
         self.category_manager = CategoryManager()
+        self.tag_embeddings = TagEmbeddingStore(self)
         try:
             self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
         except Exception:
@@ -108,7 +109,7 @@ class MemeSender(Star, MemeConfigMixin):
             logger.warning(f"[meme_manager] Failed to activate send_meme: {e}")
 
         # Start background tag embedding and similarity feature synchronization
-        asyncio.create_task(sync_tag_embeddings(self))
+        self.tag_embeddings.start_sync()
         asyncio.create_task(sync_similarity_features(self))
         self._apply_llm_tool_config()
 
@@ -205,7 +206,7 @@ class MemeSender(Star, MemeConfigMixin):
         """Dynamically reload meme configuration settings."""
         try:
             self.category_manager.sync_with_filesystem()
-            asyncio.create_task(sync_tag_embeddings(self))
+            self.tag_embeddings.start_sync()
             try:
                 self._last_mtime = os.path.getmtime(MEMES_DATA_PATH)
             except Exception:
@@ -479,5 +480,6 @@ class MemeSender(Star, MemeConfigMixin):
 
     async def terminate(self):
         """清理资源"""
+        await self.tag_embeddings.close()
         if self.img_sync:
             self.img_sync.stop_sync()

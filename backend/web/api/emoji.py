@@ -156,6 +156,7 @@ async def add_emoji():
             category_manager = plugin_config.get("category_manager")
             if category_manager:
                 category_manager.sync_with_filesystem()
+            trigger_tag_vectorization()
 
             logger.info(f"表情包添加成功: {result['path']}")
             return jsonify(

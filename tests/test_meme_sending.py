@@ -106,10 +106,16 @@ def meme_plugin(tmp_path, monkeypatch):
         "astrbot.core.provider.register": {"llm_tools": tool_manager},
         "astrbot.core.star.star_handler": {"star_handlers_registry": []},
         "astrbot.core.star.star": {"star_registry": []},
+        "astrbot.core.utils.session_waiter": {
+            "SessionController": object,
+            "SessionFilter": object,
+            "session_waiter": Mock(),
+        },
         package + ".config": {
             "PLUGIN_DATA_DIR": tmp_path,
             "MEMES_DIR": tmp_path / "memes",
             "MEMES_DATA_PATH": tmp_path / "categories.json",
+            "DEFAULT_CATEGORIES": [],
         },
         package + ".image_host.img_sync": {"ImageSync": Mock()},
         package + ".init": {"init_plugin": lambda: True},
@@ -145,13 +151,6 @@ def meme_plugin(tmp_path, monkeypatch):
     for filename in ("global.png", "alice.png", "bob.png"):
         PILImage.new("RGB", (8, 8), "red").save(memes_dir / filename)
 
-    database = ModuleType(package + ".backend.db.database")
-    database.get_db_conn = connect
-    database.get_all_tag_embeddings = Mock(
-        return_value={"开心": [1.0, 0.0], "猫猫": [0.0, 1.0]}
-    )
-    monkeypatch.setitem(sys.modules, database.__name__, database)
-
     def load(suffix, filename):
         name = package + suffix
         spec = importlib.util.spec_from_file_location(name, PLUGIN_ROOT / filename)
@@ -162,6 +161,15 @@ def meme_plugin(tmp_path, monkeypatch):
 
     load(".utils", "utils.py")
     helpers = load(".backend.core.helpers", "backend/core/helpers.py")
+    database = load(".backend.db.database", "backend/db/database.py")
+    load(".backend.db.models", "backend/db/models.py")
+    load(".backend.core.tag_embeddings", "backend/core/tag_embeddings.py")
+    categories = load(
+        ".backend.core.category_manager", "backend/core/category_manager.py"
+    )
+    commands = load(
+        ".backend.handlers.commands_handler", "backend/handlers/commands_handler.py"
+    )
     mixin = load(".backend.core.config_mixin", "backend/core/config_mixin.py")
     load(".backend.core.emotion_handler", "backend/core/emotion_handler.py")
     tools = load(".backend.core.llm_tools", "backend/core/llm_tools.py")
@@ -170,15 +178,14 @@ def meme_plugin(tmp_path, monkeypatch):
     )
     backend = sys.modules[package + ".backend"]
     backend.__dict__.update(
-        CategoryManager=Mock(),
-        CommandsHandler=object,
+        CategoryManager=categories.CategoryManager,
+        CommandsHandler=commands.CommandsHandler,
         EventHandlers=handlers.EventHandlers,
         MemeConfigMixin=mixin.MemeConfigMixin,
         send_meme=tools.send_meme,
         migrate_old_persona_tags_if_needed=helpers.migrate_old_persona_tags_if_needed,
         patch_onebot_serializer=Mock(),
         register_apis=Mock(),
-        sync_tag_embeddings=AsyncMock(),
         sync_similarity_features=AsyncMock(),
     )
     main = load(".main", "main.py")
@@ -203,9 +210,16 @@ def meme_plugin(tmp_path, monkeypatch):
     sender = main.MemeSender.__new__(main.MemeSender)
     sender.context = context
     sender.config = {"persona_settings": {"alice": {"meme_use_preference": "猫猫"}}}
+    sender.category_manager = categories.CategoryManager()
+    sender.tag_embeddings = main.TagEmbeddingStore(sender)
     sender._last_mtime = (tmp_path / "categories.json").stat().st_mtime
     return SimpleNamespace(
-        main=main, sender=sender, context=context, hooks=hooks, tool=tool
+        main=main,
+        sender=sender,
+        context=context,
+        hooks=hooks,
+        tool=tool,
+        database=database,
     )
 
 
@@ -314,13 +328,124 @@ async def test_giftia_candidates_and_components_preserve_persona_and_send_modes(
     assert sender.build_meme_component(sender.get_meme_by_id(1)).sub_type == 0
     assert sender.build_meme_component(4) is None
 
-    provider = SimpleNamespace(get_embedding=AsyncMock(return_value=[1.0, 0.0]))
+    with meme_plugin.database.get_db_conn() as conn:
+        conn.execute("UPDATE memes SET emotions = '其他' WHERE id = 3")
+    vectors = {
+        "开心": [3.0, 0.0],
+        "猫猫": [0.0, 1.0],
+        "其他": [1.0, 0.0],
+        "高兴": [1.0, 0.0],
+    }
+    provider = SimpleNamespace(get_embedding=AsyncMock(side_effect=vectors.__getitem__))
     meme_plugin.context.get_all_embedding_providers.return_value = [provider]
+    sender.tag_embeddings.start_sync()
+    await sender.tag_embeddings._sync_task
+    provider.get_embedding.reset_mock()
     semantic = await sender.get_candidate_memes(
         persona_id="alice", query="高兴", count=2
     )
     assert [m["id"] for m in semantic] == [2, 1]
+    assert await sender.tag_embeddings.search("开心", {"猫猫"}, 0.0, limit=1) == [
+        ("猫猫", 0.0)
+    ]
     provider.get_embedding.assert_awaited_once_with("高兴")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("dimension", [2, 3])
+async def test_model_switch_requires_manual_rebuild(meme_plugin, dimension, caplog):
+    sender = meme_plugin.sender
+    store = sender.tag_embeddings
+    providers = meme_plugin.context.get_all_embedding_providers
+    providers.return_value = [
+        SimpleNamespace(model="old", get_embedding=AsyncMock(return_value=[2.0, 1.0]))
+    ]
+    with meme_plugin.database.get_db_conn() as conn:
+        conn.execute("CREATE TABLE tag_embeddings (tag TEXT UNIQUE, embedding TEXT)")
+        conn.execute("INSERT INTO tag_embeddings VALUES ('开心', '[0, -1]')")
+    store.start_sync()
+    await store._sync_task
+    assert await store.get_vectors({"开心"}) == {"开心": [2.0, 1.0]}
+    await store.close()
+
+    begin_embedding = asyncio.Event()
+    vector = [0.0] * (dimension - 1) + [1.0]
+
+    async def embed(tag):
+        await begin_embedding.wait()
+        return vector + [0.0] if tag == "维度异常" else vector
+
+    new_provider = SimpleNamespace(
+        model="new", get_embedding=AsyncMock(side_effect=embed)
+    )
+    providers.return_value = [new_provider]
+    store = sender.tag_embeddings = meme_plugin.main.TagEmbeddingStore(sender)
+    store.start_sync()
+    await store._sync_task
+    new_provider.get_embedding.assert_not_awaited()
+    assert "Embedding model differs from the cache" in caplog.text
+
+    handler = importlib.import_module(
+        f"{meme_plugin.main.__package__}.backend.core.emotion_handler"
+    )
+    valid_tags = {"开心", "猫猫"}
+    assert await handler.match_emotions_by_tags(sender, None, ["开心"], valid_tags) == [
+        ("开心", ["开心"])
+    ]
+
+    event = SimpleNamespace(plain_result=lambda message: message)
+    replies = [reply async for reply in sender.rebuild_tag_embeddings(event)]
+    assert "正在后台按当前模型重建" in replies[0]
+    assert await handler.match_emotions_by_tags(sender, None, ["开心"], valid_tags) == [
+        ("开心", ["开心"])
+    ]
+    assert "embedding cache is rebuilding" in caplog.text
+
+    begin_embedding.set()
+    await asyncio.wait_for(store._sync_task, timeout=5)
+    assert await store.get_vectors(valid_tags) == {tag: vector for tag in valid_tags}
+    assert await store.search("别名", {"开心"}, 0.6, limit=1) == [("开心", 1.0)]
+    assert await store.search("维度异常", {"开心"}, 0.6, limit=1) == []
+    assert (
+        f"Expected a {dimension}-dimensional embedding, got {dimension + 1}"
+        in caplog.text
+    )
+    with meme_plugin.database.get_db_conn() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM tag_embeddings").fetchone()[0] == 0
+    await store.close()
+
+
+@pytest.mark.asyncio
+async def test_rebuild_discards_in_flight_embeddings(meme_plugin):
+    store = meme_plugin.sender.tag_embeddings
+    providers = meme_plugin.context.get_all_embedding_providers
+    started = asyncio.Event()
+    blocked = asyncio.Event()
+
+    async def old_embedding(_tag):
+        started.set()
+        try:
+            await blocked.wait()
+        except asyncio.CancelledError:
+            # Simulate a provider that still returns a late result on cancellation.
+            return [1.0, 0.0]
+
+    providers.return_value = [SimpleNamespace(model="old", get_embedding=old_embedding)]
+    store.start_sync()
+    old_task = store._sync_task
+    await asyncio.wait_for(started.wait(), timeout=5)
+
+    new_vector = [0.0, 0.0, 1.0]
+    providers.return_value = [
+        SimpleNamespace(model="new", get_embedding=AsyncMock(return_value=new_vector))
+    ]
+    assert await store.reset(rebuild=True)
+    await asyncio.wait_for(asyncio.gather(old_task, store._sync_task), timeout=5)
+    assert await store.get_vectors({"开心", "猫猫"}) == {
+        "开心": new_vector,
+        "猫猫": new_vector,
+    }
+    await store.close()
 
 
 @pytest.mark.asyncio

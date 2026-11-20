@@ -3,7 +3,6 @@ import os
 import random
 import re
 
-from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent
 
 from ...config import MEMES_DIR
@@ -170,113 +169,6 @@ def cosine_similarity(v1, v2):
     return dot_product / (norm_v1 * norm_v2)
 
 
-async def sync_tag_embeddings(sender):
-    """后台增量计算缺失标签的向量并同步至 SQLite"""
-    if not sender:
-        return
-
-    # Concurrency guard: if another synchronization task is already running,
-    # set the pending flag so it will check again when finished, and exit.
-    if getattr(sender, "_embedding_sync_in_progress", False):
-        sender._embedding_sync_pending = True
-        logger.debug(
-            "[meme_manager] Tag embedding synchronization already in progress, marked pending."
-        )
-        return
-
-    sender._embedding_sync_in_progress = True
-    sender._embedding_sync_pending = False
-
-    try:
-        from ..db.database import (
-            get_all_tag_embeddings,
-            get_db_conn,
-            save_tag_embedding,
-        )
-
-        while True:
-            conn = get_db_conn()
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT emotions FROM memes")
-            rows = cursor.fetchall()
-            conn.close()
-
-            all_tags = set()
-            for row in rows:
-                if row["emotions"]:
-                    for emo in row["emotions"].split(","):
-                        emo = emo.strip()
-                        if emo:
-                            all_tags.add(emo)
-
-            if not all_tags:
-                break
-
-            cached_embeddings = get_all_tag_embeddings()
-            missing_tags = [tag for tag in all_tags if tag not in cached_embeddings]
-
-            if not missing_tags:
-                # If a new request was pending, check again; otherwise exit.
-                if getattr(sender, "_embedding_sync_pending", False):
-                    sender._embedding_sync_pending = False
-                    continue
-                break
-
-            logger.info(
-                f"[meme_manager] 检测到 {len(missing_tags)} 个表情标签缺失向量，正在后台计算..."
-            )
-
-            provider_id = get_config_value(sender.config, "embedding_provider_id", "")
-            embedding_provider = None
-            if provider_id:
-                embedding_provider = sender.context.get_provider_by_id(provider_id)
-            if not embedding_provider:
-                provs = sender.context.get_all_embedding_providers()
-                if provs:
-                    embedding_provider = provs[0]
-
-            if not embedding_provider:
-                logger.warning(
-                    "[meme_manager] 未配置或未找到可用的 Embedding 提供商，跳过向量同步。"
-                )
-                break
-
-            logger.info(
-                f"[meme_manager] 向量计算开始：使用 Provider ID: {getattr(embedding_provider, 'id', 'unknown')}, "
-                f"类型: {type(embedding_provider).__name__}, Model: {getattr(embedding_provider, 'model', 'unknown')}"
-            )
-
-            for tag in missing_tags:
-                try:
-                    embedding = await embedding_provider.get_embedding(tag)
-                    if embedding:
-                        save_tag_embedding(tag, embedding)
-                        logger.info(
-                            f"[meme_manager] 标签 '{tag}' 向量计算成功：维度={len(embedding)}, "
-                            f"前5位数据={embedding[:5]}"
-                        )
-                except Exception as e:
-                    logger.error(f"[meme_manager] 标签 '{tag}' 向量计算失败: {e}")
-
-            logger.info("[meme_manager] 标签向量增量同步一轮完成")
-
-            # Check if another synchronization request was triggered during execution.
-            if getattr(sender, "_embedding_sync_pending", False):
-                sender._embedding_sync_pending = False
-                logger.info(
-                    "[meme_manager] Pending sync request detected, starting a new round."
-                )
-                continue
-            else:
-                break
-
-        logger.info("[meme_manager] 标签向量增量同步全部完成")
-    except Exception as e:
-        logger.error(f"[meme_manager] 标签向量同步过程发生错误: {e}")
-    finally:
-        sender._embedding_sync_in_progress = False
-
-
 async def search_memes_for_llm(
     sender, query: str, persona_id: str, event: AstrMessageEvent = None, limit: int = 8
 ) -> list[dict]:
@@ -440,128 +332,18 @@ async def match_emotions_by_tags(
     if not raw_tags or not valid_emoticons:
         return []
 
-    # 1. Check for exact matches and initialize lists
-    exact_matches = {}
-    tags_to_embed = []
-    for raw_tag in raw_tags:
-        matched = None
-        for valid in valid_emoticons:
-            if raw_tag.lower() == valid.lower():
-                matched = valid
-                break
-        if matched:
-            exact_matches[raw_tag] = matched
-
-        # Always run vector similarity matching to recall related tags even on exact matches
-        tags_to_embed.append(raw_tag)
-
-    if exact_matches:
-        logger.debug(
-            f"[meme_manager] (直接触发) 精确匹配到的表情标签: {list(exact_matches.values())}"
-        )
-
-    # 2. Vector similarity matching (run for all tags to recall related ones)
-    vector_matches = {}
-    if tags_to_embed:
-        provider_id = get_config_value(sender.config, "embedding_provider_id", "")
-        embedding_provider = None
-        if provider_id:
-            embedding_provider = sender.context.get_provider_by_id(provider_id)
-        if not embedding_provider:
-            provs = sender.context.get_all_embedding_providers()
-            if provs:
-                embedding_provider = provs[0]
-
-        if embedding_provider:
-            from ..db.database import get_all_tag_embeddings
-
-            tag_embeddings = get_all_tag_embeddings()
-
-            # Trigger background synchronization if any valid emotions lack embeddings
-            import asyncio
-
-            missing_tags = [tag for tag in valid_emoticons if tag not in tag_embeddings]
-            if missing_tags:
-                logger.info(
-                    f"[meme_manager] (直接触发) 检测到有 {len(missing_tags)} 个标签未计算向量，已触发后台增量计算。"
-                )
-                asyncio.create_task(sync_tag_embeddings(sender))
-
-            raw_tags_vectors = {}
-            for raw_tag in tags_to_embed:
-                # Prefer cached tag vectors to avoid redundant remote API calls
-                if raw_tag in tag_embeddings:
-                    raw_tags_vectors[raw_tag] = tag_embeddings[raw_tag]
-                    continue
-                try:
-                    vec = await embedding_provider.get_embedding(raw_tag)
-                    if vec:
-                        raw_tags_vectors[raw_tag] = vec
-                except Exception as e:
-                    logger.warning(
-                        f"[meme_manager] (直接触发) 获取标签 '{raw_tag}' 向量失败: {e}"
-                    )
-
-            if raw_tags_vectors and tag_embeddings:
-                similarity_threshold = get_config_value(
-                    sender.config, "embedding_similarity_threshold", 0.6
-                )
-
-                # Search similar database tags for each query tag
-                for raw_tag, raw_vec in raw_tags_vectors.items():
-                    candidates_with_scores = []
-                    for valid_tag in valid_emoticons:
-                        # Skip comparing with the exact matched tag itself
-                        if (
-                            raw_tag in exact_matches
-                            and valid_tag == exact_matches[raw_tag]
-                        ):
-                            continue
-                        tag_vec = tag_embeddings.get(valid_tag)
-                        if not tag_vec:
-                            continue
-                        sim = cosine_similarity(raw_vec, tag_vec)
-                        if sim >= similarity_threshold:
-                            candidates_with_scores.append((valid_tag, sim))
-
-                    # Sort by similarity score descending
-                    candidates_with_scores.sort(key=lambda x: x[1], reverse=True)
-
-                    # Gather top 5 non-duplicate similar candidate tags
-                    filtered_candidates = []
-                    used_candidates_for_tag = set()
-                    if raw_tag in exact_matches:
-                        used_candidates_for_tag.add(exact_matches[raw_tag])
-
-                    for valid_tag, sim in candidates_with_scores:
-                        if valid_tag not in used_candidates_for_tag:
-                            filtered_candidates.append(valid_tag)
-                            used_candidates_for_tag.add(valid_tag)
-                            if len(filtered_candidates) == 5:
-                                break
-
-                    logger.debug(
-                        f"[meme_manager] (直接触发) 查询标签 '{raw_tag}' 召回候选匹配 (已去重/顺延/最多5个): {filtered_candidates} (阈值={similarity_threshold})"
-                    )
-
-                    if filtered_candidates:
-                        vector_matches[raw_tag] = filtered_candidates
-        else:
-            logger.debug(
-                "[meme_manager] (直接触发) 没有可用的 Embedding Provider，跳过向量匹配。"
-            )
-
-    # 3. Merge exact matches and recalled tags, preserving query tag order
+    threshold = get_config_value(sender.config, "embedding_similarity_threshold", 0.6)
     final_emotions = []
     for raw_tag in raw_tags:
-        candidates = []
-        if raw_tag in exact_matches:
-            candidates.append(exact_matches[raw_tag])
-        if raw_tag in vector_matches:
-            for c in vector_matches[raw_tag]:
-                if c not in candidates:
-                    candidates.append(c)
+        normalized = raw_tag.lower()
+        exact_match = next(
+            (tag for tag in valid_emoticons if tag.lower() == normalized), None
+        )
+        candidates = [exact_match] if exact_match else []
+        similar = await sender.tag_embeddings.search(
+            raw_tag, valid_emoticons.difference(candidates), threshold, limit=5
+        )
+        candidates.extend(tag for tag, _ in similar)
         if candidates:
             final_emotions.append((raw_tag, candidates))
-
     return final_emotions
