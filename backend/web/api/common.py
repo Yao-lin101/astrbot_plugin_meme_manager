@@ -20,8 +20,4 @@ def trigger_tag_vectorization() -> None:
     plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
     sender = plugin_config.get("sender")
     if sender:
-        import asyncio
-
-        from ...core.emotion_handler import sync_tag_embeddings
-
-        asyncio.create_task(sync_tag_embeddings(sender))
+        sender.tag_embeddings.start_sync()

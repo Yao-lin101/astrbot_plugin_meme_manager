@@ -85,6 +85,31 @@ async def get_all_emojis():
     )
 
 
+async def search_emojis():
+    """Search the gallery by exact and similar tags, returning every ranked match."""
+    from ...core.emotion_handler import search_memes_for_llm
+
+    sender = current_app.config.get("PLUGIN_CONFIG", {}).get("sender")
+    if sender is None:
+        return jsonify({"message": "插件尚未初始化"}), 503
+
+    try:
+        query = request.args.get("query", "")
+        persona_id = request.args.get("persona_id") or None
+        matches = await search_memes_for_llm(sender, query, persona_id, limit=None)
+        return jsonify(
+            {
+                "results": [
+                    {"filename": item["filename"], "score": item["score"]}
+                    for item in matches
+                ]
+            }
+        )
+    except Exception as exc:
+        logger.warning("Failed to search the meme gallery: %s", exc)
+        return jsonify({"message": "搜索表情包失败"}), 500
+
+
 async def get_emojis_by_category(category):
     """获取指定类别的表情包"""
     emojis = get_emoji_by_category(category)
@@ -156,6 +181,7 @@ async def add_emoji():
             category_manager = plugin_config.get("category_manager")
             if category_manager:
                 category_manager.sync_with_filesystem()
+            trigger_tag_vectorization()
 
             logger.info(f"表情包添加成功: {result['path']}")
             return jsonify(

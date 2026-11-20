@@ -3,7 +3,6 @@ const { ref } = window.Vue;
 export function useCategories(
   showToast,
   fetchEmojis,
-  checkSyncStatus,
   renameCategoryModal,
   addCategoryForm,
   emojiData,
@@ -46,7 +45,6 @@ export function useCategories(
         activeCategories.value[idx] = newName;
       }
       await fetchEmojis();
-      await checkSyncStatus(false);
     } catch (e) {
       showToast(e.message, "error", "重命名失败");
     }
@@ -72,7 +70,6 @@ export function useCategories(
       addCategoryForm.name = "";
       addCategoryForm.visible = false;
       await fetchEmojis();
-      await checkSyncStatus(false);
     } catch (e) {
       showToast(e.message, "error", "添加失败");
     }
@@ -126,7 +123,6 @@ export function useCategories(
 
       showToast(`已成功删除标签 ${category}`, "success", "删除成功");
       await fetchEmojis();
-      await checkSyncStatus(false);
     } catch (e) {
       showToast(e.message, "error", "删除失败");
     }

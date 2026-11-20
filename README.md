@@ -4,6 +4,8 @@
 
 本项目基于 [anka-afk/astrbot_plugin_meme_manager](https://github.com/anka-afk/astrbot_plugin_meme_manager) 开发，感谢原作者及贡献者。本仓库由维护者独立维护，功能、配置与发布以本仓库文档为准；问题与建议请提交到[本仓库 Issues](https://github.com/Yao-lin101/astrbot_plugin_meme_manager/issues)。
 
+当前版本 [v5.0.1](CHANGELOG.md#v501)
+
 ## 快速开始
 
 1. 在 AstrBot 插件管理中，通过[本仓库地址](https://github.com/Yao-lin101/astrbot_plugin_meme_manager)安装插件并启用。

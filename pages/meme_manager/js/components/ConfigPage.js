@@ -1,3 +1,5 @@
+import { formatProviderLabel } from '../modules/providerLabels.js';
+
 const { ref, computed, watch, onMounted } = window.Vue;
 
 export const ConfigPage = {
@@ -309,6 +311,7 @@ export const ConfigPage = {
       providers,
       decisionProviders,
       embeddingProviders,
+      formatProviderLabel,
       clearingAll,
       clearingOrphans,
       cacheCleanupResult,
@@ -531,7 +534,7 @@ export const ConfigPage = {
                     <select v-else-if="getFieldType(subField, subKey) === 'provider_select'" v-model="localConfig[key][subKey]" class="form-control">
                       <option value="">-- 请选择供应商 (留空默认) --</option>
                       <option v-for="prov in providers" :key="prov.id" :value="prov.id">
-                        {{ prov.name }} ({{ prov.id }})
+                        {{ formatProviderLabel(prov) }}
                       </option>
                     </select>
 
@@ -539,7 +542,7 @@ export const ConfigPage = {
                     <select v-else-if="getFieldType(subField, subKey) === 'decision_provider_select'" v-model="localConfig[key][subKey]" class="form-control">
                       <option value="">-- 沿用多模态判定流程 --</option>
                       <option v-for="prov in decisionProviders" :key="prov.id" :value="prov.id">
-                        {{ prov.name }} ({{ prov.id }})
+                        {{ formatProviderLabel(prov) }}
                       </option>
                     </select>
 
@@ -548,7 +551,7 @@ export const ConfigPage = {
                       <select v-if="embeddingProviders.length > 0" v-model="localConfig[key][subKey]" class="form-control">
                         <option value="">-- 请选择 Embedding 供应商 (留空默认) --</option>
                         <option v-for="prov in embeddingProviders" :key="prov.id" :value="prov.id">
-                          {{ prov.name }} ({{ prov.id }})
+                          {{ formatProviderLabel(prov) }}
                         </option>
                       </select>
                       <input v-else type="text" v-model="localConfig[key][subKey]" class="form-control" placeholder="无法查找到 Embedding 供应商，请输入 Provider ID" />
@@ -605,7 +608,7 @@ export const ConfigPage = {
                   <select v-else-if="getFieldType(configSchema[key], key) === 'provider_select'" v-model="localConfig[key]" class="form-control">
                     <option value="">-- 请选择供应商 (留空默认) --</option>
                     <option v-for="prov in providers" :key="prov.id" :value="prov.id">
-                      {{ prov.name }} ({{ prov.id }})
+                      {{ formatProviderLabel(prov) }}
                     </option>
                   </select>
 
@@ -614,7 +617,7 @@ export const ConfigPage = {
                     <select v-if="embeddingProviders.length > 0" v-model="localConfig[key]" class="form-control">
                       <option value="">-- 请选择 Embedding 供应商 (留空默认) --</option>
                       <option v-for="prov in embeddingProviders" :key="prov.id" :value="prov.id">
-                        {{ prov.name }} ({{ prov.id }})
+                        {{ formatProviderLabel(prov) }}
                       </option>
                     </select>
                     <input v-else type="text" v-model="localConfig[key]" class="form-control" placeholder="无法查找到 Embedding 供应商，请输入 Provider ID" />

@@ -24,7 +24,7 @@ import { DuplicatePage } from './components/DuplicatePage.js';
 import { SyncPage } from './components/SyncPage.js';
 import { ConfigPage } from './components/ConfigPage.js';
 
-const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+const { createApp, ref, computed, onMounted, onUnmounted, watch } = Vue;
 
 createApp({
   components: {
@@ -65,7 +65,6 @@ createApp({
     const categories = useCategories(
       showToast,
       api.fetchEmojis,
-      sync.checkSyncStatus,
       modals.renameCategoryModal,
       modals.addCategoryForm,
       api.emojiData,
@@ -112,6 +111,9 @@ createApp({
       currentTab.value = tab;
       modals.safeSetItem('meme_mgr_tab', tab);
     };
+    watch(currentTab, (tab) => {
+      if (tab === 'sync') void sync.checkVectorStatus();
+    });
 
     const savePersonaSettingsDirect = async ({ persona_id, meme_use_preference, meme_preference }) => {
       try {
@@ -177,6 +179,7 @@ createApp({
     };
 
     const sortedActiveEmojisList = computed(() => {
+      if (api.isMemeSearchActive.value) return api.activeCategoryEmojisList.value;
       const list = [...api.activeCategoryEmojisList.value];
       list.sort((a, b) => {
         const ta = api.emojiMtimes.value[a] || 0;
@@ -233,7 +236,6 @@ createApp({
       await api.fetchEmojis();
       await api.fetchPersonas();
       await configApi.fetchConfig();
-      void sync.checkSyncStatus(false);
       
       window.addEventListener("scroll", handleScroll);
     });
@@ -255,6 +257,11 @@ createApp({
       activeCategoriesDisplayName,
       activeCategoryEmojisList: api.activeCategoryEmojisList,
       activeEmojisCount: api.activeEmojisCount,
+      memeSearchInput: api.memeSearchInput,
+      memeSearch: api.memeSearch,
+      isMemeSearchActive: api.isMemeSearchActive,
+      searchEmojis: api.searchEmojis,
+      clearMemeSearch: api.clearMemeSearch,
       tabSearchQuery: api.tabSearchQuery,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
       fetchEmojis: api.fetchEmojis,
@@ -267,7 +274,7 @@ createApp({
       allEmojisList: api.allEmojisList,
       importableEmojisList: api.importableEmojisList,
       allCategories: api.allCategories,
-      activeCategoryTimeGroups: api.activeCategoryTimeGroups,
+      activeCategoryGroups: api.activeCategoryGroups,
       getEmojiTags: api.getEmojiTags,
       getCategoryActiveCount: api.getCategoryActiveCount,
       visibleLimit: api.visibleLimit,
@@ -328,13 +335,11 @@ createApp({
       navigateToSiblingEmoji,
 
       // Sync
-      syncChecking: sync.syncChecking,
-      syncStatus: sync.syncStatus,
+      vectorChecking: sync.vectorChecking,
+      vectorStatus: sync.vectorStatus,
       imgHostSyncing: sync.imgHostSyncing,
       imgHostStatus: sync.imgHostStatus,
-      checkSyncStatus: sync.checkSyncStatus,
-      syncConfig: sync.syncConfig,
-      removeFromConfig: sync.removeFromConfig,
+      checkVectorStatus: sync.checkVectorStatus,
       checkImgHostSyncStatus: sync.checkImgHostSyncStatus,
       syncToRemote: sync.syncToRemote,
       syncFromRemote: sync.syncFromRemote,

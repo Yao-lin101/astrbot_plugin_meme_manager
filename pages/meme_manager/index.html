@@ -240,7 +240,16 @@
                       </button>
                     </div>
                   </div>
-                  <p class="description" v-if="activeCategories.includes('all')">展示当前过滤人格下的所有表情包</p>
+                  <form v-if="activeCategory === 'all'" class="meme-search" role="search" @submit.prevent="searchEmojis()">
+                    <input type="text" class="form-control meme-search-input" v-model="memeSearchInput"
+                      aria-label="按标签搜索表情" placeholder="搜索标签，例如 开心，猫猫" enterkeyhint="search" />
+                    <button type="submit" class="btn-primary"
+                      :disabled="!memeSearchInput.trim() || memeSearch.status === 'loading'">
+                      <i class="fas fa-magnifying-glass" aria-hidden="true"></i> 搜索
+                    </button>
+                    <button v-if="memeSearchInput || isMemeSearchActive" type="button" class="btn-secondary"
+                      @click="clearMemeSearch">清除</button>
+                  </form>
                   <p class="description" v-else-if="activeCategories.length > 1">展示同时包含 「{{ activeCategoriesDisplayName
                     }}」 标签的表情包交集</p>
                 </div>
@@ -274,23 +283,29 @@
                 </div>
 
                 <!-- 空状态展示 -->
-                <div v-if="activeCategoryTimeGroups.length === 0"
+                <p v-if="isMemeSearchActive && memeSearch.status === 'loading'" class="meme-search-feedback" role="status">
+                  正在搜索表情…
+                </p>
+                <p v-else-if="isMemeSearchActive && memeSearch.status === 'error'" class="meme-search-feedback" role="alert">
+                  搜索失败，请重试。
+                </p>
+                <div v-else-if="activeCategoryGroups.length === 0"
                   style="padding: 60px; text-align: center; color: var(--text-secondary);">
                   <i class="far fa-face-smile"
                     style="font-size: 32px; margin-bottom: 12px; color: var(--border-color);"></i>
-                  <p>没有符合当前组合标签 of 表情包</p>
+                  <p>{{ isMemeSearchActive ? '没有找到匹配的表情' : '没有符合当前组合标签的表情包' }}</p>
                 </div>
 
                 <!-- 表情包分级网格 -->
                 <div v-else class="emoji-time-groups">
-                  <div v-for="group in activeCategoryTimeGroups" :key="group.title" class="time-group-section"
+                  <div v-for="group in activeCategoryGroups" :key="group.title" class="time-group-section"
                     style="margin-bottom: 24px;">
                     <h3 class="time-group-header"
                       style="font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-                      <i class="far fa-clock"></i> {{ group.title }}
+                      <i v-if="!isMemeSearchActive" class="far fa-clock" aria-hidden="true"></i> {{ group.title }}
                       <span class="group-count"
                         style="font-size: 10px; padding: 2px 6px; background: var(--tag-pill-bg); border-radius: 10px; color: var(--text-secondary);">
-                        {{ group.list.length }}
+                        {{ isMemeSearchActive ? activeEmojisCount : group.list.length }}
                       </span>
                     </h3>
 
@@ -325,6 +340,8 @@
                       </template>
                     </div>
                   </div>
+                  <button v-if="isMemeSearchActive && visibleLimit < activeEmojisCount" type="button"
+                    class="btn-secondary meme-search-more" @click="visibleLimit += 20">显示更多</button>
                 </div>
               </div>
             </div>
@@ -394,9 +411,9 @@
 
       <!-- 同步管理全页面 Tab 内容 -->
       <div v-show="currentTab === 'sync'" class="tab-content">
-        <sync-page :checking="syncChecking" :status="syncStatus" :img-host-syncing="imgHostSyncing"
-          :img-host-status="imgHostStatus" @check-status="checkSyncStatus" @sync-config="syncConfig"
-          @remove-config="removeFromConfig" @refresh-img-host="checkImgHostSyncStatus" @sync-to-remote="syncToRemote"
+        <sync-page :vector-checking="vectorChecking" :vector-status="vectorStatus" :img-host-syncing="imgHostSyncing"
+          :img-host-status="imgHostStatus" @refresh-vector-status="checkVectorStatus"
+          @refresh-img-host="checkImgHostSyncStatus" @sync-to-remote="syncToRemote"
           @sync-from-remote="syncFromRemote"></sync-page>
       </div>
 
@@ -499,8 +516,8 @@
     </div>
 
     <!-- 标签侧栏悬浮切换按钮 -->
-    <button type="button" class="sidebar-floating-toggle" :class="{ open: mobileSidebarOpen }"
-      @click.stop="mobileSidebarOpen = !mobileSidebarOpen" aria-label="切换标签分类">
+    <button v-if="currentTab === 'meme'" type="button" class="sidebar-floating-toggle"
+      :class="{ open: mobileSidebarOpen }" @click.stop="mobileSidebarOpen = !mobileSidebarOpen" aria-label="切换标签分类">
       <i class="fas" :class="mobileSidebarOpen ? 'fa-chevron-right' : 'fa-tags'"></i>
     </button>
 

@@ -56,6 +56,19 @@ async def sync_config():
         return jsonify({"message": f"配置同步失败: {str(e)}"}), 500
 
 
+async def get_tag_embedding_status():
+    """Return the current LanceDB tag cache metrics for the WebUI."""
+    sender = current_app.config.get("PLUGIN_CONFIG", {}).get("sender")
+    if sender is None:
+        return jsonify({"message": "插件尚未初始化"}), 503
+
+    try:
+        return jsonify(await sender.tag_embeddings.get_status())
+    except Exception as exc:
+        logger.warning("Failed to read the tag embedding cache status: %s", exc)
+        return jsonify({"message": "读取向量数据库状态失败"}), 500
+
+
 async def get_img_host_sync_status():
     """获取同步状态"""
     try:

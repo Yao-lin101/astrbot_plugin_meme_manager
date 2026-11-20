@@ -130,6 +130,7 @@ def register_apis(sender):
         get_prompt_template,
         get_providers,
         get_sync_status,
+        get_tag_embedding_status,
         get_ui_settings,
         merge_tags,
         move_emoji,
@@ -139,6 +140,7 @@ def register_apis(sender):
         save_persona_tag,
         save_ui_settings,
         scan_similar_tags,
+        search_emojis,
         sync_config,
         sync_from_remote,
         sync_to_remote,
@@ -149,6 +151,7 @@ def register_apis(sender):
 
     apis = [
         ("emoji", get_all_emojis, ["GET"]),
+        ("emoji/search/by_tags", search_emojis, ["GET"]),
         ("emoji/generate_thumbnails", generate_thumbnails_api, ["POST"]),
         ("emoji/clear_all_thumbnails", clear_all_thumbnails_api, ["POST"]),
         ("emoji/clear_orphaned_thumbnails", clear_orphaned_thumbnails_api, ["POST"]),
@@ -167,6 +170,7 @@ def register_apis(sender):
         ("category/delete", delete_category, ["POST"]),
         ("sync/status", get_sync_status, ["GET"]),
         ("sync/config", sync_config, ["POST"]),
+        ("tag_embeddings/status", get_tag_embedding_status, ["GET"]),
         ("category/restore", restore_category, ["POST"]),
         ("category/rename", rename_category, ["POST"]),
         ("img_host/sync/status", get_img_host_sync_status, ["GET"]),

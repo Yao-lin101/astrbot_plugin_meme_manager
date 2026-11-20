@@ -4,11 +4,7 @@ from quart import current_app, jsonify, request
 
 from ...core.emotion_handler import cosine_similarity
 from ...core.helpers import get_settings_dict, save_settings_dict
-from ...db.database import (
-    delete_tag_embedding,
-    get_all_tag_embeddings,
-    get_db_conn,
-)
+from ...db.database import get_db_conn
 from .common import trigger_tag_vectorization
 
 logger = logging.getLogger(__name__)
@@ -40,7 +36,12 @@ async def scan_similar_tags():
         logger.info(f"[meme_manager] 开始扫描相似标签，阈值={threshold}")
 
         tag_meme_counts = _load_tag_meme_counts()
-        tag_embeddings = get_all_tag_embeddings()
+        sender = current_app.config.get("PLUGIN_CONFIG", {}).get("sender")
+        tag_embeddings = (
+            await sender.tag_embeddings.get_vectors(set(tag_meme_counts))
+            if sender
+            else {}
+        )
 
         # 仅对既被表情引用、又已缓存向量的标签进行聚类
         tags = [tag for tag in tag_meme_counts if tag in tag_embeddings]
@@ -204,15 +205,12 @@ async def merge_tags():
         conn.commit()
         conn.close()
 
-        # 2. 删除 source 标签的向量缓存
-        for source in all_sources:
-            try:
-                delete_tag_embedding(source)
-            except Exception as e:
-                logger.warning(f"[meme_manager] 删除标签 '{source}' 向量缓存失败: {e}")
+        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
+        sender = plugin_config.get("sender")
+        if sender:
+            await sender.tag_embeddings.delete(all_sources)
 
         # 3. 更新 CategoryManager (memes_data.json)
-        plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
         category_manager = plugin_config.get("category_manager")
         if category_manager:
             for target, _sources in normalized:
@@ -220,7 +218,6 @@ async def merge_tags():
             category_manager.sync_with_filesystem()
 
         # 4. 更新 persona_settings 中各人格的 meme_use_preference
-        sender = plugin_config.get("sender")
         if sender:
             settings = get_settings_dict(sender.config)
             settings_changed = False

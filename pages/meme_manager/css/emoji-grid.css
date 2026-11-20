@@ -59,6 +59,31 @@
   color: var(--text-secondary);
 }
 
+.meme-search {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.meme-search-input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  max-width: 32rem;
+}
+
+.meme-search-feedback {
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.meme-search-more {
+  display: flex;
+  margin: 0 auto;
+}
+
 /* Emoji Grid Layout */
 .emoji-grid {
   display: grid;

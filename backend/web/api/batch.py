@@ -11,6 +11,7 @@ from ...db.models import (
     batch_move_emojis,
     move_emoji_to_category,
 )
+from .common import trigger_tag_vectorization
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ async def move_emoji():
         return jsonify({"message": "Target file already exists"}), 409
     if result["missing"]:
         return jsonify({"message": "Emoji not found"}), 404
+    trigger_tag_vectorization()
 
     # 移动后源标签可能变空，同步清理配置
     plugin_config = current_app.config.get("PLUGIN_CONFIG", {})
@@ -140,6 +142,8 @@ async def batch_move_emoji():
         category_manager.sync_with_filesystem()
 
     moved_files = result["moved_files"]
+    if moved_files:
+        trigger_tag_vectorization()
     missing_files = result["missing_files"]
     conflicting_files = result["conflicting_files"]
     return jsonify(
@@ -184,6 +188,8 @@ async def batch_copy_emoji():
         return jsonify({"message": "Source category not found"}), 404
 
     copied_files = result["copied_files"]
+    if copied_files:
+        trigger_tag_vectorization()
     missing_files = result["missing_files"]
     conflicting_files = result["conflicting_files"]
     return jsonify(
@@ -264,6 +270,7 @@ async def batch_import_emojis():
         category_manager = plugin_config.get("category_manager")
         if category_manager:
             category_manager.sync_with_filesystem()
+        trigger_tag_vectorization()
 
         return (
             jsonify(
