@@ -499,8 +499,8 @@
     </div>
 
     <!-- 标签侧栏悬浮切换按钮 -->
-    <button type="button" class="sidebar-floating-toggle" :class="{ open: mobileSidebarOpen }"
-      @click.stop="mobileSidebarOpen = !mobileSidebarOpen" aria-label="切换标签分类">
+    <button v-if="currentTab === 'meme'" type="button" class="sidebar-floating-toggle"
+      :class="{ open: mobileSidebarOpen }" @click.stop="mobileSidebarOpen = !mobileSidebarOpen" aria-label="切换标签分类">
       <i class="fas" :class="mobileSidebarOpen ? 'fa-chevron-right' : 'fa-tags'"></i>
     </button>
 
