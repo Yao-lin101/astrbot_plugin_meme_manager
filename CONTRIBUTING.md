@@ -121,8 +121,8 @@ git push --force-with-lease origin <你的分支>    # 仅对自己的临时分�
 发布新版本时，以下三处版本号**必须一起修改**，漏一处就会导致版本不一致：
 
 1. **`metadata.yaml`** 的 `version` 属性
-2. **`main.py`** 中 `@register(...)` 装饰器的第四个参数
-3. **`README.md`** 顶部的目录索引与 `## 📜 更新日志` 尾部新增的本次变更条目
+2. **`CHANGELOG.md`** 顶部的版本标题和本次变更条目
+3. **`README.md`** 顶部的当前版本链接
 
 ---
 
