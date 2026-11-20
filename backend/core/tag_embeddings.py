@@ -160,6 +160,52 @@ class TagEmbeddingStore:
                 raise RuntimeError("The LanceDB embedding table is not ready.")
         return provider, table, dimension
 
+    async def get_status(self) -> dict[str, str | int | None]:
+        """Inspect the persisted cache and its current availability.
+
+        Returns:
+            The cache state, stored vector dimension, and number of cached tags.
+
+        Raises:
+            RuntimeError: If the embedding store has been closed.
+        """
+        async with self._lock:
+            if self._closed:
+                raise RuntimeError("The embedding cache is closed.")
+
+            table = None
+            if self._db is not None or CACHE_PATH.exists():
+                table = await self._open_table()
+            dimension = None
+            tag_count = 0
+            if table is not None:
+                schema = await table.schema()
+                dimension = schema.field("vector").type.list_size
+                tag_count = await table.count_rows()
+
+            if self._rebuilding:
+                status = "rebuilding"
+            else:
+                try:
+                    resolved = self._provider()
+                except ValueError as exc:
+                    logger.warning("Embedding provider unavailable: %s", exc)
+                    resolved = None
+
+                if resolved is None:
+                    status = "provider_unavailable"
+                elif (
+                    table is not None
+                    and (schema.metadata or {}).get(SOURCE_KEY) != resolved[1]
+                ):
+                    status = "model_mismatch"
+                elif self._sync_task is not None and not self._sync_task.done():
+                    status = "syncing"
+                else:
+                    status = "ready" if tag_count else "empty"
+
+            return {"status": status, "dimension": dimension, "tag_count": tag_count}
+
     async def search(
         self, query: str, tags: set[str], threshold: float, limit: int
     ) -> list[tuple[str, float]]:

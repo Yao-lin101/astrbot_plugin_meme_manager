@@ -394,9 +394,9 @@
 
       <!-- 同步管理全页面 Tab 内容 -->
       <div v-show="currentTab === 'sync'" class="tab-content">
-        <sync-page :checking="syncChecking" :status="syncStatus" :img-host-syncing="imgHostSyncing"
-          :img-host-status="imgHostStatus" @check-status="checkSyncStatus" @sync-config="syncConfig"
-          @remove-config="removeFromConfig" @refresh-img-host="checkImgHostSyncStatus" @sync-to-remote="syncToRemote"
+        <sync-page :vector-checking="vectorChecking" :vector-status="vectorStatus" :img-host-syncing="imgHostSyncing"
+          :img-host-status="imgHostStatus" @refresh-vector-status="checkVectorStatus"
+          @refresh-img-host="checkImgHostSyncStatus" @sync-to-remote="syncToRemote"
           @sync-from-remote="syncFromRemote"></sync-page>
       </div>
 

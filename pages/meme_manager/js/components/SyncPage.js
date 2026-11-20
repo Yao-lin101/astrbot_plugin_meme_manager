@@ -1,11 +1,21 @@
+const VECTOR_STATUS_LABELS = {
+  ready: '可用',
+  empty: '待向量化',
+  syncing: '补算中',
+  rebuilding: '重建中',
+  provider_unavailable: 'Embedding Provider 不可用',
+  model_mismatch: '需要重构',
+  error: '读取失败',
+};
+
 export const SyncPage = {
   name: 'SyncPage',
   props: {
-    checking: {
+    vectorChecking: {
       type: Boolean,
       required: true
     },
-    status: {
+    vectorStatus: {
       type: Object,
       required: true
     },
@@ -18,62 +28,47 @@ export const SyncPage = {
       required: true
     }
   },
-  emits: ['check-status', 'sync-config', 'remove-config', 'refresh-img-host', 'sync-to-remote', 'sync-from-remote'],
+  emits: ['refresh-vector-status', 'refresh-img-host', 'sync-to-remote', 'sync-from-remote'],
+  computed: {
+    vectorStatusLabel() {
+      if (this.vectorChecking) return '读取中…';
+      return VECTOR_STATUS_LABELS[this.vectorStatus.status] ?? '待读取';
+    }
+  },
   template: `
     <div class="config-container">
       <div style="display: grid; grid-template-columns: 1fr; gap: 24px; width: 100%;">
-        <!-- For desktop, double column. For mobile, single column. -->
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 24px;">
-          
-          <!-- 本地配置同步卡片 -->
+        <div class="sync-grid">
           <div class="config-card">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 8px;">
               <span class="config-card-title" style="border: none; padding-left: 0; display: flex; align-items: center; gap: 8px; margin-bottom: 0;">
-                <i class="fas fa-arrows-spin" style="color: var(--primary-color);"></i>
-                配置与本地同步
+                <i class="fas fa-database" style="color: var(--primary-color);" aria-hidden="true"></i>
+                向量数据库状态
               </span>
-              <button class="btn-secondary" style="padding: 4px 10px; font-size: 12px;" @click="$emit('check-status', true)" :disabled="checking">
-                <i class="fas fa-sync" :class="{ 'fa-spin': checking }"></i> 检查状态
+              <button class="btn-secondary" style="padding: 4px 10px; font-size: 12px;" @click="$emit('refresh-vector-status')" :disabled="vectorChecking">
+                <i class="fas fa-rotate" :class="{ 'fa-spin': vectorChecking }" aria-hidden="true"></i> 刷新状态
               </button>
             </div>
-            
-            <p class="form-hint">
-              检查表情包在数据库中的分类配置与服务器本地的实际文件夹目录结构是否一致，并修复配置残留或未注册目录的问题。
-            </p>
 
-            <div style="min-height: 120px; display: flex; align-items: center; justify-content: center; background: var(--btn-default-bg); border-radius: var(--radius-md); border: 1px solid var(--border-color); padding: 16px;">
-              <div v-if="checking" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
-                <i class="fas fa-circle-notch fa-spin"></i> 正在检查配置状态...
+            <div class="vector-db-summary" aria-live="polite" :aria-busy="vectorChecking">
+              <div class="vector-db-state">
+                <span>LanceDB 缓存</span>
+                <strong :data-state="vectorChecking ? 'loading' : vectorStatus.status">{{ vectorStatusLabel }}</strong>
               </div>
-              <div v-else style="width: 100%;">
-                <div v-if="status.inSync" style="color: var(--ok-color); font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                  <i class="fas fa-circle-check" style="font-size: 16px;"></i> 配置与文件夹结构完全一致！
+              <dl class="vector-db-metrics">
+                <div>
+                  <dt>向量维度</dt>
+                  <dd>{{ vectorStatus.dimension ?? '—' }}</dd>
                 </div>
-                <div v-else style="display: flex; flex-direction: column; gap: 12px;">
-                  <div v-if="status.missingInConfig && status.missingInConfig.length > 0" class="sync-diff-group">
-                    <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 6px;">未注册的本地分类 (文件夹存在但数据库无配置):</h4>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                      <span v-for="cat in status.missingInConfig" :key="cat" style="font-size: 11px; background: rgba(59, 130, 246, 0.08); color: var(--primary-color); border: 1px solid rgba(59, 130, 246, 0.15); padding: 2px 8px; border-radius: 4px;">
-                        {{ cat }}
-                      </span>
-                    </div>
-                  </div>
-                  <div v-if="status.deletedCategories && status.deletedCategories.length > 0" class="sync-diff-group">
-                    <h4 style="font-size: 13px; font-weight: 700; margin-bottom: 6px; color: var(--warn-color);">已删除的类别 (数据库配置残留):</h4>
-                    <div style="display: flex; flex-direction: column; gap: 6px;">
-                      <div v-for="cat in status.deletedCategories" :key="cat" style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-card); padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                        <span style="font-size: 12px; font-weight: 600;">{{ cat }}</span>
-                        <button class="btn-sm btn-danger" style="padding: 2px 8px; font-size: 11px;" @click="$emit('remove-config', cat)">删除残留配置</button>
-                      </div>
-                    </div>
-                  </div>
+                <div>
+                  <dt>已向量化标签</dt>
+                  <dd>{{ vectorStatus.tagCount ?? '—' }}</dd>
                 </div>
-              </div>
+              </dl>
             </div>
-            
-            <button class="btn-primary" style="width: 100%; margin-top: 10px;" @click="$emit('sync-config')" :disabled="checking || status.inSync">
-              <i class="fas fa-arrows-rotate"></i> 一键同步所有配置
-            </button>
+            <p v-if="vectorStatus.status === 'model_mismatch'" class="form-hint">
+              更换模型后，执行 <code>/表情管理 重构向量缓存</code>。
+            </p>
           </div>
 
           <!-- 云端图床同步卡片 -->

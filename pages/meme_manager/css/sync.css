@@ -11,8 +11,63 @@
 
 .sync-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 24px;
+}
+
+.vector-db-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 120px;
+  padding: 16px;
+  background: var(--btn-default-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.vector-db-state {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.vector-db-state strong {
+  color: var(--text-primary);
+  text-align: end;
+}
+
+.vector-db-state [data-state="ready"] {
+  color: var(--ok-color);
+}
+
+.vector-db-state [data-state="error"],
+.vector-db-state [data-state="model_mismatch"] {
+  color: var(--warn-color);
+}
+
+.vector-db-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.vector-db-metrics dt {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.vector-db-metrics dd {
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .sync-card {
@@ -71,12 +126,6 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.sync-diff-group h4 {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
 }
 
 .diff-tags {

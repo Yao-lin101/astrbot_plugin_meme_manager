@@ -360,12 +360,24 @@ async def test_model_switch_requires_manual_rebuild(meme_plugin, dimension, capl
     providers.return_value = [
         SimpleNamespace(model="old", get_embedding=AsyncMock(return_value=[2.0, 1.0]))
     ]
+    assert await store.get_status() == {
+        "status": "empty",
+        "dimension": None,
+        "tag_count": 0,
+    }
+    assert not (meme_plugin.database.DB_PATH.parent / "lancedb").exists()
+    providers.return_value[0].get_embedding.assert_not_awaited()
     with meme_plugin.database.get_db_conn() as conn:
         conn.execute("CREATE TABLE tag_embeddings (tag TEXT UNIQUE, embedding TEXT)")
         conn.execute("INSERT INTO tag_embeddings VALUES ('开心', '[0, -1]')")
     store.start_sync()
     await store._sync_task
     assert await store.get_vectors({"开心"}) == {"开心": [2.0, 1.0]}
+    assert await store.get_status() == {
+        "status": "ready",
+        "dimension": 2,
+        "tag_count": 2,
+    }
     await store.close()
 
     begin_embedding = asyncio.Event()
@@ -384,6 +396,11 @@ async def test_model_switch_requires_manual_rebuild(meme_plugin, dimension, capl
     await store._sync_task
     new_provider.get_embedding.assert_not_awaited()
     assert "Embedding model differs from the cache" in caplog.text
+    assert await store.get_status() == {
+        "status": "model_mismatch",
+        "dimension": 2,
+        "tag_count": 2,
+    }
 
     handler = importlib.import_module(
         f"{meme_plugin.main.__package__}.backend.core.emotion_handler"
@@ -396,6 +413,11 @@ async def test_model_switch_requires_manual_rebuild(meme_plugin, dimension, capl
     event = SimpleNamespace(plain_result=lambda message: message)
     replies = [reply async for reply in sender.rebuild_tag_embeddings(event)]
     assert "正在后台按当前模型重建" in replies[0]
+    assert await store.get_status() == {
+        "status": "rebuilding",
+        "dimension": None,
+        "tag_count": 0,
+    }
     assert await handler.match_emotions_by_tags(sender, None, ["开心"], valid_tags) == [
         ("开心", ["开心"])
     ]
@@ -404,6 +426,11 @@ async def test_model_switch_requires_manual_rebuild(meme_plugin, dimension, capl
     begin_embedding.set()
     await asyncio.wait_for(store._sync_task, timeout=5)
     assert await store.get_vectors(valid_tags) == {tag: vector for tag in valid_tags}
+    assert await store.get_status() == {
+        "status": "ready",
+        "dimension": dimension,
+        "tag_count": 2,
+    }
     assert await store.search("别名", {"开心"}, 0.6, limit=1) == [("开心", 1.0)]
     assert await store.search("维度异常", {"开心"}, 0.6, limit=1) == []
     assert (

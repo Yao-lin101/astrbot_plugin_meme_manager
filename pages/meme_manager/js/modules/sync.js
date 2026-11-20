@@ -1,11 +1,11 @@
 const { ref } = window.Vue;
 
 export function useSync(showToast, fetchEmojis) {
-  const syncChecking = ref(false);
-  const syncStatus = ref({
-    inSync: true,
-    missingInConfig: [],
-    deletedCategories: [],
+  const vectorChecking = ref(false);
+  const vectorStatus = ref({
+    status: null,
+    dimension: null,
+    tagCount: null,
   });
 
   const imgHostSyncing = ref(false);
@@ -30,56 +30,18 @@ export function useSync(showToast, fetchEmojis) {
     return `${value.toFixed(1)} ${units[unitIndex]}`;
   };
 
-  const checkSyncStatus = async (showAlert = true) => {
-    syncChecking.value = true;
+  const checkVectorStatus = async () => {
+    if (vectorChecking.value) return;
+    vectorChecking.value = true;
     try {
-      const res = await fetch("/api/sync/status");
-      if (!res.ok) throw new Error("获取状态失败");
-      const data = await res.json();
-
-      if (data.status === "error") throw new Error(data.message);
-
-      const diffs = data.differences || data;
-      syncStatus.value.missingInConfig = diffs.missing_in_config || [];
-      syncStatus.value.deletedCategories = diffs.deleted_categories || [];
-      syncStatus.value.inSync =
-        syncStatus.value.missingInConfig.length === 0 && syncStatus.value.deletedCategories.length === 0;
-
-      if (showAlert) {
-        showToast("配置同步状态检查完毕。", "success", "刷新成功");
-      }
-    } catch (e) {
-      showToast(e.message, "error", "同步检查失败");
+      const res = await fetch("/api/tag_embeddings/status");
+      if (!res.ok) throw new Error("读取向量数据库状态失败");
+      const { status, dimension, tag_count: tagCount } = await res.json();
+      vectorStatus.value = { status, dimension, tagCount };
+    } catch {
+      vectorStatus.value = { status: "error", dimension: null, tagCount: null };
     } finally {
-      syncChecking.value = false;
-    }
-  };
-
-  const syncConfig = async () => {
-    try {
-      const res = await fetch("/api/sync/config", { method: "POST" });
-      if (!res.ok) throw new Error("同步失败");
-      showToast("已成功将磁盘文件夹同步至系统配置", "success", "配置同步完成");
-      await fetchEmojis();
-      await checkSyncStatus(false);
-    } catch (e) {
-      showToast(e.message, "error", "同步失败");
-    }
-  };
-
-  const removeFromConfig = async (category) => {
-    try {
-      const res = await fetch("/api/category/remove", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category }),
-      });
-      if (!res.ok) throw new Error("移除配置失败");
-      showToast(`已从配置中移除标签 「${category}」`, "success", "移除成功");
-      await fetchEmojis();
-      await checkSyncStatus(false);
-    } catch (e) {
-      showToast(e.message, "error", "删除配置失败");
+      vectorChecking.value = false;
     }
   };
 
@@ -150,14 +112,12 @@ export function useSync(showToast, fetchEmojis) {
   };
 
   return {
-    syncChecking,
-    syncStatus,
+    vectorChecking,
+    vectorStatus,
     imgHostSyncing,
     imgHostStatus,
     formatBytes,
-    checkSyncStatus,
-    syncConfig,
-    removeFromConfig,
+    checkVectorStatus,
     checkImgHostSyncStatus,
     syncToRemote,
     syncFromRemote,

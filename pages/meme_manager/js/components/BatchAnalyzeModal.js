@@ -1,3 +1,5 @@
+import { formatProviderLabel } from '../modules/providerLabels.js';
+
 export const BatchAnalyzeModal = {
   name: 'BatchAnalyzeModal',
   props: {
@@ -15,6 +17,7 @@ export const BatchAnalyzeModal = {
     }
   },
   emits: ['close', 'start', 'cancel'],
+  methods: { formatProviderLabel },
   template: `
     <div v-if="dialog.visible" class="emoji-detail-modal" role="dialog" aria-modal="true">
       <div class="emoji-detail-modal-card" style="max-width: 700px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
@@ -36,7 +39,7 @@ export const BatchAnalyzeModal = {
               <select class="form-control" v-model="dialog.selectedProvider" style="width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary);">
                 <option value="">-- 请选择供应商 --</option>
                 <option v-for="prov in dialog.providers" :key="prov.id" :value="prov.id">
-                  {{ prov.name }} ({{ prov.id }})
+                  {{ formatProviderLabel(prov) }}
                 </option>
               </select>
               <p style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">需要选择支持图片理解（多模态）的供应商实例，否则分析可能会失败。</p>

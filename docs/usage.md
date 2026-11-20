@@ -217,7 +217,7 @@ async def get_candidate_memes(
 | Stardots | `stardots` | `image_host_config.stardots`：`key`、`secret`、`space` |
 | Cloudflare R2 | `cloudflare_r2` | `image_host_config.cloudflare_r2`：`account_id`、`access_key_id`、`secret_access_key`、`bucket_name`，可选 `public_url` |
 
-「同步管理」提供同步状态、上传和下载入口；覆盖操作可通过下表中的管理指令执行。
+「同步管理」显示 LanceDB 缓存的向量维度、已向量化标签数量和重建状态。图床卡片提供云端状态、上传和下载入口，覆盖操作可通过下表中的管理指令执行。
 
 同步仅处理扁平图库中的图片文件，忽略分类子目录；R2 的 `memes/` 是远端存储前缀。图片标签、描述、人格绑定等 SQLite 元数据不会随图床图片同步，完整备份需同时保存插件数据目录。
 
