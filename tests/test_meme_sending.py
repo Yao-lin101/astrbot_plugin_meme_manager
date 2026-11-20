@@ -352,6 +352,61 @@ async def test_giftia_candidates_and_components_preserve_persona_and_send_modes(
 
 
 @pytest.mark.asyncio
+async def test_unlimited_gallery_search_returns_ranked_matches(meme_plugin):
+    sender = meme_plugin.sender
+    database = meme_plugin.database
+    handler = importlib.import_module(
+        f"{meme_plugin.main.__package__}.backend.core.emotion_handler"
+    )
+
+    vectors = {"开心": [1.0, 0.0], "猫猫": [0.0, 1.0], "高兴": [1.0, 0.0]}
+    related_files = set()
+    with database.get_db_conn() as conn:
+        for index in range(9):
+            tag = f"related-{index}"
+            filename = f"{tag}.png"
+            related_files.add(filename)
+            vectors[tag] = [1.0, (index + 1) / 10]
+            conn.execute(
+                "INSERT INTO memes (filename, emotions, personas, send_mode) VALUES (?, ?, '*', 'sticker')",
+                (filename, tag),
+            )
+            PILImage.new("RGB", (8, 8), "red").save(
+                database.DB_PATH.parent / "memes" / filename
+            )
+
+    provider = SimpleNamespace(get_embedding=AsyncMock(side_effect=vectors.__getitem__))
+    meme_plugin.context.get_all_embedding_providers.return_value = [provider]
+    sender.tag_embeddings.start_sync()
+    await sender.tag_embeddings._sync_task
+
+    results = await handler.search_memes_for_llm(sender, "高兴", None, limit=None)
+    assert {item["filename"] for item in results} == related_files | {
+        "global.png",
+        "alice.png",
+        "bob.png",
+    }
+    assert [item["score"] for item in results] == sorted(
+        (item["score"] for item in results), reverse=True
+    )
+    assert {item["filename"] for item in results[:3]} == {
+        "global.png",
+        "alice.png",
+        "bob.png",
+    }
+
+    scoped = await handler.search_memes_for_llm(sender, "高兴", "alice", limit=None)
+    assert {item["filename"] for item in scoped} == related_files | {
+        "global.png",
+        "alice.png",
+    }
+    assert scoped[0]["filename"] == "alice.png"
+    limited = await handler.search_memes_for_llm(sender, "高兴", "alice")
+    assert len(limited) == 6
+    await sender.tag_embeddings.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("dimension", [2, 3])
 async def test_model_switch_requires_manual_rebuild(meme_plugin, dimension, caplog):
     sender = meme_plugin.sender

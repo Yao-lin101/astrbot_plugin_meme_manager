@@ -179,6 +179,7 @@ createApp({
     };
 
     const sortedActiveEmojisList = computed(() => {
+      if (api.isMemeSearchActive.value) return api.activeCategoryEmojisList.value;
       const list = [...api.activeCategoryEmojisList.value];
       list.sort((a, b) => {
         const ta = api.emojiMtimes.value[a] || 0;
@@ -256,6 +257,11 @@ createApp({
       activeCategoriesDisplayName,
       activeCategoryEmojisList: api.activeCategoryEmojisList,
       activeEmojisCount: api.activeEmojisCount,
+      memeSearchInput: api.memeSearchInput,
+      memeSearch: api.memeSearch,
+      isMemeSearchActive: api.isMemeSearchActive,
+      searchEmojis: api.searchEmojis,
+      clearMemeSearch: api.clearMemeSearch,
       tabSearchQuery: api.tabSearchQuery,
       drawerTagSearchQuery: api.drawerTagSearchQuery,
       fetchEmojis: api.fetchEmojis,
@@ -268,7 +274,7 @@ createApp({
       allEmojisList: api.allEmojisList,
       importableEmojisList: api.importableEmojisList,
       allCategories: api.allCategories,
-      activeCategoryTimeGroups: api.activeCategoryTimeGroups,
+      activeCategoryGroups: api.activeCategoryGroups,
       getEmojiTags: api.getEmojiTags,
       getCategoryActiveCount: api.getCategoryActiveCount,
       visibleLimit: api.visibleLimit,

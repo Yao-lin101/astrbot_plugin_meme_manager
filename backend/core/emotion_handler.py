@@ -2,6 +2,7 @@ import math
 import os
 import random
 import re
+from contextlib import closing
 
 from astrbot.api.event import AstrMessageEvent
 
@@ -12,13 +13,13 @@ from .helpers import get_persona_id, normalize_meme_send_mode
 
 
 async def get_scored_memes_by_emotions(
-    sender, found_emotions: list, persona_id: str
+    sender, found_emotions: list, persona_id: str | None
 ) -> list[dict]:
     """根据情绪标签的重合度评分规则，计算并返回所有匹配表情包的评分列表。"""
     if not found_emotions:
         return []
 
-    # 兼容处理：提取所有可能的目标表情标签，用于构建 SQL 查询条件
+    # Collect matching tags to filter the library before scoring.
     flat_emotions = set()
     for item in found_emotions:
         if isinstance(item, tuple):
@@ -29,29 +30,13 @@ async def get_scored_memes_by_emotions(
     if not flat_emotions:
         return []
 
-    conn = get_db_conn()
-    cursor = conn.cursor()
-
-    # 构建 SQL 条件：匹配指定人格或全局，并且至少匹配其中一个候选情绪标签 (OR)
-    conditions = []
-    params = []
-
-    conditions.append("(personas = '*' OR ',' || personas || ',' LIKE ?)")
-    params.append(f"%,{persona_id},%")
-
-    emotion_conditions = []
-    for emotion in flat_emotions:
-        if emotion:
-            emotion_conditions.append("',' || emotions || ',' LIKE ?")
-            params.append(f"%,{emotion},%")
-
-    if emotion_conditions:
-        conditions.append(f"({' OR '.join(emotion_conditions)})")
-
-    sql = f"SELECT id, filename, emotions, description, send_mode FROM memes WHERE {' AND '.join(conditions)}"
-    cursor.execute(sql, tuple(params))
-    rows = cursor.fetchall()
-    conn.close()
+    sql = "SELECT id, filename, emotions, description, send_mode FROM memes"
+    params = ()
+    if persona_id is not None:
+        sql += " WHERE personas = '*' OR ',' || personas || ',' LIKE ?"
+        params = (f"%,{persona_id},%",)
+    with closing(get_db_conn()) as conn:
+        rows = conn.execute(sql, params).fetchall()
 
     # 获取人格专属标签，用于评分加分（而不是计入 matched_count）
     from .helpers import load_persona_tags
@@ -67,7 +52,10 @@ async def get_scored_memes_by_emotions(
             if len(item) == 3 and item[2] is True:
                 continue
             raw_tag, candidates = item[0], item[1]
-            emotions_to_match.append((raw_tag, candidates))
+            ranks = {}
+            for rank, candidate in enumerate(candidates):
+                ranks.setdefault(candidate, rank)
+            emotions_to_match.append((raw_tag, ranks))
         else:
             emotions_to_match.append(item)
 
@@ -80,14 +68,10 @@ async def get_scored_memes_by_emotions(
     for row in rows:
         filename = row["filename"]
         full_path = os.path.join(MEMES_DIR, filename)
-        if os.path.exists(full_path):
-            # 计算与当前匹配情绪列表的重合数作为基础评分，并加上基于顺序的偏置评分
-            meme_emotions = (
-                [e.strip() for e in row["emotions"].split(",") if e.strip()]
-                if row["emotions"]
-                else []
-            )
-
+        meme_emotions = [
+            tag.strip() for tag in (row["emotions"] or "").split(",") if tag.strip()
+        ]
+        if not flat_emotions.isdisjoint(meme_emotions) and os.path.exists(full_path):
             # 计算匹配到的意图/输入标签重合数（matched_count）与位置权重分
             matched_count = 0
             matched_score = 0
@@ -99,23 +83,21 @@ async def get_scored_memes_by_emotions(
                     tag_weight = max(1, 400 // (2 ** (idx - 1)))
 
                 if isinstance(item, tuple):
-                    raw_tag, candidates = item
-                    # 找到所有匹配的候选词及其在候选列表中的索引
-                    matching_indices = [
-                        idx_c
-                        for idx_c, c in enumerate(candidates)
-                        if c in meme_emotions
-                    ]
-                    if matching_indices:
+                    raw_tag, ranks = item
+                    best_candidate = min(
+                        (tag for tag in meme_emotions if tag in ranks),
+                        key=ranks.__getitem__,
+                        default=None,
+                    )
+                    if best_candidate is not None:
                         matched_count += 1
-                        # 取匹配度最高的那个候选词（即 index 最小的那个）
-                        best_candidate_idx = min(matching_indices)
+                        best_candidate_idx = ranks[best_candidate]
                         # 基于候选词排名的衰减系数：排在第 1 的（index 0）保留 100% 分值，后面每顺延一位衰减 5%，保底保留 80%
                         decay_factor = max(0.8, 1.0 - best_candidate_idx * 0.05)
                         weighted_tag_score = int(tag_weight * decay_factor)
                         matched_score += weighted_tag_score
                         matched_details.append(
-                            f"{raw_tag}->{candidates[best_candidate_idx]}(+{weighted_tag_score})"
+                            f"{raw_tag}->{best_candidate}(+{weighted_tag_score})"
                         )
                 else:
                     if item in meme_emotions:
@@ -170,22 +152,35 @@ def cosine_similarity(v1, v2):
 
 
 async def search_memes_for_llm(
-    sender, query: str, persona_id: str, event: AstrMessageEvent = None, limit: int = 8
+    sender,
+    query: str,
+    persona_id: str | None,
+    event: AstrMessageEvent | None = None,
+    limit: int | None = 8,
 ) -> list[dict]:
-    """为 LLM 搜索表情包。使用精确匹配与向量相似度检索，并采用与情绪表情匹配一致的评分规则。"""
+    """Find memes using exact tags, semantic matches, and persona preferences.
+
+    Args:
+        sender: Plugin instance providing the embedding cache and settings.
+        query: Ordered search tags separated by commas or whitespace.
+        persona_id: Persona to search, or None to search the whole library.
+        event: Optional message event from the calling tool.
+        limit: Maximum number of memes, or None for all matching tags and memes.
+
+    Returns:
+        Matching memes sorted by score in descending order.
+    """
     query = query.strip()
     if not query:
         return []
 
-    # 1. Get all available emotions for the current persona and global
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT emotions FROM memes WHERE personas = '*' OR ',' || personas || ',' LIKE ?",
-        (f"%,{persona_id},%",),
-    )
-    rows = cursor.fetchall()
-    conn.close()
+    sql = "SELECT DISTINCT emotions FROM memes"
+    params = ()
+    if persona_id is not None:
+        sql += " WHERE personas = '*' OR ',' || personas || ',' LIKE ?"
+        params = (f"%,{persona_id},%",)
+    with closing(get_db_conn()) as conn:
+        rows = conn.execute(sql, params).fetchall()
 
     valid_emoticons = set()
     for row in rows:
@@ -207,7 +202,11 @@ async def search_memes_for_llm(
     # 3. Split query by comma and call match_emotions_by_tags
     query_parts = [q.strip() for q in re.split(r"[,，\s]+", query) if q.strip()]
     matched_emotions = await match_emotions_by_tags(
-        sender, event, query_parts, valid_emoticons
+        sender,
+        event,
+        query_parts,
+        valid_emoticons,
+        similar_limit=None if limit is None else 5,
     )
 
     if not matched_emotions:
@@ -316,7 +315,12 @@ async def get_candidate_memes_for_plugin(
 
 
 async def match_emotions_by_tags(
-    sender, event: AstrMessageEvent, raw_tags: list[str], valid_emoticons: set[str]
+    sender,
+    event: AstrMessageEvent | None,
+    raw_tags: list[str],
+    valid_emoticons: set[str],
+    *,
+    similar_limit: int | None = 5,
 ) -> list[tuple[str, list[str]]]:
     """Match query tags to exact and semantically similar library tags.
 
@@ -325,6 +329,7 @@ async def match_emotions_by_tags(
         event: Optional message event associated with the search.
         raw_tags: Ordered tags from a tool or external plugin query.
         valid_emoticons: Tags available to the selected persona.
+        similar_limit: Maximum semantic matches per tag, or None for all matches.
 
     Returns:
         Query tags paired with their ranked matching library tags.
@@ -340,8 +345,12 @@ async def match_emotions_by_tags(
             (tag for tag in valid_emoticons if tag.lower() == normalized), None
         )
         candidates = [exact_match] if exact_match else []
+        eligible_tags = valid_emoticons.difference(candidates)
         similar = await sender.tag_embeddings.search(
-            raw_tag, valid_emoticons.difference(candidates), threshold, limit=5
+            raw_tag,
+            eligible_tags,
+            threshold,
+            limit=len(eligible_tags) if similar_limit is None else similar_limit,
         )
         candidates.extend(tag for tag, _ in similar)
         if candidates:

@@ -1,4 +1,4 @@
-const { ref, computed } = window.Vue;
+const { ref, computed, watch } = window.Vue;
 
 export function useApi(showToast, pruneSelections) {
   const emojiData = ref({});
@@ -16,6 +16,57 @@ export function useApi(showToast, pruneSelections) {
   const drawerTagSearchQuery = ref("");
   const selectedEmotions = ref([]);
   const visibleLimit = ref(40);
+  const memeSearchInput = ref("");
+  const memeSearch = ref({ query: "", status: "idle", filenames: [] });
+  let searchRequestId = 0;
+
+  const isMemeSearchActive = computed(() => Boolean(memeSearch.value.query) && (
+    activeCategories.value.includes('all') || activeCategories.value.length === 0
+  ));
+
+  const searchEmojis = async (query = memeSearchInput.value) => {
+    const submittedQuery = query.trim();
+    const requestId = ++searchRequestId;
+    visibleLimit.value = 40;
+    memeSearch.value = {
+      query: submittedQuery,
+      status: submittedQuery ? "loading" : "idle",
+      filenames: [],
+    };
+    if (!submittedQuery) return;
+
+    const params = new URLSearchParams({ query: submittedQuery });
+    if (personaFilter.value) params.set("persona_id", personaFilter.value);
+    try {
+      const res = await fetch(`/api/emoji/search/by_tags?${params}`);
+      if (!res.ok) throw new Error("搜索表情包失败");
+      const { results } = await res.json();
+      if (requestId !== searchRequestId) return;
+
+      const filenames = results.map(({ filename }) => filename);
+      // Automatic collection may have added matching files since the gallery was loaded.
+      if (filenames.some(filename => !emojiTagsMap.value.has(filename))) {
+        await fetchEmojis();
+      }
+      if (requestId === searchRequestId) {
+        memeSearch.value = { query: submittedQuery, status: "ready", filenames };
+      }
+    } catch (error) {
+      if (requestId === searchRequestId) {
+        console.error(error);
+        memeSearch.value = { query: submittedQuery, status: "error", filenames: [] };
+      }
+    }
+  };
+
+  const clearMemeSearch = () => {
+    memeSearchInput.value = "";
+    void searchEmojis("");
+  };
+
+  watch(personaFilter, () => {
+    if (memeSearch.value.query) void searchEmojis(memeSearch.value.query);
+  });
 
   const fetchEmojis = async () => {
     visibleLimit.value = 40;
@@ -37,6 +88,7 @@ export function useApi(showToast, pruneSelections) {
         })
       ]);
 
+      if (personaId !== personaFilter.value) return;
       emojiData.value = emojiRes.categories || {};
       emojiMtimes.value = emojiRes.mtimes || {};
       emojiDescriptions.value = emojiRes.descriptions || {};
@@ -138,6 +190,9 @@ export function useApi(showToast, pruneSelections) {
   });
 
   const activeCategoryEmojisList = computed(() => {
+    if (isMemeSearchActive.value) {
+      return memeSearch.value.filenames.filter(filename => emojiTagsMap.value.has(filename));
+    }
     if (activeCategories.value.includes('all') || activeCategories.value.length === 0) {
       return allEmojisList.value;
     }
@@ -204,9 +259,12 @@ export function useApi(showToast, pruneSelections) {
     return allEmojisList.value.filter((emoji) => !currentList.includes(emoji));
   });
 
-  const activeCategoryTimeGroups = computed(() => {
-    if (activeCategories.value.length === 0) return [];
+  const activeCategoryGroups = computed(() => {
     const list = activeCategoryEmojisList.value;
+    if (isMemeSearchActive.value) {
+      return list.length ? [{ title: "搜索结果", list: list.slice(0, visibleLimit.value) }] : [];
+    }
+    if (activeCategories.value.length === 0) return [];
     
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -287,6 +345,11 @@ export function useApi(showToast, pruneSelections) {
     activeCategories,
     activeCategoryEmojisList,
     activeEmojisCount: computed(() => activeCategoryEmojisList.value.length),
+    memeSearchInput,
+    memeSearch,
+    isMemeSearchActive,
+    searchEmojis,
+    clearMemeSearch,
     tabSearchQuery,
     drawerTagSearchQuery,
     fetchEmojis,
@@ -299,7 +362,7 @@ export function useApi(showToast, pruneSelections) {
     allEmojisList,
     importableEmojisList,
     allCategories,
-    activeCategoryTimeGroups,
+    activeCategoryGroups,
     getEmojiTags,
     visibleLimit,
     selectedEmotions,

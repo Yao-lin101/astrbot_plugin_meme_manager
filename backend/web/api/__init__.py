@@ -42,6 +42,7 @@ from .emoji import (
     get_emoji_info,
     get_emojis_by_category,
     get_emotions,
+    search_emojis,
 )
 from .persona import get_persona_tags, get_personas, save_persona_tag
 from .sync import (
@@ -89,6 +90,7 @@ __all__ = [
     "get_emoji_info",
     "get_emojis_by_category",
     "get_emotions",
+    "search_emojis",
     "get_persona_tags",
     "get_personas",
     "save_persona_tag",

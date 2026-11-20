@@ -140,6 +140,7 @@ def register_apis(sender):
         save_persona_tag,
         save_ui_settings,
         scan_similar_tags,
+        search_emojis,
         sync_config,
         sync_from_remote,
         sync_to_remote,
@@ -150,6 +151,7 @@ def register_apis(sender):
 
     apis = [
         ("emoji", get_all_emojis, ["GET"]),
+        ("emoji/search/by_tags", search_emojis, ["GET"]),
         ("emoji/generate_thumbnails", generate_thumbnails_api, ["POST"]),
         ("emoji/clear_all_thumbnails", clear_all_thumbnails_api, ["POST"]),
         ("emoji/clear_orphaned_thumbnails", clear_orphaned_thumbnails_api, ["POST"]),
